@@ -71,9 +71,11 @@ zaalcaster-notifs --limit 10
 
 ### Post a cast
 
+Preview is the default - nothing is sent without `--yes`:
+
 ```bash
-npm run post -- "Hello Farcaster from Zaalcaster"
-zaalcaster-post "Hello Farcaster"
+npm run post -- "Hello Farcaster from Zaalcaster"          # preview only
+npm run post -- "Hello Farcaster from Zaalcaster" --yes    # actually posts
 ```
 
 With an embed:
@@ -92,11 +94,11 @@ zaalcaster-post "Hello ZAO" --channel "zao"
 
 ### Reply to a cast
 
-Pass either a cast hash or a farcaster.xyz link (exactly what engage/channels print):
+Pass either a cast hash or a farcaster.xyz link (exactly what engage/channels print). Preview is the default - nothing is sent without `--yes`:
 
 ```bash
-npm run reply -- "0xabcd..." "Great post!"
-zaalcaster-reply "https://farcaster.xyz/user/0x12345678" "Great post!"
+npm run reply -- "0xabcd..." "Great post!"                                  # preview only
+zaalcaster-reply "https://farcaster.xyz/user/0x12345678" "Great post!" --yes  # actually posts
 ```
 
 With an embed:
