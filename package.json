@@ -16,9 +16,11 @@
     "zaalcaster-thread": "./bin/thread.js",
     "zaalcaster-drafts": "./bin/drafts.js",
     "zaalcaster-user": "./bin/user.js",
-    "zaalcaster-channel": "bin/channel.js"
+    "zaalcaster-channel": "bin/channel.js",
+    "zaalcaster-like": "./bin/like.js"
   },
   "scripts": {
+    "like": "node bin/like.js",
     "user": "node bin/user.js",
     "drafts": "node bin/drafts.js",
     "thread": "node bin/thread.js",
