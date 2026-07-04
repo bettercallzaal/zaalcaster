@@ -245,6 +245,58 @@ export async function getAnsweredParents(pages = 3) {
   return answered
 }
 
+// Unanswered inbound items (the engage/cockpit work list): notifications Zaal
+// has not replied to yet, newest first, with parent-cast context attached.
+export async function getUnansweredInbound(options = {}) {
+  const { limit = 15, includeAll = false, withContext = true } = options
+  const answerable = new Set(['reply', 'mention', 'quote'])
+
+  const [notifs, answered] = await Promise.all([
+    getNotifications({ limit }),
+    getAnsweredParents(),
+  ])
+
+  const items = []
+  for (const n of notifs.notifications || []) {
+    const c = n.cast || {}
+    if (!includeAll && !answerable.has(n.type)) continue
+    if (!c.hash || answered.has(c.hash)) continue
+    items.push({
+      type: n.type,
+      user: c.author?.username || '?',
+      fid: c.author?.fid || null,
+      hash: c.hash,
+      link: `https://farcaster.xyz/${c.author?.username || '?'}/${c.hash.slice(0, 10)}`,
+      text: (c.text || '').replace(/\s+/g, ' '),
+      parentHash: c.parent_hash || null,
+      parent: null,
+      draft: null,
+    })
+  }
+
+  if (withContext && items.length) {
+    // one lookup per unique parent, shared across items in the same thread
+    const parentHashes = [...new Set(items.map((i) => i.parentHash).filter(Boolean))]
+    const parents = new Map()
+    await Promise.all(parentHashes.map(async (h) => {
+      try {
+        const res = await getCastDetails(h)
+        parents.set(h, {
+          user: res.cast.author?.username || '?',
+          text: (res.cast.text || '').replace(/\s+/g, ' '),
+        })
+      } catch {
+        // parent deleted or unfetchable - item shows without context
+      }
+    }))
+    for (const item of items) {
+      if (item.parentHash) item.parent = parents.get(item.parentHash) || null
+    }
+  }
+
+  return items
+}
+
 // Full conversation around a cast (hash or farcaster.xyz URL): ancestors + replies
 export async function getConversation(hashOrUrl, options = {}) {
   const { replyDepth = 2, limit = 20 } = options
