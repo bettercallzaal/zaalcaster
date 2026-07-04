@@ -1,0 +1,31 @@
+{
+  "name": "zaalcaster",
+  "version": "0.1.0",
+  "description": "Lightweight personal Farcaster client for @zaal",
+  "type": "module",
+  "main": "lib.js",
+  "bin": {
+    "zaalcaster-timeline": "./bin/timeline.js",
+    "zaalcaster-notifs": "./bin/notifs.js",
+    "zaalcaster-post": "./bin/post.js",
+    "zaalcaster-reply": "./bin/reply.js",
+    "zaalcaster-search": "./bin/search.js"
+  },
+  "scripts": {
+    "timeline": "node bin/timeline.js",
+    "notifs": "node bin/notifs.js",
+    "post": "node bin/post.js",
+    "reply": "node bin/reply.js",
+    "search": "node bin/search.js"
+  },
+  "keywords": [
+    "farcaster",
+    "cli",
+    "neynar"
+  ],
+  "author": "Zaal",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

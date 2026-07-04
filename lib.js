@@ -1,0 +1,211 @@
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const ENV_PATH = path.join(process.env.HOME, '.zao/private/farcaster-zaal.env')
+const NEYNAR_BASE_URL = 'https://api.neynar.com/v2'
+
+let env = null
+
+function loadEnv() {
+  if (env) return env
+
+  if (!fs.existsSync(ENV_PATH)) {
+    console.error(`Error: Missing env file at ${ENV_PATH}`)
+    console.error('Create ~/.zao/private/farcaster-zaal.env with:')
+    console.error('  NEYNAR_API_KEY=your_key_here')
+    console.error('  ZAAL_SIGNER_UUID=your_signer_uuid_here')
+    console.error('  ZAAL_FID=19640')
+    process.exit(1)
+  }
+
+  env = {}
+  const content = fs.readFileSync(ENV_PATH, 'utf-8')
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const [key, ...rest] = trimmed.split('=')
+    env[key] = rest.join('=')
+  }
+
+  const required = ['NEYNAR_API_KEY', 'ZAAL_SIGNER_UUID', 'ZAAL_FID']
+  for (const key of required) {
+    if (!env[key]) {
+      console.error(`Error: Missing ${key} in ${ENV_PATH}`)
+      process.exit(1)
+    }
+  }
+
+  return env
+}
+
+async function fetchNeynar(endpoint, options = {}) {
+  const env = loadEnv()
+  const url = `${NEYNAR_BASE_URL}${endpoint}`
+  const headers = {
+    'X-API-Key': env.NEYNAR_API_KEY,
+    'Content-Type': 'application/json',
+    ...options.headers,
+  }
+
+  const res = await fetch(url, { ...options, headers })
+  const json = await res.json()
+
+  if (!res.ok) {
+    console.error(`Neynar API error: ${res.status}`)
+    console.error(json)
+    process.exit(1)
+  }
+
+  return json
+}
+
+export async function getFollowingFeed(options = {}) {
+  const { limit = 20, cursor = null } = options
+  const env = loadEnv()
+
+  const params = new URLSearchParams({
+    fid: env.ZAAL_FID,
+    limit: String(limit),
+  })
+
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/feeds/following?${params}`)
+  return response
+}
+
+export async function getChannelFeed(channelId, options = {}) {
+  const { limit = 20, cursor = null } = options
+
+  const params = new URLSearchParams({
+    id: channelId,
+    limit: String(limit),
+  })
+
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/feeds/channels?${params}`)
+  return response
+}
+
+export async function getNotifications(options = {}) {
+  const { limit = 20, cursor = null } = options
+  const env = loadEnv()
+
+  const params = new URLSearchParams({
+    fid: env.ZAAL_FID,
+    limit: String(limit),
+  })
+
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/notifications?${params}`)
+  return response
+}
+
+export async function searchCasts(query, options = {}) {
+  const { limit = 20 } = options
+
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  })
+
+  const response = await fetchNeynar(`/search/casts?${params}`)
+  return response
+}
+
+export async function postCast(text, options = {}) {
+  const { embedUrl = null, parentHash = null, parentFid = null, channelId = null } = options
+  const env = loadEnv()
+
+  const payload = {
+    signer_uuid: env.ZAAL_SIGNER_UUID,
+    text,
+  }
+
+  if (embedUrl) {
+    payload.embeds = [{ url: embedUrl }]
+  }
+
+  if (parentHash && parentFid) {
+    payload.reply_settings = {
+      parent: {
+        hash: parentHash,
+        fid: parseInt(parentFid, 10),
+      },
+    }
+  } else if (parentHash) {
+    payload.reply_settings = {
+      parent_hash: parentHash,
+    }
+  }
+
+  if (channelId) {
+    payload.channel_id = channelId
+  }
+
+  const response = await fetchNeynar('/casts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+  return response
+}
+
+export async function getCastDetails(castHash) {
+  const response = await fetchNeynar(`/casts?hash=${castHash}`)
+  return response
+}
+
+export function formatCast(cast) {
+  const author = cast.author.display_name || cast.author.username
+  const timestamp = new Date(cast.timestamp).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  let text = cast.text
+  if (cast.embeds && cast.embeds.length > 0) {
+    text += '\n'
+    for (const embed of cast.embeds) {
+      if (embed.url) text += `\n[${embed.url}]`
+    }
+  }
+
+  return {
+    hash: cast.hash,
+    fid: cast.author.fid,
+    author,
+    timestamp,
+    text,
+    replies: cast.replies?.count || 0,
+    recasts: cast.recasts?.count || 0,
+    likes: cast.reactions?.likes_count || 0,
+  }
+}
+
+export function formatNotification(notif) {
+  const casts = notif.casts || []
+  if (casts.length === 0) return null
+
+  const cast = casts[0]
+  return {
+    hash: cast.hash,
+    fid: cast.author.fid,
+    author: cast.author.display_name || cast.author.username,
+    type: notif.type,
+    text: cast.text,
+    timestamp: new Date(cast.timestamp).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  }
+}
