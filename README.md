@@ -20,20 +20,13 @@ Visit https://dev.neynar.com and sign up for free.
 
 ### 3. Create a managed signer (first time only)
 
-A managed signer is Neynar's way of signing your casts server-side, so you don't handle keys locally.
+A managed signer is Neynar's way of signing your casts server-side, so you don't handle keys locally. Reads work without one; only posting needs it.
 
 ```bash
-curl -X POST https://api.neynar.com/v2/signers \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "signer_uuid": "generated-uuid"
-  }'
+npm run mint-signer
 ```
 
-This returns a `signer_uuid`. Or visit https://dev.neynar.com/signers in your dashboard.
-
-Alternatively, register a signer via the Neynar UI and approve the transaction that appears in your wallet. Either way, you end up with a `signer_uuid` string.
+The script walks the whole flow: it signs a SignedKeyRequest with the app wallet, registers the key with Neynar, prints an approval URL to open on your phone (Farcaster app), polls until approved, and writes `ZAAL_SIGNER_UUID` into the creds file itself. See the header of `bin/mint-signer.js` for the app-FID prerequisite (one-time, ~0.0002 ETH on Optimism via `--register-app-fid`).
 
 ### 4. Create config file
 
@@ -99,11 +92,11 @@ zaalcaster-post "Hello ZAO" --channel "zao"
 
 ### Reply to a cast
 
-First, find the cast hash from timeline or search:
+Pass either a cast hash or a farcaster.xyz link (exactly what engage/channels print):
 
 ```bash
 npm run reply -- "0xabcd..." "Great post!"
-zaalcaster-reply "0xabcd..." "Great post!"
+zaalcaster-reply "https://farcaster.xyz/user/0x12345678" "Great post!"
 ```
 
 With an embed:
@@ -120,30 +113,37 @@ npm run search -- "music" --limit 20
 zaalcaster-search "music" --limit 10
 ```
 
-## One-liner daily commands
+### Unanswered inbound (the daily driver)
 
-Read timeline once per day:
+Replies/mentions/quotes you have not answered yet, with thread context and one-tap links:
 
 ```bash
-zaalcaster-timeline --limit 30
+npm run engage
+node bin/engage.js --context          # show what each reply was responding to
+node bin/engage.js --json             # structured output for drafting replies
+node bin/engage.js --all              # include likes/recasts/follows too
 ```
 
-Check notifications:
+### Home channels
 
 ```bash
-zaalcaster-notifs --limit 15
+npm run channels                      # /zao /wavewarz /zabal interleaved
+node bin/channels.js farcaster        # any single channel
 ```
 
-Post a thought:
+### Morning one-shot
+
+Engage + channels + timeline in one read:
 
 ```bash
-zaalcaster-post "Building in public today"
+npm run morning
+node bin/morning.js --limit 5
 ```
 
 ## Architecture
 
 - **lib.js** - Neynar v2 REST API wrapper, env loader
-- **bin/*.js** - CLI commands for timeline, notifs, post, reply, search
+- **bin/*.js** - CLI commands: engage, morning, channels, timeline, notifs, post, reply, search, mint-signer
 - **Signing** - Neynar managed signer (server-side). Your key never leaves Neynar's servers.
 
 ## Config location
