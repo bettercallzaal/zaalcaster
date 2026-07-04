@@ -12,9 +12,11 @@
     "zaalcaster-search": "./bin/search.js",
     "zaalcaster-mint-signer": "./bin/mint-signer.js",
     "zaalcaster-channels": "./bin/channels.js",
-    "zaalcaster-morning": "./bin/morning.js"
+    "zaalcaster-morning": "./bin/morning.js",
+    "zaalcaster-thread": "./bin/thread.js"
   },
   "scripts": {
+    "thread": "node bin/thread.js",
     "mint-signer": "node bin/mint-signer.js",
     "morning": "node bin/morning.js",
     "channels": "node bin/channels.js",

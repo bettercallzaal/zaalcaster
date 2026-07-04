@@ -11,23 +11,9 @@
 //   --all        include likes/recasts/follows too (default: replies + mentions
 //                + quotes only - the ones that can actually be answered)
 
-import { getNotifications, getCastDetails } from '../lib.js'
-import fs from 'node:fs'
-import path from 'node:path'
-import os from 'node:os'
-
-function env() {
-  const p = path.join(os.homedir(), '.zao/private/farcaster-zaal.env')
-  const out = {}
-  for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
-    const i = line.indexOf('=')
-    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim()
-  }
-  return out
-}
+import { getNotifications, getCastDetails, getUserCasts } from '../lib.js'
 
 async function main() {
-  const { NEYNAR_API_KEY, ZAAL_FID } = env()
   const args = process.argv.slice(2)
   const limit = args.includes('--limit') ? args[args.indexOf('--limit') + 1] : '15'
   const withContext = args.includes('--context') || args.includes('--json')
@@ -37,10 +23,7 @@ async function main() {
 
   const [notifs, mineRes] = await Promise.all([
     getNotifications({ limit: Number(limit) }),
-    fetch(
-      `https://api.neynar.com/v2/farcaster/feed/user/casts?fid=${ZAAL_FID}&limit=50&include_replies=true`,
-      { headers: { 'x-api-key': NEYNAR_API_KEY, accept: 'application/json' } },
-    ).then((r) => r.json()),
+    getUserCasts({ limit: 50, includeReplies: true }),
   ])
 
   const answered = new Set(

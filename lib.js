@@ -9,7 +9,7 @@ const NEYNAR_BASE_URL = 'https://api.neynar.com/v2'
 
 let env = null
 
-function loadEnv() {
+export function loadEnv() {
   if (env) return env
 
   if (!fs.existsSync(ENV_PATH)) {
@@ -166,6 +166,38 @@ export async function resolveCast(hashOrUrl) {
   })
   const response = await fetchNeynar(`/farcaster/cast?${params}`)
   return response.cast
+}
+
+// Zaal's own recent casts (includes replies) - used by engage to filter answered
+export async function getUserCasts(options = {}) {
+  const { limit = 50, includeReplies = true } = options
+  const env = loadEnv()
+
+  const params = new URLSearchParams({
+    fid: env.ZAAL_FID,
+    limit: String(limit),
+    include_replies: String(includeReplies),
+  })
+
+  const response = await fetchNeynar(`/farcaster/feed/user/casts?${params}`)
+  return response
+}
+
+// Full conversation around a cast (hash or farcaster.xyz URL): ancestors + replies
+export async function getConversation(hashOrUrl, options = {}) {
+  const { replyDepth = 2, limit = 20 } = options
+  const isUrl = hashOrUrl.startsWith('http')
+
+  const params = new URLSearchParams({
+    identifier: hashOrUrl,
+    type: isUrl ? 'url' : 'hash',
+    reply_depth: String(replyDepth),
+    include_chronological_parent_casts: 'true',
+    limit: String(limit),
+  })
+
+  const response = await fetchNeynar(`/farcaster/cast/conversation?${params}`)
+  return response
 }
 
 export function formatCast(cast) {
