@@ -8,16 +8,76 @@
 //   --context    fetch the parent cast of each reply so the thread reads in place
 //   --json       machine-readable output (feed to a Claude session to draft
 //                replies in Zaal's voice; posting still needs Zaal's yes)
+//   --drafts     generate suggested replies in Zaal's voice using OpenRouter API
+//                (reads OPENROUTER_API_KEY from ~/.zao/private/openrouter.key)
 //   --all        include likes/recasts/follows too (default: replies + mentions
 //                + quotes only - the ones that can actually be answered)
 
+import fs from 'fs'
+import path from 'path'
 import { getNotifications, getCastDetails, getAnsweredParents } from '../lib.js'
+
+const OPENROUTER_KEY_PATH = path.join(process.env.HOME, '.zao/private/openrouter.key')
+
+function loadOpenRouterKey() {
+  try {
+    if (!fs.existsSync(OPENROUTER_KEY_PATH)) return null
+    const key = fs.readFileSync(OPENROUTER_KEY_PATH, 'utf-8').trim()
+    return key || null
+  } catch {
+    return null
+  }
+}
+
+async function generateDraft(castText, parentText) {
+  const openrouterKey = loadOpenRouterKey()
+  if (!openrouterKey) return null
+
+  const systemPrompt = `You draft Farcaster replies for Zaal (@zaal). Voice rules:
+- short, plain, direct. one or two sentences max. lowercase is fine.
+- "ppl", "u", "imho" are fine. no hype adjectives, no exclamation stacking.
+- no emojis, no em dashes (plain hyphens only).
+- answer the actual thing they asked or said; add one concrete detail when it helps.
+- keep it under 280 chars.
+- if this really does not need a reply, just output "SKIP".`
+
+  const userPrompt = parentText
+    ? `their cast you're responding to: "${parentText}"\n\nthey said: "${castText}"\n\nDraft a one-line reply in Zaal's voice (or SKIP):`
+    : `they said: "${castText}"\n\nDraft a one-line reply in Zaal's voice (or SKIP):`
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openrouterKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-fable-5',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 100,
+        temperature: 0.7,
+      }),
+    })
+
+    if (!response.ok) return null
+    const data = await response.json()
+    const draft = data.choices?.[0]?.message?.content?.trim() || null
+    return draft === 'SKIP' ? 'SKIP' : draft
+  } catch {
+    return null
+  }
+}
 
 async function main() {
   const args = process.argv.slice(2)
   const limit = args.includes('--limit') ? args[args.indexOf('--limit') + 1] : '15'
-  const withContext = args.includes('--context') || args.includes('--json')
+  const withContext = args.includes('--context') || args.includes('--json') || args.includes('--drafts')
   const asJson = args.includes('--json')
+  const withDrafts = args.includes('--drafts')
   const includeAll = args.includes('--all')
   const answerable = new Set(['reply', 'mention', 'quote'])
 
@@ -39,6 +99,7 @@ async function main() {
       text: (c.text || '').replace(/\s+/g, ' '),
       parentHash: c.parent_hash || null,
       parent: null,
+      draft: null,
     })
   }
 
@@ -62,6 +123,23 @@ async function main() {
     }
   }
 
+  if (withDrafts && !asJson) {
+    const openrouterKey = loadOpenRouterKey()
+    if (!openrouterKey) {
+      console.log('Note: OpenRouter API key not found at ~/.zao/private/openrouter.key')
+      console.log('Showing casts without drafts. Create the file to enable draft generation.\n')
+    } else {
+      console.log(`Generating drafts for ${items.length} item(s)...\n`)
+    }
+
+    if (openrouterKey) {
+      for (const item of items) {
+        const draft = await generateDraft(item.text, item.parent?.text)
+        item.draft = draft
+      }
+    }
+  }
+
   if (asJson) {
     console.log(JSON.stringify({ unanswered: items }, null, 2))
     return
@@ -71,6 +149,13 @@ async function main() {
     console.log(`[${item.type}] @${item.user}  ${item.link}`)
     if (item.parent) console.log(`  in reply to @${item.parent.user}: ${item.parent.text.slice(0, 120)}`)
     console.log(`  ${item.text.slice(0, 140)}`)
+    if (withDrafts && item.draft) {
+      if (item.draft === 'SKIP') {
+        console.log('  draft: (no reply needed)')
+      } else {
+        console.log(`  draft: ${item.draft}`)
+      }
+    }
     console.log('')
   }
   if (!items.length) console.log('Inbox zero - everything answered.')
