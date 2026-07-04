@@ -11,9 +11,10 @@ Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Ne
 - Branch + PR for multi-file changes; direct commits to main are OK for single-file fixes Zaal asked for.
 
 ## Map
-- lib.js - env loader + Neynar wrapper. Endpoints are /v2/farcaster/* (verified live 2026-07-04). Signer only required at post time; reads need only API key. resolveCast() takes hash or farcaster.xyz URL. getAnsweredParents() paginates Zaal's replies (3 pages / 150 casts).
-- bin/engage.js - unanswered inbound (replies/mentions/quotes) with thread context; --json for draft workflows; --all for likes etc (the daily driver)
-- engage --drafts - THE single drafts path: one batched call, OpenRouter if ~/.zao/private/openrouter.key exists else claude CLI, grounded in context.js, prints copy-ready reply commands, never posts
+- lib.js - env loader + Neynar wrapper. Endpoints are /v2/farcaster/* (verified live 2026-07-04). Signer only required at post time; reads need only API key. resolveCast() takes hash or farcaster.xyz URL. getAnsweredParents() paginates Zaal's replies (3 pages / 150 casts). getUnansweredInbound() is the shared engage/cockpit work list.
+- voice.js - draft generation in Zaal's voice (shared): one batched call, OpenRouter if ~/.zao/private/openrouter.key exists else claude CLI, grounded in context.js. Never posts.
+- bin/cockpit.js - THE FLAGSHIP: single-screen keyboard walk of unanswered inbound. [a] send draft (the press is the confirmation), [e] edit+confirm+send, [s] skip, [n] later, [q] quit. --dry disables sends entirely; no TTY degrades to read-only listing.
+- bin/engage.js - print version of the same list; --context, --json, --all, --drafts (copy-ready reply commands, never posts)
 - bin/morning.js - one-shot: engage + channels + timeline
 - bin/thread.js - full conversation view (ancestors + nested replies) from hash or link
 - bin/user.js - profile lookup (mutual follows, neynar score, --casts n)
@@ -26,5 +27,5 @@ Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Ne
 - Reads WORK. POSTING UNBLOCKED: ZAAL_SIGNER_UUID approved for fid 19640 (minted via the zolbot account as app FID by the assistant terminal; no ETH was needed). No cast has been posted yet - first post still needs Zaal's yes on exact text.
 - mint-signer supports APP_SIGNER_PRIVATE_KEY/APP_SIGNER_MNEMONIC process-env overrides (how zolbot minted). The ZAO OS app wallet path (fund + --register-app-fid) remains as fallback documentation; ZAO OS's own /api/auth/signer route still has the custody-mismatch bug (APP_FID=19640 vs generated wallet).
 - TWO terminals sometimes work this repo simultaneously (this one + the zolbot/assistant terminal). Always git pull + git status before branching; expect uncommitted drift.
-- Commands: engage (context/json/filter/pagination/--drafts), channels (channel is an alias), reply-by-URL, thread, user, like/recast, morning, mint-signer, timeline, notifs, search, post, reply.
-- Next ideas: notifs mark-seen, post --preview.
+- Commands: cockpit (flagship TUI), engage (context/json/filter/pagination/--drafts), channels (channel is an alias), reply-by-URL, thread, user, like/recast, morning, mint-signer, timeline, notifs, search, post (preview by default, --yes to send), reply (same).
+- Flagship roadmap (Zaal 2026-07-04): 1 cockpit TUI DONE, 2 thread-context drafts (full parent thread into the draft prompt) NEXT, 3 channel dedupe DONE (#12), 4 polish: cockpit --dry exists; still to do - save Zaal's [e] edits as voice examples that feed future drafts.
