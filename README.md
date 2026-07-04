@@ -151,10 +151,10 @@ node bin/thread.js 0xabcd... --depth 3
 
 ### Reply drafts in Zaal's voice
 
-Runs engage, hands the thread context to the claude CLI, prints drafts plus a copy-ready reply command per item. Never posts anything:
+One batched model call over the unanswered inbound, grounded in the ZAO/WaveWarZ facts from context.js. Prints each draft plus a copy-ready reply command. Never posts anything. Uses OpenRouter when ~/.zao/private/openrouter.key exists, otherwise falls back to the local claude CLI:
 
 ```bash
-npm run drafts
+node bin/engage.js --drafts
 ```
 
 ### User lookup
@@ -169,7 +169,7 @@ node bin/user.js 19640 --casts 3
 ## Architecture
 
 - **lib.js** - Neynar v2 REST API wrapper, env loader
-- **bin/*.js** - CLI commands: engage, drafts, morning, thread, user, channels, timeline, notifs, post, reply, search, mint-signer
+- **bin/*.js** - CLI commands: engage, morning, thread, user, like, channels, timeline, notifs, post, reply, search, mint-signer
 - **Signing** - Neynar managed signer (server-side). Your key never leaves Neynar's servers.
 
 ## Config location

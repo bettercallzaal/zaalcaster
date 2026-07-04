@@ -8,13 +8,15 @@
 //   --context    fetch the parent cast of each reply so the thread reads in place
 //   --json       machine-readable output (feed to a Claude session to draft
 //                replies in Zaal's voice; posting still needs Zaal's yes)
-//   --drafts     generate suggested replies in Zaal's voice using OpenRouter API
-//                (reads OPENROUTER_API_KEY from ~/.zao/private/openrouter.key)
+//   --drafts     generate suggested replies in Zaal's voice. One batched model
+//                call: OpenRouter if ~/.zao/private/openrouter.key exists,
+//                otherwise the local claude CLI. Print-only, never posts.
 //   --all        include likes/recasts/follows too (default: replies + mentions
 //                + quotes only - the ones that can actually be answered)
 
 import fs from 'fs'
 import path from 'path'
+import { spawnSync } from 'node:child_process'
 import { ZAO_CONTEXT } from '../context.js'
 import { getNotifications, getCastDetails, getAnsweredParents } from '../lib.js'
 
@@ -30,51 +32,84 @@ function loadOpenRouterKey() {
   }
 }
 
-async function generateDraft(castText, parentText) {
-  const openrouterKey = loadOpenRouterKey()
-  if (!openrouterKey) return null
-
-  const systemPrompt = `You draft Farcaster replies for Zaal (@zaal). Voice rules:
+const VOICE_PROMPT = `You draft Farcaster replies for Zaal (@zaal). Voice rules:
 - short, plain, direct. one or two sentences max. lowercase is fine.
 - "ppl", "u", "imho" are fine. no hype adjectives, no exclamation stacking.
 - no emojis, no em dashes (plain hyphens only).
 - answer the actual thing they asked or said; add one concrete detail when it helps.
 - keep it under 280 chars.
-- if this really does not need a reply, just output "SKIP".
+- if an item really does not need a reply, output SKIP for it.
 
-Ground the reply in these facts when relevant (do not force them, do not list them, just be accurate):
-${ZAO_CONTEXT}
-`
+Ground replies in these facts when relevant (do not force them, do not list them, just be accurate):
+${ZAO_CONTEXT}`
 
-  const userPrompt = parentText
-    ? `their cast you're responding to: "${parentText}"\n\nthey said: "${castText}"\n\nDraft a one-line reply in Zaal's voice (or SKIP):`
-    : `they said: "${castText}"\n\nDraft a one-line reply in Zaal's voice (or SKIP):`
-
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openrouterKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-fable-5',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 100,
-        temperature: 0.7,
-      }),
+function buildBatchPrompt(items) {
+  const itemsBlock = items
+    .map((item, i) => {
+      const parent = item.parent ? `zaal's cast they are responding to: "${item.parent.text}"\n` : ''
+      return `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${parent}their message: "${item.text}"`
     })
+    .join('\n\n')
 
-    if (!response.ok) return null
-    const data = await response.json()
-    const draft = data.choices?.[0]?.message?.content?.trim() || null
-    return draft === 'SKIP' ? 'SKIP' : draft
-  } catch {
-    return null
+  return `${VOICE_PROMPT}
+
+For each item below output exactly one line in the form:
+ITEM <n>: <draft reply text or SKIP>
+
+${itemsBlock}`
+}
+
+function parseDraftLines(output, items) {
+  const drafts = new Map()
+  for (const line of (output || '').split('\n')) {
+    const m = line.match(/^ITEM (\d+):\s*(.+)$/)
+    if (m) drafts.set(Number(m[1]), m[2].trim())
   }
+  items.forEach((item, i) => {
+    item.draft = drafts.get(i + 1) || null
+  })
+  return drafts.size > 0
+}
+
+// One model call for the whole batch. OpenRouter wins when the key exists,
+// claude CLI is the zero-config fallback. Returns the backend used or null.
+async function generateDrafts(items) {
+  const openrouterKey = loadOpenRouterKey()
+
+  if (openrouterKey) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openrouterKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'anthropic/claude-fable-5',
+          messages: [{ role: 'user', content: buildBatchPrompt(items) }],
+          max_tokens: 120 * items.length,
+          temperature: 0.7,
+        }),
+        signal: AbortSignal.timeout(60000),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        // 200 with empty/garbled content (bad model slug etc) falls through
+        if (parseDraftLines(data.choices?.[0]?.message?.content, items)) return 'openrouter'
+      }
+    } catch {
+      // fall through to claude CLI
+    }
+  }
+
+  const claude = spawnSync('claude', ['-p', buildBatchPrompt(items)], {
+    encoding: 'utf8',
+    timeout: 120000,
+  })
+  if (claude.status === 0 && parseDraftLines(claude.stdout, items)) {
+    return 'claude-cli'
+  }
+  return null
 }
 
 async function main() {
@@ -128,20 +163,11 @@ async function main() {
     }
   }
 
-  if (withDrafts && !asJson) {
-    const openrouterKey = loadOpenRouterKey()
-    if (!openrouterKey) {
-      console.log('Note: OpenRouter API key not found at ~/.zao/private/openrouter.key')
-      console.log('Showing casts without drafts. Create the file to enable draft generation.\n')
-    } else {
-      console.log(`Generating drafts for ${items.length} item(s)...\n`)
-    }
-
-    if (openrouterKey) {
-      for (const item of items) {
-        const draft = await generateDraft(item.text, item.parent?.text)
-        item.draft = draft
-      }
+  if (withDrafts && !asJson && items.length) {
+    console.log(`Drafting replies for ${items.length} item(s)...\n`)
+    const backend = await generateDrafts(items)
+    if (!backend) {
+      console.log('Draft generation unavailable (no OpenRouter key, claude CLI failed). Showing casts without drafts.\n')
     }
   }
 
@@ -159,6 +185,7 @@ async function main() {
         console.log('  draft: (no reply needed)')
       } else {
         console.log(`  draft: ${item.draft}`)
+        console.log(`  post:  npm run reply -- "${item.link}" "${item.draft.replace(/"/g, '\\"')}"`)
       }
     }
     console.log('')
