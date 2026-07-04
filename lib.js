@@ -120,6 +120,23 @@ export async function searchCasts(query, options = {}) {
   return response
 }
 
+// Look up a user by fid (number) or username (with or without @).
+// viewer_fid is Zaal so the result includes follow relationship both ways.
+export async function getUser(fidOrUsername) {
+  const env = loadEnv()
+  const raw = String(fidOrUsername).replace(/^@/, '')
+
+  if (/^\d+$/.test(raw)) {
+    const params = new URLSearchParams({ fids: raw, viewer_fid: env.ZAAL_FID })
+    const response = await fetchNeynar(`/farcaster/user/bulk?${params}`)
+    return response.users?.[0] || null
+  }
+
+  const params = new URLSearchParams({ username: raw, viewer_fid: env.ZAAL_FID })
+  const response = await fetchNeynar(`/farcaster/user/by_username?${params}`)
+  return response.user || null
+}
+
 export async function postCast(text, options = {}) {
   const { embedUrl = null, parentHash = null, parentFid = null, channelId = null } = options
   const env = loadEnv()
@@ -168,13 +185,13 @@ export async function resolveCast(hashOrUrl) {
   return response.cast
 }
 
-// Zaal's own recent casts (includes replies) - used by engage to filter answered
+// Recent casts for a fid (defaults to Zaal) - engage uses it to filter answered
 export async function getUserCasts(options = {}) {
-  const { limit = 50, includeReplies = true } = options
+  const { fid = null, limit = 50, includeReplies = true } = options
   const env = loadEnv()
 
   const params = new URLSearchParams({
-    fid: env.ZAAL_FID,
+    fid: String(fid || env.ZAAL_FID),
     limit: String(limit),
     include_replies: String(includeReplies),
   })
