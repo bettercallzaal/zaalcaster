@@ -137,12 +137,20 @@ export async function getUser(fidOrUsername) {
   return response.user || null
 }
 
+function requireSigner(env) {
+  if (!env.ZAAL_SIGNER_UUID) {
+    console.error('Error: ZAAL_SIGNER_UUID missing - run npm run mint-signer first. Reads work without it.')
+    process.exit(1)
+  }
+  return env.ZAAL_SIGNER_UUID
+}
+
 export async function postCast(text, options = {}) {
   const { embedUrl = null, parentHash = null, parentFid = null, channelId = null } = options
   const env = loadEnv()
 
   const payload = {
-    signer_uuid: env.ZAAL_SIGNER_UUID,
+    signer_uuid: requireSigner(env),
     text,
   }
 
@@ -160,6 +168,25 @@ export async function postCast(text, options = {}) {
   }
 
   const response = await fetchNeynar('/farcaster/cast', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+  return response
+}
+
+// reaction_type: 'like' or 'recast'. Zaal running the command is the approval.
+export async function postReaction(reactionType, targetHash, targetAuthorFid = null) {
+  const env = loadEnv()
+
+  const payload = {
+    signer_uuid: requireSigner(env),
+    reaction_type: reactionType,
+    target: targetHash,
+  }
+  if (targetAuthorFid) payload.target_author_fid = parseInt(targetAuthorFid, 10)
+
+  const response = await fetchNeynar('/farcaster/reaction', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

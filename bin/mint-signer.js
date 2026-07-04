@@ -190,6 +190,17 @@ async function main() {
   if (!creds.NEYNAR_API_KEY) fail(`NEYNAR_API_KEY missing in ${CREDS_PATH}`)
   if (!creds.ZAAL_FID) fail(`ZAAL_FID missing in ${CREDS_PATH}`)
 
+  // Already approved? Say so before any onchain preflight - the app wallet
+  // check is irrelevant once a working signer exists.
+  if (!dryRun && creds.ZAAL_SIGNER_UUID) {
+    const status = await neynar(creds.NEYNAR_API_KEY, `/signer?signer_uuid=${creds.ZAAL_SIGNER_UUID}`)
+    if (status.status === 'approved') {
+      console.log(`ZAAL_SIGNER_UUID already set and approved (fid ${status.fid}). Nothing to do.`)
+      return
+    }
+    console.log(`Existing signer status: ${status.status} - minting fresh one.`)
+  }
+
   const viem = await loadViem()
 
   // App custody key: process env wins (lets another terminal point this at a
@@ -213,16 +224,6 @@ async function main() {
     console.log(`  app wallet: ${appAccount.address}, app fid: ${appFid ?? 'NONE - fund wallet + --register-app-fid'}`)
     console.log('  viem resolved from ZAO OS V1')
     return
-  }
-
-  // Already approved? Nothing to do.
-  if (creds.ZAAL_SIGNER_UUID) {
-    const status = await neynar(creds.NEYNAR_API_KEY, `/signer?signer_uuid=${creds.ZAAL_SIGNER_UUID}`)
-    if (status.status === 'approved') {
-      console.log('ZAAL_SIGNER_UUID already set and approved. Nothing to do.')
-      return
-    }
-    console.log(`Existing signer status: ${status.status} - minting fresh one.`)
   }
 
   // Get or create the signer, then drive it to pending_approval regardless of the
