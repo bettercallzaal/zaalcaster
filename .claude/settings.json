@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git add *)",
+      "Bash(git commit *)", "Bash(git push*)", "Bash(git checkout *)", "Bash(git pull*)",
+      "Bash(gh api *)", "Bash(gh repo view*)", "Bash(gh pr *)",
+      "Bash(ls *)", "Bash(cat package.json)", "Bash(chmod +x bin/*)"
+    ],
+    "deny": [
+      "Read(~/.zao/private/**)",
+      "Bash(cat ~/.zao/private/*)", "Bash(grep * ~/.zao/private/*)"
+    ]
+  }
+}
