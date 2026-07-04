@@ -140,10 +140,36 @@ npm run morning
 node bin/morning.js --limit 5
 ```
 
+### Thread view
+
+Full conversation around a cast (ancestors above, replies below) - read before replying:
+
+```bash
+npm run thread -- "https://farcaster.xyz/user/0x12345678"
+node bin/thread.js 0xabcd... --depth 3
+```
+
+### Reply drafts in Zaal's voice
+
+Runs engage, hands the thread context to the claude CLI, prints drafts plus a copy-ready reply command per item. Never posts anything:
+
+```bash
+npm run drafts
+```
+
+### User lookup
+
+Who is this person - follower counts, neynar score, bio, mutual-follow state:
+
+```bash
+npm run user -- @someone
+node bin/user.js 19640 --casts 3
+```
+
 ## Architecture
 
 - **lib.js** - Neynar v2 REST API wrapper, env loader
-- **bin/*.js** - CLI commands: engage, morning, channels, timeline, notifs, post, reply, search, mint-signer
+- **bin/*.js** - CLI commands: engage, drafts, morning, thread, user, channels, timeline, notifs, post, reply, search, mint-signer
 - **Signing** - Neynar managed signer (server-side). Your key never leaves Neynar's servers.
 
 ## Config location

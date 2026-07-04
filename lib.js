@@ -187,7 +187,7 @@ export async function resolveCast(hashOrUrl) {
 
 // Recent casts for a fid (defaults to Zaal) - engage uses it to filter answered
 export async function getUserCasts(options = {}) {
-  const { fid = null, limit = 50, includeReplies = true } = options
+  const { fid = null, limit = 50, includeReplies = true, cursor = null } = options
   const env = loadEnv()
 
   const params = new URLSearchParams({
@@ -195,9 +195,27 @@ export async function getUserCasts(options = {}) {
     limit: String(limit),
     include_replies: String(includeReplies),
   })
+  if (cursor) params.append('cursor', cursor)
 
   const response = await fetchNeynar(`/farcaster/feed/user/casts?${params}`)
   return response
+}
+
+// The set of parent hashes Zaal has already replied to, paginated so heavy
+// reply days do not push answered items past the window (Neynar caps
+// feed/user/casts at 50 per page; pages = 3 covers the last 150 casts).
+export async function getAnsweredParents(pages = 3) {
+  const answered = new Set()
+  let cursor = null
+  for (let i = 0; i < pages; i++) {
+    const res = await getUserCasts({ limit: 50, includeReplies: true, cursor })
+    for (const c of res.casts || []) {
+      if (c.parent_hash) answered.add(c.parent_hash)
+    }
+    cursor = res.next?.cursor
+    if (!cursor) break
+  }
+  return answered
 }
 
 // Full conversation around a cast (hash or farcaster.xyz URL): ancestors + replies
