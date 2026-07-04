@@ -10,9 +10,11 @@
     "zaalcaster-post": "./bin/post.js",
     "zaalcaster-reply": "./bin/reply.js",
     "zaalcaster-search": "./bin/search.js",
-    "zaalcaster-channels": "./bin/channels.js"
+    "zaalcaster-channels": "./bin/channels.js",
+    "zaalcaster-morning": "./bin/morning.js"
   },
   "scripts": {
+    "morning": "node bin/morning.js",
     "channels": "node bin/channels.js",
     "timeline": "node bin/timeline.js",
     "notifs": "node bin/notifs.js",
