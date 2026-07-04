@@ -30,12 +30,23 @@ export const VOICE_PROMPT = `You draft Farcaster replies for Zaal (@zaal). Voice
 Ground replies in these facts when relevant (do not force them, do not list them, just be accurate):
 ${ZAO_CONTEXT}`
 
+// Render the ancestor chain for the prompt: last 4 casts, 220 chars each,
+// so deep threads inform the draft without blowing up the prompt.
+function threadBlock(item) {
+  const chain = (item.thread && item.thread.length)
+    ? item.thread
+    : (item.parent ? [item.parent] : [])
+  if (!chain.length) return ''
+  const lines = chain
+    .slice(-4)
+    .map((c) => `  @${c.user}: "${c.text.slice(0, 220)}"`)
+    .join('\n')
+  return `conversation so far (oldest first):\n${lines}\n`
+}
+
 function buildBatchPrompt(items) {
   const itemsBlock = items
-    .map((item, i) => {
-      const parent = item.parent ? `zaal's cast they are responding to: "${item.parent.text}"\n` : ''
-      return `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${parent}their message: "${item.text}"`
-    })
+    .map((item, i) => `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${threadBlock(item)}their message: "${item.text}"`)
     .join('\n\n')
 
   return `${VOICE_PROMPT}
