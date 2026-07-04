@@ -17,7 +17,7 @@
 
 import readline from 'node:readline'
 import { getUnansweredInbound, postCast } from '../lib.js'
-import { generateDrafts } from '../voice.js'
+import { generateDrafts, saveVoiceExample } from '../voice.js'
 
 const line = '-'.repeat(60)
 
@@ -153,7 +153,11 @@ async function main() {
         const confirm = (await askLine('send? [y/N]: ')).trim().toLowerCase()
         if (confirm === 'y') {
           const result = await sendReply(item, edited, dry)
-          if (result === 'sent') summary.sent++
+          if (result === 'sent') {
+            summary.sent++
+            // his edit is the best voice data there is - feed future drafts
+            saveVoiceExample({ theirText: item.text, draftWas: item.draft, zaalWrote: edited })
+          }
           await askLine('enter to continue...')
           acted = true
         } else {

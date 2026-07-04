@@ -8,6 +8,10 @@ import { spawnSync } from 'node:child_process'
 import { ZAO_CONTEXT } from './context.js'
 
 const OPENROUTER_KEY_PATH = path.join(process.env.HOME, '.zao/private/openrouter.key')
+// Zaal's real edits from cockpit [e] - the highest-signal voice data. Lives
+// outside the repo, never committed. Overridable for tests.
+const EXAMPLES_PATH = process.env.VOICE_EXAMPLES_PATH
+  || path.join(process.env.HOME, '.zao/private/zaal-voice-examples.md')
 
 function loadOpenRouterKey() {
   try {
@@ -19,7 +23,47 @@ function loadOpenRouterKey() {
   }
 }
 
-export const VOICE_PROMPT = `You draft Farcaster replies for Zaal (@zaal). Voice rules:
+// Append one edit pair. Called by cockpit when Zaal sends an [e]dited reply -
+// what he actually wrote beats any rule we could write down.
+export function saveVoiceExample({ theirText, draftWas, zaalWrote }) {
+  try {
+    const entry = [
+      `## ${new Date().toISOString()}`,
+      `them: ${(theirText || '').replace(/\s+/g, ' ').slice(0, 300)}`,
+      draftWas ? `draft was: ${draftWas.replace(/\s+/g, ' ').slice(0, 300)}` : null,
+      `zaal wrote: ${(zaalWrote || '').replace(/\s+/g, ' ').slice(0, 300)}`,
+      '',
+    ].filter((l) => l !== null).join('\n')
+    fs.appendFileSync(EXAMPLES_PATH, entry + '\n', { mode: 0o600 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function loadVoiceExamples(max = 5) {
+  try {
+    if (!fs.existsSync(EXAMPLES_PATH)) return []
+    const blocks = fs.readFileSync(EXAMPLES_PATH, 'utf-8').split(/^## /m).filter((b) => b.trim())
+    return blocks.slice(-max).map((b) => {
+      const them = b.match(/^them: (.+)$/m)?.[1]
+      const wrote = b.match(/^zaal wrote: (.+)$/m)?.[1]
+      return them && wrote ? { them, wrote } : null
+    }).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function voicePrompt() {
+  const examples = loadVoiceExamples()
+  const exampleBlock = examples.length
+    ? `\n\nReal examples of how zaal actually replies (match this register):\n${examples
+        .map((e) => `- them: "${e.them}"\n  zaal: "${e.wrote}"`)
+        .join('\n')}`
+    : ''
+
+  return `You draft Farcaster replies for Zaal (@zaal). Voice rules:
 - short, plain, direct. one or two sentences max. lowercase is fine.
 - "ppl", "u", "imho" are fine. no hype adjectives, no exclamation stacking.
 - no emojis, no em dashes (plain hyphens only).
@@ -28,7 +72,8 @@ export const VOICE_PROMPT = `You draft Farcaster replies for Zaal (@zaal). Voice
 - if an item really does not need a reply, output SKIP for it.
 
 Ground replies in these facts when relevant (do not force them, do not list them, just be accurate):
-${ZAO_CONTEXT}`
+${ZAO_CONTEXT}${exampleBlock}`
+}
 
 // Render the ancestor chain for the prompt: last 4 casts, 220 chars each,
 // so deep threads inform the draft without blowing up the prompt.
@@ -44,12 +89,12 @@ function threadBlock(item) {
   return `conversation so far (oldest first):\n${lines}\n`
 }
 
-function buildBatchPrompt(items) {
+export function buildBatchPrompt(items) {
   const itemsBlock = items
     .map((item, i) => `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${threadBlock(item)}their message: "${item.text}"`)
     .join('\n\n')
 
-  return `${VOICE_PROMPT}
+  return `${voicePrompt()}
 
 For each item below output exactly one line in the form:
 ITEM <n>: <draft reply text or SKIP>
