@@ -155,6 +155,19 @@ export async function getCastDetails(castHash) {
   return response
 }
 
+// Resolve a cast from either a full/short hash or a farcaster.xyz URL
+// (https://farcaster.xyz/<username>/<0x + first 8 hash chars> - the link
+// format engage/channels print). Neynar accepts the URL as identifier.
+export async function resolveCast(hashOrUrl) {
+  const isUrl = hashOrUrl.startsWith('http')
+  const params = new URLSearchParams({
+    identifier: hashOrUrl,
+    type: isUrl ? 'url' : 'hash',
+  })
+  const response = await fetchNeynar(`/farcaster/cast?${params}`)
+  return response.cast
+}
+
 export function formatCast(cast) {
   const author = cast.author.display_name || cast.author.username
   const timestamp = new Date(cast.timestamp).toLocaleString('en-US', {

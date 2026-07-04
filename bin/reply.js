@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 
-import { postCast, getCastDetails } from '../lib.js'
+import { postCast, resolveCast } from '../lib.js'
 
 async function main() {
   const args = process.argv.slice(2)
 
   if (args.length < 2) {
-    console.error('Usage: zaalcaster-reply <parentHash> "your reply text" [--embed url]')
+    console.error('Usage: zaalcaster-reply <parentHashOrUrl> "your reply text" [--embed url]')
+    console.error('  parent can be a cast hash or a farcaster.xyz link (as printed by engage/channels)')
     process.exit(1)
   }
 
-  const parentHash = args[0]
+  const parent = args[0]
   let text = args[1]
   let embedUrl = null
 
@@ -22,14 +23,14 @@ async function main() {
   }
 
   try {
-    console.log('Fetching parent cast...')
-    const parentResponse = await getCastDetails(parentHash)
-    const parentCast = parentResponse.cast
+    console.log('Resolving parent cast...')
+    const parentCast = await resolveCast(parent)
+    console.log(`Replying to @${parentCast.author.username}: ${(parentCast.text || '').replace(/\s+/g, ' ').slice(0, 80)}`)
 
     console.log('Posting reply...')
     const response = await postCast(text, {
       embedUrl,
-      parentHash,
+      parentHash: parentCast.hash,
       parentFid: parentCast.author.fid,
     })
 
