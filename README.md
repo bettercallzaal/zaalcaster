@@ -199,3 +199,10 @@ Zaalcaster uses only Node 20+ built-ins. No npm packages needed.
 ## License
 
 MIT. Use freely. Farcaster is a public network.
+
+## Daily cockpit
+
+- `npm run morning` - one screen: what needs a reply (with drafts in your voice) + top of your timeline. Reads only.
+- `node bin/engage.js --drafts` - unanswered inbound, each with a suggested reply grounded in the ZAO/WaveWarZ context. Never posts.
+- `node bin/channel.js zao` (or wavewarz, zabal) - read a channel feed.
+- `node bin/reply.js <hash-or-url> "text"` - reply. `node bin/post.js "text"` - post. Both need your call on the text.

@@ -15,6 +15,7 @@
 
 import fs from 'fs'
 import path from 'path'
+import { ZAO_CONTEXT } from '../context.js'
 import { getNotifications, getCastDetails, getAnsweredParents } from '../lib.js'
 
 const OPENROUTER_KEY_PATH = path.join(process.env.HOME, '.zao/private/openrouter.key')
@@ -39,7 +40,11 @@ async function generateDraft(castText, parentText) {
 - no emojis, no em dashes (plain hyphens only).
 - answer the actual thing they asked or said; add one concrete detail when it helps.
 - keep it under 280 chars.
-- if this really does not need a reply, just output "SKIP".`
+- if this really does not need a reply, just output "SKIP".
+
+Ground the reply in these facts when relevant (do not force them, do not list them, just be accurate):
+${ZAO_CONTEXT}
+`
 
   const userPrompt = parentText
     ? `their cast you're responding to: "${parentText}"\n\nthey said: "${castText}"\n\nDraft a one-line reply in Zaal's voice (or SKIP):`

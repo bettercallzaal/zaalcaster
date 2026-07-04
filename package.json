@@ -12,10 +12,11 @@
     "zaalcaster-search": "./bin/search.js",
     "zaalcaster-mint-signer": "./bin/mint-signer.js",
     "zaalcaster-channels": "./bin/channels.js",
-    "zaalcaster-morning": "./bin/morning.js",
+    "zaalcaster-morning": "bin/morning.js",
     "zaalcaster-thread": "./bin/thread.js",
     "zaalcaster-drafts": "./bin/drafts.js",
-    "zaalcaster-user": "./bin/user.js"
+    "zaalcaster-user": "./bin/user.js",
+    "zaalcaster-channel": "bin/channel.js"
   },
   "scripts": {
     "user": "node bin/user.js",
@@ -28,7 +29,8 @@
     "notifs": "node bin/notifs.js",
     "post": "node bin/post.js",
     "reply": "node bin/reply.js",
-    "search": "node bin/search.js"
+    "search": "node bin/search.js",
+    "channel": "node bin/channel.js"
   },
   "keywords": [
     "farcaster",

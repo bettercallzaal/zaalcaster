@@ -1,30 +1,17 @@
 #!/usr/bin/env node
-
-// morning - the daily one-shot: unanswered inbound first (the work), then
-// home channels, then a slice of the following timeline. One command, one read.
-//
-// Usage: zaalcaster-morning [--limit n]   (n = casts per section, default 5)
-
+// morning - one screen to start the day: what needs a reply (with drafts) +
+// top of the timeline. Read-only, never posts. Usage: node bin/morning.js
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-const bin = path.dirname(fileURLToPath(import.meta.url))
-
-const args = process.argv.slice(2)
-const limit = args.includes('--limit') ? args[args.indexOf('--limit') + 1] : '5'
-
-const sections = [
-  ['UNANSWERED INBOUND', 'engage.js', ['--context', '--limit', '15']],
-  ['HOME CHANNELS', 'channels.js', ['--limit', limit]],
-  ['TIMELINE', 'timeline.js', ['--limit', limit]],
-]
-
-for (const [title, script, scriptArgs] of sections) {
-  console.log(`==== ${title} ====\n`)
-  const res = spawnSync('node', [path.join(bin, script), ...scriptArgs], {
-    stdio: 'inherit',
-  })
-  if (res.status !== 0) console.log(`(${script} failed - see above)`)
-  console.log('')
+const dir = path.dirname(fileURLToPath(import.meta.url))
+function run(script, args) {
+  const r = spawnSync('node', [path.join(dir, script), ...args], { encoding: 'utf-8' })
+  return (r.stdout || '') + (r.stderr || '')
 }
+const line = '='.repeat(56)
+console.log('\n' + line + '\n  GM. what needs you on farcaster\n' + line + '\n')
+console.log(run('engage.js', ['--drafts', '--limit', '8']).trim() || 'inbox zero.')
+console.log('\n' + line + '\n  top of your timeline\n' + line + '\n')
+console.log(run('timeline.js', ['--limit', '8']).trim())
+console.log('\n(reads only - nothing was posted)\n')
