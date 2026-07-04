@@ -11,7 +11,7 @@
 //   --all        include likes/recasts/follows too (default: replies + mentions
 //                + quotes only - the ones that can actually be answered)
 
-import { getNotifications, getCastDetails, getUserCasts } from '../lib.js'
+import { getNotifications, getCastDetails, getAnsweredParents } from '../lib.js'
 
 async function main() {
   const args = process.argv.slice(2)
@@ -21,14 +21,10 @@ async function main() {
   const includeAll = args.includes('--all')
   const answerable = new Set(['reply', 'mention', 'quote'])
 
-  const [notifs, mineRes] = await Promise.all([
+  const [notifs, answered] = await Promise.all([
     getNotifications({ limit: Number(limit) }),
-    getUserCasts({ limit: 50, includeReplies: true }),
+    getAnsweredParents(),
   ])
-
-  const answered = new Set(
-    (mineRes.casts || []).map((c) => c.parent_hash).filter(Boolean),
-  )
 
   const items = []
   for (const n of notifs.notifications || []) {
