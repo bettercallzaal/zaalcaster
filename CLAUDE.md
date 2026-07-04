@@ -13,7 +13,7 @@ Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Ne
 ## Map
 - lib.js - env loader + Neynar wrapper. Endpoints are /v2/farcaster/* (verified live 2026-07-04). Signer only required at post time; reads need only API key. resolveCast() takes hash or farcaster.xyz URL. getAnsweredParents() paginates Zaal's replies (3 pages / 150 casts).
 - bin/engage.js - unanswered inbound (replies/mentions/quotes) with thread context; --json for draft workflows; --all for likes etc (the daily driver)
-- bin/drafts.js - engage --json piped to claude -p with the voice rules; prints drafts + copy-ready reply commands, never posts
+- engage --drafts - THE single drafts path: one batched call, OpenRouter if ~/.zao/private/openrouter.key exists else claude CLI, grounded in context.js, prints copy-ready reply commands, never posts
 - bin/morning.js - one-shot: engage + channels + timeline
 - bin/thread.js - full conversation view (ancestors + nested replies) from hash or link
 - bin/user.js - profile lookup (mutual follows, neynar score, --casts n)
@@ -26,5 +26,5 @@ Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Ne
 - Reads WORK. POSTING UNBLOCKED: ZAAL_SIGNER_UUID approved for fid 19640 (minted via the zolbot account as app FID by the assistant terminal; no ETH was needed). No cast has been posted yet - first post still needs Zaal's yes on exact text.
 - mint-signer supports APP_SIGNER_PRIVATE_KEY/APP_SIGNER_MNEMONIC process-env overrides (how zolbot minted). The ZAO OS app wallet path (fund + --register-app-fid) remains as fallback documentation; ZAO OS's own /api/auth/signer route still has the custody-mismatch bug (APP_FID=19640 vs generated wallet).
 - TWO terminals sometimes work this repo simultaneously (this one + the zolbot/assistant terminal). Always git pull + git status before branching; expect uncommitted drift.
-- Commands: engage (context/json/filter/pagination + --drafts from #8), drafts, cockpit (#9), channel (#9), reply-by-URL, thread, user, like/recast, channels, morning, mint-signer. Note: bin/drafts.js and engage --drafts overlap - consolidation candidate.
-- Next ideas: consolidate drafts paths, notifs mark-seen, post --preview.
+- Commands: engage (context/json/filter/pagination/--drafts), channel + channels (overlap - consolidation candidate), reply-by-URL, thread, user, like/recast, morning, mint-signer, timeline, notifs, search, post, reply.
+- Next ideas: consolidate channel/channels, notifs mark-seen, post --preview.
