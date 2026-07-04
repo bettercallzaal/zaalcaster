@@ -10,10 +10,12 @@
     "zaalcaster-post": "./bin/post.js",
     "zaalcaster-reply": "./bin/reply.js",
     "zaalcaster-search": "./bin/search.js",
-    "zaalcaster-mint-signer": "./bin/mint-signer.js"
+    "zaalcaster-mint-signer": "./bin/mint-signer.js",
+    "zaalcaster-channels": "./bin/channels.js"
   },
   "scripts": {
     "mint-signer": "node bin/mint-signer.js",
+    "channels": "node bin/channels.js",
     "timeline": "node bin/timeline.js",
     "notifs": "node bin/notifs.js",
     "post": "node bin/post.js",
