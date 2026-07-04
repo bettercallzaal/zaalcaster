@@ -9,9 +9,11 @@
     "zaalcaster-notifs": "./bin/notifs.js",
     "zaalcaster-post": "./bin/post.js",
     "zaalcaster-reply": "./bin/reply.js",
-    "zaalcaster-search": "./bin/search.js"
+    "zaalcaster-search": "./bin/search.js",
+    "zaalcaster-channels": "./bin/channels.js"
   },
   "scripts": {
+    "channels": "node bin/channels.js",
     "timeline": "node bin/timeline.js",
     "notifs": "node bin/notifs.js",
     "post": "node bin/post.js",
