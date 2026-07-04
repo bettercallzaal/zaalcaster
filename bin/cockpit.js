@@ -27,7 +27,11 @@ function renderItem(item, index, total, dry) {
   console.log(line)
   console.log(`[${item.type}] @${item.user}`)
   console.log(`${item.link}`)
-  if (item.parent) console.log(`\nin reply to your cast: ${item.parent.text.slice(0, 160)}`)
+  const chain = (item.thread && item.thread.length) ? item.thread : (item.parent ? [item.parent] : [])
+  if (chain.length) {
+    console.log('\nthread:')
+    for (const c of chain.slice(-3)) console.log(`  @${c.user}: ${c.text.slice(0, 160)}`)
+  }
   console.log(`\nthem: ${item.text}`)
   console.log(line)
   if (item.draft === 'SKIP') {

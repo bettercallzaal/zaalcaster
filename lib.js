@@ -270,28 +270,30 @@ export async function getUnansweredInbound(options = {}) {
       text: (c.text || '').replace(/\s+/g, ' '),
       parentHash: c.parent_hash || null,
       parent: null,
+      thread: [],
       draft: null,
     })
   }
 
   if (withContext && items.length) {
-    // one lookup per unique parent, shared across items in the same thread
-    const parentHashes = [...new Set(items.map((i) => i.parentHash).filter(Boolean))]
-    const parents = new Map()
-    await Promise.all(parentHashes.map(async (h) => {
+    // full ancestor chain per item (root -> direct parent) so drafts fit the
+    // whole conversation, not just the one cast above. One conversation call
+    // per item, in parallel.
+    await Promise.all(items.map(async (item) => {
+      if (!item.parentHash) return
       try {
-        const res = await getCastDetails(h)
-        parents.set(h, {
-          user: res.cast.author?.username || '?',
-          text: (res.cast.text || '').replace(/\s+/g, ' '),
-        })
+        const res = await getConversation(item.hash, { replyDepth: 0 })
+        const ancestors = res.conversation?.chronological_parent_casts || []
+        item.thread = ancestors.map((a) => ({
+          user: a.author?.username || '?',
+          text: (a.text || '').replace(/\s+/g, ' '),
+        }))
+        // direct parent = last ancestor (kept for display compat)
+        item.parent = item.thread[item.thread.length - 1] || null
       } catch {
-        // parent deleted or unfetchable - item shows without context
+        // thread unfetchable - item shows without context
       }
     }))
-    for (const item of items) {
-      if (item.parentHash) item.parent = parents.get(item.parentHash) || null
-    }
   }
 
   return items
