@@ -18,7 +18,9 @@
 //
 // Env sources:
 //   ~/.zao/private/farcaster-zaal.env           NEYNAR_API_KEY (+ existing ZAAL_* keys)
-//   $ZAO_OS_DIR/.env.local                      APP_SIGNER_PRIVATE_KEY
+//   APP_SIGNER_PRIVATE_KEY / APP_SIGNER_MNEMONIC (process env) - custody of the app FID
+//     to sign with (e.g. the zolbot account). Takes precedence when set.
+//   $ZAO_OS_DIR/.env.local                      APP_SIGNER_PRIVATE_KEY fallback
 //     (default ZAO_OS_DIR: ~/Documents/ZAO OS V1; refresh with `vercel env pull .env.local`)
 //
 // viem is borrowed from ZAO OS V1's node_modules so zaalcaster stays dependency-free.
@@ -188,11 +190,20 @@ async function main() {
   if (!creds.NEYNAR_API_KEY) fail(`NEYNAR_API_KEY missing in ${CREDS_PATH}`)
   if (!creds.ZAAL_FID) fail(`ZAAL_FID missing in ${CREDS_PATH}`)
 
-  const zaoEnv = parseEnvFile(path.join(ZAO_OS_DIR, '.env.local'), 'ZAO OS V1 .env.local (run: vercel env pull .env.local)')
-  if (!zaoEnv.APP_SIGNER_PRIVATE_KEY) fail('APP_SIGNER_PRIVATE_KEY missing in ZAO OS V1 .env.local')
-
   const viem = await loadViem()
-  const appAccount = viem.privateKeyToAccount(zaoEnv.APP_SIGNER_PRIVATE_KEY)
+
+  // App custody key: process env wins (lets another terminal point this at a
+  // different app account, e.g. zolbot), then ZAO OS .env.local fallback.
+  let appAccount
+  if (process.env.APP_SIGNER_MNEMONIC) {
+    appAccount = viem.mnemonicToAccount(process.env.APP_SIGNER_MNEMONIC.trim())
+  } else if (process.env.APP_SIGNER_PRIVATE_KEY) {
+    appAccount = viem.privateKeyToAccount(process.env.APP_SIGNER_PRIVATE_KEY.trim())
+  } else {
+    const zaoEnv = parseEnvFile(path.join(ZAO_OS_DIR, '.env.local'), 'ZAO OS V1 .env.local (run: vercel env pull .env.local)')
+    if (!zaoEnv.APP_SIGNER_PRIVATE_KEY) fail('APP_SIGNER_PRIVATE_KEY missing in ZAO OS V1 .env.local')
+    appAccount = viem.privateKeyToAccount(zaoEnv.APP_SIGNER_PRIVATE_KEY)
+  }
   const appFid = await ensureAppFid(viem, appAccount, registerRequested, dryRun)
 
   if (dryRun) {
