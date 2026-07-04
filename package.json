@@ -15,7 +15,7 @@
     "zaalcaster-morning": "bin/morning.js",
     "zaalcaster-thread": "./bin/thread.js",
     "zaalcaster-user": "./bin/user.js",
-    "zaalcaster-channel": "bin/channel.js",
+    "zaalcaster-channel": "./bin/channels.js",
     "zaalcaster-like": "./bin/like.js"
   },
   "scripts": {
@@ -30,7 +30,7 @@
     "post": "node bin/post.js",
     "reply": "node bin/reply.js",
     "search": "node bin/search.js",
-    "channel": "node bin/channel.js"
+    "channel": "node bin/channels.js"
   },
   "keywords": [
     "farcaster",

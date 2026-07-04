@@ -204,5 +204,5 @@ MIT. Use freely. Farcaster is a public network.
 
 - `npm run morning` - one screen: what needs a reply (with drafts in your voice) + top of your timeline. Reads only.
 - `node bin/engage.js --drafts` - unanswered inbound, each with a suggested reply grounded in the ZAO/WaveWarZ context. Never posts.
-- `node bin/channel.js zao` (or wavewarz, zabal) - read a channel feed.
+- `node bin/channels.js zao` (or wavewarz, zabal; no arg = all three) - read channel feeds.
 - `node bin/reply.js <hash-or-url> "text"` - reply. `node bin/post.js "text"` - post. Both need your call on the text.
