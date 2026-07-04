@@ -30,7 +30,9 @@ function loadEnv() {
     env[key] = rest.join('=')
   }
 
-  const required = ['NEYNAR_API_KEY', 'ZAAL_SIGNER_UUID', 'ZAAL_FID']
+  // Reads only need the API key + fid. The signer is checked at post time so
+  // timeline/notifs/search/engage work before the signer is set up.
+  const required = ['NEYNAR_API_KEY', 'ZAAL_FID']
   for (const key of required) {
     if (!env[key]) {
       console.error(`Error: Missing ${key} in ${ENV_PATH}`)
@@ -73,7 +75,7 @@ export async function getFollowingFeed(options = {}) {
 
   if (cursor) params.append('cursor', cursor)
 
-  const response = await fetchNeynar(`/feeds/following?${params}`)
+  const response = await fetchNeynar(`/farcaster/feed/following?${params}`)
   return response
 }
 
@@ -81,13 +83,13 @@ export async function getChannelFeed(channelId, options = {}) {
   const { limit = 20, cursor = null } = options
 
   const params = new URLSearchParams({
-    id: channelId,
+    channel_ids: channelId,
     limit: String(limit),
   })
 
   if (cursor) params.append('cursor', cursor)
 
-  const response = await fetchNeynar(`/feeds/channels?${params}`)
+  const response = await fetchNeynar(`/farcaster/feed/channels?${params}`)
   return response
 }
 
@@ -102,7 +104,7 @@ export async function getNotifications(options = {}) {
 
   if (cursor) params.append('cursor', cursor)
 
-  const response = await fetchNeynar(`/notifications?${params}`)
+  const response = await fetchNeynar(`/farcaster/notifications?${params}`)
   return response
 }
 
@@ -114,7 +116,7 @@ export async function searchCasts(query, options = {}) {
     limit: String(limit),
   })
 
-  const response = await fetchNeynar(`/search/casts?${params}`)
+  const response = await fetchNeynar(`/farcaster/cast/search?${params}`)
   return response
 }
 
@@ -131,24 +133,16 @@ export async function postCast(text, options = {}) {
     payload.embeds = [{ url: embedUrl }]
   }
 
-  if (parentHash && parentFid) {
-    payload.reply_settings = {
-      parent: {
-        hash: parentHash,
-        fid: parseInt(parentFid, 10),
-      },
-    }
-  } else if (parentHash) {
-    payload.reply_settings = {
-      parent_hash: parentHash,
-    }
+  if (parentHash) {
+    payload.parent = parentHash
+    if (parentFid) payload.parent_author_fid = parseInt(parentFid, 10)
   }
 
   if (channelId) {
     payload.channel_id = channelId
   }
 
-  const response = await fetchNeynar('/casts', {
+  const response = await fetchNeynar('/farcaster/cast', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -157,7 +151,7 @@ export async function postCast(text, options = {}) {
 }
 
 export async function getCastDetails(castHash) {
-  const response = await fetchNeynar(`/casts?hash=${castHash}`)
+  const response = await fetchNeynar(`/farcaster/cast?identifier=${castHash}&type=hash`)
   return response
 }
 
@@ -191,10 +185,8 @@ export function formatCast(cast) {
 }
 
 export function formatNotification(notif) {
-  const casts = notif.casts || []
-  if (casts.length === 0) return null
-
-  const cast = casts[0]
+  const cast = notif.cast || (notif.casts && notif.casts[0])
+  if (!cast) return null
   return {
     hash: cast.hash,
     fid: cast.author.fid,
