@@ -178,11 +178,27 @@
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
   let bookmarks = lsGet('zc_bookmarks', [])           // array of compact casts
   let muted = lsGet('zc_muted', [])                   // array of lowercased words
+  let scheduled = lsGet('zc_scheduled', [])           // [{id,text,channelId,quoteHash,quoteFid,at}]
+  let syncEnabled = false                             // server store on? (set at boot)
+
+  // one persist path: write localStorage (offline cache) + push to the server
+  // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
+  let pushT = null
+  function persist() {
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled)
+    if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
+    if (!syncEnabled) return
+    clearTimeout(pushT)
+    pushT = setTimeout(() => {
+      fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled } }) }).catch(() => {})
+    }, 800)
+  }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
   function toggleBookmark(cast) {
     if (isBookmarked(cast.hash)) bookmarks = bookmarks.filter((b) => b.hash !== cast.hash)
     else bookmarks = [cast, ...bookmarks].slice(0, 500)
-    lsSet('zc_bookmarks', bookmarks)
+    persist()
   }
   const isMuted = (text) => { const t = (text || '').toLowerCase(); return muted.some((w) => w && t.includes(w)) }
   const dropMuted = (casts) => casts.filter((c) => !isMuted(c.text))
@@ -412,8 +428,17 @@
           <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
           <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
     }
-    return `<div class="compose"><textarea id="composeText" placeholder="what's happening... (posts as @zaal)">${esc(compose.text)}</textarea>
-      <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post</button><span class="cc" id="composeCc">${compose.text.length}</span></div></div>`
+    const pending = scheduled.filter((s) => !s.sent)
+    const queue = pending.length ? `<div class="subbar" style="margin-top:14px"><b style="color:#8a8a99;font-size:13px">scheduled (${pending.length})</b></div>`
+      + pending.map((s) => `<div class="urow" style="cursor:default"><div style="flex:1"><div>${esc((s.text || '').slice(0, 80))}</div>
+        <div class="ub">${new Date(s.at).toLocaleString()}${s.channelId ? ' - /' + esc(s.channelId) : ''}</div></div>
+        <span data-act="schedrm" data-id="${esc(s.id)}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('') : ''
+    const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
+    return `<div class="compose">${quotePreview()}<textarea id="composeText" placeholder="what's happening... (posts as @zaal)">${esc(compose.text)}</textarea>
+      <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
+      <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
+        <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
+      ${queue}</div>`
   }
 
   // ================= GROW =================
@@ -478,7 +503,7 @@
   if (!daily) { daily = DAILY_DEFAULT; lsSet('zc_daily', daily) }
   // daily reset - clear task ticks on a new day
   if (daily.date !== todayStr()) { daily.date = todayStr(); daily.tasks.forEach((x) => (x.done = false)); lsSet('zc_daily', daily) }
-  const saveDaily = () => lsSet('zc_daily', daily)
+  const saveDaily = () => persist()
 
   function renderDaily() {
     const done = daily.tasks.filter((t) => t.done).length
@@ -721,6 +746,16 @@
     }
 
     // compose
+    if (act === 'schedule') {
+      const ta = document.getElementById('composeText'); const at = document.getElementById('composeAt')
+      const text = ta ? ta.value.trim() : ''; const when = at ? at.value : ''
+      if (!text) { meta.textContent = 'write something first'; return }
+      if (!when || Date.parse(when) <= Date.now()) { meta.textContent = 'pick a future time'; return }
+      const item = { id: 'sc' + Date.now() + Math.floor(performance.now()), text, channelId: compose.channel || null, at: new Date(when).toISOString(), sent: false }
+      if (compose.quote) { item.quoteHash = compose.quote.hash; item.quoteFid = compose.quote.fid }
+      scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
+    }
+    if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
     if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; if (!compose.text) return; compose.armed = true; render(); return }
     if (act === 'composecancel') { compose.armed = false; render(); return }
     if (act === 'composeconfirm') {
@@ -750,12 +785,29 @@
     const b = e.target.closest('button[data-act="savemuted"]'); if (!b) return
     const val = document.getElementById('mutedInput').value
     muted = val.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
-    lsSet('zc_muted', muted); closeOverlay(); render()
+    persist(); closeOverlay(); render()
   })
 
   // ---- password gate ----
   const gate = document.getElementById('gate')
-  function startApp() { gate.style.display = 'none'; switchTab('daily') }
+  async function pullState() {
+    try {
+      const r = await fetch('/api/state'); const d = await r.json()
+      syncEnabled = !!d.enabled
+      if (d.enabled && d.state) {
+        const s = d.state
+        if (Array.isArray(s.bookmarks)) { bookmarks = s.bookmarks; lsSet('zc_bookmarks', bookmarks) }
+        if (Array.isArray(s.muted)) { muted = s.muted; lsSet('zc_muted', muted) }
+        if (Array.isArray(s.scheduled)) { scheduled = s.scheduled; lsSet('zc_scheduled', scheduled) }
+        if (s.daily && typeof s.daily === 'object') {
+          daily = s.daily
+          if (daily.date !== todayStr()) { daily.date = todayStr(); (daily.tasks || []).forEach((x) => (x.done = false)) }
+          lsSet('zc_daily', daily)
+        }
+      }
+    } catch { /* store unreachable - stay on localStorage */ }
+  }
+  async function startApp() { gate.style.display = 'none'; await pullState(); switchTab('daily') }
   async function submitPw() {
     const pw = document.getElementById('gatePw').value
     document.getElementById('gateErr').textContent = ''
