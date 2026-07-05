@@ -3,7 +3,7 @@
 // Behind Vercel login. A like/recast is a low-stakes, reversible signal, so
 // the UI fires it on click (no confirm) - but it still needs the signer.
 
-import { postReaction } from '../lib.js'
+import { postReaction, friendlyPostError } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -27,6 +27,6 @@ export default async function handler(req, res) {
     await postReaction(type, targetHash, body.targetFid ?? null)
     res.status(200).json({ ok: true, type })
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'react failed' })
+    res.status(500).json({ error: friendlyPostError(err) })
   }
 }

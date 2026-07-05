@@ -8,7 +8,7 @@
 // the UI must show exact text + an explicit confirm before calling this - the
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
-import { postCast } from '../lib.js'
+import { postCast, friendlyPostError } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -45,6 +45,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     // lib throws a clear message when ZAAL_SIGNER_UUID is missing
-    res.status(500).json({ error: err instanceof Error ? err.message : 'send failed' })
+    res.status(500).json({ error: friendlyPostError(err) })
   }
 }

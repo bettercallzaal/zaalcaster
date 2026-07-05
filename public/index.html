@@ -112,6 +112,7 @@
       box-shadow: 0 -4px 16px rgba(0,0,0,.3); }
     .tabs button { font-size: 12px; padding: 10px 2px 9px; }
     .tabs button .k { display: none; }
+    .tabs button.on { border-bottom-color: transparent; box-shadow: inset 0 2px 0 var(--accent); }
     main { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0)); }
     .card .stats { gap: 18px; }
     .card .stats button, .reply button, .ibtn, .chip { min-height: 34px; }
@@ -175,6 +176,7 @@
   const meta = document.getElementById('meta')
   const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
   let HOME_CHANNELS = ['zao', 'wavewarz', 'zabal'] // overridden from config on boot
+  let ME = 'zaal' // your username, set from config on boot
 
   let tab = 'feed'
   const st = {
@@ -530,10 +532,16 @@
     const apps = daily.apps.map((a, i) => `<span class="chip"><a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(a.label)}</a> <span data-act="dapprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
     const comms = daily.communities.map((c, i) => `<span class="chip" data-act="dcomm" data-c="${esc(c)}">/${esc(c)} <span data-act="dcommrm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
     const groups = daily.groups.map((g, i) => `<span class="chip"><a href="${esc(g.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(g.label)}</a> <span data-act="dgrouprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
-    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @zaal - <b>${done}/${daily.tasks.length}</b> done today</div></div>
+    const pending = (scheduled || []).filter((s) => !s.sent).sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+    const sched = pending.length ? `<div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">scheduled posts (${pending.length})</b></div>`
+      + pending.map((s) => `<div class="urow" style="cursor:default"><div style="flex:1"><div>${esc((s.text || '').slice(0, 70))}</div>
+        <div class="ub">${new Date(s.at).toLocaleString()}${s.channelId ? ' - /' + esc(s.channelId) : ''}</div></div>
+        <span data-act="schedrm" data-id="${esc(s.id)}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('') : ''
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</div></div>
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
       <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
+      ${sched}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
       <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
       <div class="searchbar"><input id="dAppLabel" placeholder="app name" style="flex:1"><input id="dAppUrl" placeholder="https://..." style="flex:2"><button class="ibtn" data-act="dappadd">add</button></div>
@@ -897,6 +905,7 @@
   // brand the UI from config.js (name, channels, Daily seed) so a fork adapts
   function applyConfig(cfg) {
     if (!cfg) return
+    if (cfg.username) ME = cfg.username
     if (cfg.appName) {
       document.title = cfg.appName
       const m = cfg.appName.match(/^(.*?)(caster)$/i)
