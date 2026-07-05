@@ -4,42 +4,57 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const ENV_PATH = path.join(process.env.HOME, '.zao/private/farcaster-zaal.env')
+const ENV_PATH = path.join(process.env.HOME || '', '.zao/private/farcaster-zaal.env')
+// Personal spam list - usernames and/or fids to drop from the inbound work
+// list. Lives outside the repo (never committed). One entry per line, '#'
+// comments allowed; a bare username (no @) or a numeric fid.
+export const SPAM_PATH = path.join(process.env.HOME || '', '.zao/private/zaalcaster-spam.txt')
 const NEYNAR_BASE_URL = 'https://api.neynar.com/v2'
 
 let env = null
 
+// Env resolves from two places so the same lib runs as a local CLI and as a
+// Vercel serverless function:
+//   1. process.env - Vercel (set NEYNAR_API_KEY / ZAAL_FID / ZAAL_SIGNER_UUID
+//      in the project's Environment Variables). Wins when NEYNAR_API_KEY is set.
+//   2. ~/.zao/private/farcaster-zaal.env - the local CLI creds file.
+// Throws (never process.exit) so serverless handlers can catch and return 500
+// instead of killing the function; CLI bins already catch and print.
 export function loadEnv() {
   if (env) return env
 
-  if (!fs.existsSync(ENV_PATH)) {
-    console.error(`Error: Missing env file at ${ENV_PATH}`)
-    console.error('Create ~/.zao/private/farcaster-zaal.env with:')
-    console.error('  NEYNAR_API_KEY=your_key_here')
-    console.error('  ZAAL_SIGNER_UUID=your_signer_uuid_here')
-    console.error('  ZAAL_FID=19640')
-    process.exit(1)
+  if (process.env.NEYNAR_API_KEY) {
+    env = {
+      NEYNAR_API_KEY: process.env.NEYNAR_API_KEY,
+      ZAAL_FID: process.env.ZAAL_FID || '19640',
+      ZAAL_SIGNER_UUID: process.env.ZAAL_SIGNER_UUID || '',
+    }
+    return env
   }
 
-  env = {}
+  if (!fs.existsSync(ENV_PATH)) {
+    throw new Error(
+      `Missing credentials. Set NEYNAR_API_KEY (+ ZAAL_FID, ZAAL_SIGNER_UUID) in the ` +
+      `environment, or create ${ENV_PATH} with NEYNAR_API_KEY / ZAAL_SIGNER_UUID / ZAAL_FID=19640.`,
+    )
+  }
+
+  const parsed = {}
   const content = fs.readFileSync(ENV_PATH, 'utf-8')
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue
     const [key, ...rest] = trimmed.split('=')
-    env[key] = rest.join('=')
+    parsed[key] = rest.join('=')
   }
 
   // Reads only need the API key + fid. The signer is checked at post time so
   // timeline/notifs/search/engage work before the signer is set up.
-  const required = ['NEYNAR_API_KEY', 'ZAAL_FID']
-  for (const key of required) {
-    if (!env[key]) {
-      console.error(`Error: Missing ${key} in ${ENV_PATH}`)
-      process.exit(1)
-    }
+  for (const key of ['NEYNAR_API_KEY', 'ZAAL_FID']) {
+    if (!parsed[key]) throw new Error(`Missing ${key} in ${ENV_PATH}`)
   }
 
+  env = parsed
   return env
 }
 
@@ -53,12 +68,11 @@ async function fetchNeynar(endpoint, options = {}) {
   }
 
   const res = await fetch(url, { ...options, headers })
-  const json = await res.json()
+  const json = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    console.error(`Neynar API error: ${res.status}`)
-    console.error(json)
-    process.exit(1)
+    const detail = json?.message || JSON.stringify(json).slice(0, 200)
+    throw new Error(`Neynar API error ${res.status}: ${detail}`)
   }
 
   return json
@@ -93,6 +107,41 @@ export async function getChannelFeed(channelId, options = {}) {
   return response
 }
 
+// Trending channels right now - where the action is, so Zaal can jump in.
+export async function getTrendingChannels(options = {}) {
+  const { limit = 10, timeWindow = '1d' } = options
+  const params = new URLSearchParams({ limit: String(limit), time_window: timeWindow })
+  const response = await fetchNeynar(`/farcaster/channel/trending?${params}`)
+  return (response.channels || []).map((a) => {
+    const c = a.channel || a
+    return { id: c.id, name: c.name || c.id, image: c.image_url || null, casts1d: Number(a.cast_count_1d || 0) }
+  }).filter((c) => c.id)
+}
+
+// Suggested accounts to follow/engage - people Neynar thinks are relevant to
+// Zaal but that he is not already deep with. A growth surface.
+export async function getFollowSuggestions(options = {}) {
+  const { limit = 12 } = options
+  const env = loadEnv()
+  const params = new URLSearchParams({ fid: env.ZAAL_FID, limit: String(limit) })
+  const response = await fetchNeynar(`/farcaster/following/suggested?${params}`)
+  return response.users || []
+}
+
+export async function getTrendingFeed(options = {}) {
+  const { limit = 20, cursor = null, timeWindow = '24h' } = options
+
+  const params = new URLSearchParams({
+    limit: String(limit),
+    time_window: timeWindow,
+  })
+
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/farcaster/feed/trending?${params}`)
+  return response
+}
+
 export async function getNotifications(options = {}) {
   const { limit = 20, cursor = null } = options
   const env = loadEnv()
@@ -120,6 +169,23 @@ export async function searchCasts(query, options = {}) {
   return response
 }
 
+export async function searchUsers(query, options = {}) {
+  const { limit = 8 } = options
+  const env = loadEnv()
+  const params = new URLSearchParams({ q: query, limit: String(limit), viewer_fid: env.ZAAL_FID })
+  const response = await fetchNeynar(`/farcaster/user/search?${params}`)
+  return response
+}
+
+// Bulk user lookup (with Zaal as viewer, for scores + follow context).
+export async function getUsersByFids(fids) {
+  if (!fids.length) return []
+  const env = loadEnv()
+  const params = new URLSearchParams({ fids: fids.join(','), viewer_fid: env.ZAAL_FID })
+  const response = await fetchNeynar(`/farcaster/user/bulk?${params}`)
+  return response.users || []
+}
+
 // Look up a user by fid (number) or username (with or without @).
 // viewer_fid is Zaal so the result includes follow relationship both ways.
 export async function getUser(fidOrUsername) {
@@ -139,14 +205,14 @@ export async function getUser(fidOrUsername) {
 
 function requireSigner(env) {
   if (!env.ZAAL_SIGNER_UUID) {
-    console.error('Error: ZAAL_SIGNER_UUID missing - run npm run mint-signer first. Reads work without it.')
-    process.exit(1)
+    throw new Error('ZAAL_SIGNER_UUID missing - run npm run mint-signer (or set it in the Vercel env). Reads work without it.')
   }
   return env.ZAAL_SIGNER_UUID
 }
 
 export async function postCast(text, options = {}) {
-  const { embedUrl = null, parentHash = null, parentFid = null, channelId = null } = options
+  const { embedUrl = null, parentHash = null, parentFid = null, channelId = null,
+    quoteHash = null, quoteFid = null } = options
   const env = loadEnv()
 
   const payload = {
@@ -154,9 +220,11 @@ export async function postCast(text, options = {}) {
     text,
   }
 
-  if (embedUrl) {
-    payload.embeds = [{ url: embedUrl }]
-  }
+  const embeds = []
+  if (embedUrl) embeds.push({ url: embedUrl })
+  // quote cast: embed another cast by id (needs both hash + author fid)
+  if (quoteHash && quoteFid) embeds.push({ cast_id: { hash: quoteHash, fid: parseInt(quoteFid, 10) } })
+  if (embeds.length) payload.embeds = embeds
 
   if (parentHash) {
     payload.parent = parentHash
@@ -247,9 +315,31 @@ export async function getAnsweredParents(pages = 3) {
 
 // Unanswered inbound items (the engage/cockpit work list): notifications Zaal
 // has not replied to yet, newest first, with parent-cast context attached.
+// Spam set: lowercased usernames + fid strings to filter out of inbound.
+// Sources: SPAM_LIST env var (comma-separated, for Vercel) + the local file.
+export function loadSpamSet() {
+  const set = new Set()
+  const add = (raw) => {
+    const v = String(raw || '').trim().replace(/^@/, '').toLowerCase()
+    if (v && !v.startsWith('#')) set.add(v)
+  }
+  if (process.env.SPAM_LIST) {
+    for (const part of process.env.SPAM_LIST.split(',')) add(part)
+  }
+  try {
+    if (fs.existsSync(SPAM_PATH)) {
+      for (const line of fs.readFileSync(SPAM_PATH, 'utf-8').split('\n')) add(line)
+    }
+  } catch {
+    // unreadable list - fail open (show everything) rather than hide inbound
+  }
+  return set
+}
+
 export async function getUnansweredInbound(options = {}) {
   const { limit = 15, includeAll = false, withContext = true } = options
   const answerable = new Set(['reply', 'mention', 'quote'])
+  const spam = loadSpamSet()
 
   const [notifs, answered] = await Promise.all([
     getNotifications({ limit }),
@@ -261,6 +351,8 @@ export async function getUnansweredInbound(options = {}) {
     const c = n.cast || {}
     if (!includeAll && !answerable.has(n.type)) continue
     if (!c.hash || answered.has(c.hash)) continue
+    const uname = (c.author?.username || '').toLowerCase()
+    if (spam.has(uname) || (c.author?.fid && spam.has(String(c.author.fid)))) continue
     items.push({
       type: n.type,
       user: c.author?.username || '?',
@@ -270,28 +362,30 @@ export async function getUnansweredInbound(options = {}) {
       text: (c.text || '').replace(/\s+/g, ' '),
       parentHash: c.parent_hash || null,
       parent: null,
+      thread: [],
       draft: null,
     })
   }
 
   if (withContext && items.length) {
-    // one lookup per unique parent, shared across items in the same thread
-    const parentHashes = [...new Set(items.map((i) => i.parentHash).filter(Boolean))]
-    const parents = new Map()
-    await Promise.all(parentHashes.map(async (h) => {
+    // full ancestor chain per item (root -> direct parent) so drafts fit the
+    // whole conversation, not just the one cast above. One conversation call
+    // per item, in parallel.
+    await Promise.all(items.map(async (item) => {
+      if (!item.parentHash) return
       try {
-        const res = await getCastDetails(h)
-        parents.set(h, {
-          user: res.cast.author?.username || '?',
-          text: (res.cast.text || '').replace(/\s+/g, ' '),
-        })
+        const res = await getConversation(item.hash, { replyDepth: 0 })
+        const ancestors = res.conversation?.chronological_parent_casts || []
+        item.thread = ancestors.map((a) => ({
+          user: a.author?.username || '?',
+          text: (a.text || '').replace(/\s+/g, ' '),
+        }))
+        // direct parent = last ancestor (kept for display compat)
+        item.parent = item.thread[item.thread.length - 1] || null
       } catch {
-        // parent deleted or unfetchable - item shows without context
+        // thread unfetchable - item shows without context
       }
     }))
-    for (const item of items) {
-      if (item.parentHash) item.parent = parents.get(item.parentHash) || null
-    }
   }
 
   return items

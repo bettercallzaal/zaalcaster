@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>zaalcaster</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0c0c12; --surface: #14141d; --surface2: #1a1a26; --border: #24242f;
+    --text: #e9e9ee; --dim: #8a8a99; --accent: #855DCD; --accent2: #6d4aff;
+    --live: #D85A30; --good: #7ee0a0;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 12px 16px; background: rgba(12,12,18,.86); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .3px; }
+  header h1 span { color: var(--accent); }
+  header .meta { font-size: 12px; color: var(--dim); }
+  header .right { display: flex; gap: 8px; align-items: center; }
+  button { font: inherit; cursor: pointer; }
+  .ibtn { font-size: 13px; background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 11px; }
+  .ibtn:hover { border-color: var(--accent); }
+  .ibtn.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  .tabs { position: sticky; top: 49px; z-index: 15; display: flex; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .tabs button { flex: 1; background: none; border: none; color: var(--dim); padding: 11px 4px; font-size: 14px; font-weight: 600;
+    border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .tabs button .k { font-size: 10px; color: var(--dim); font-weight: 400; }
+  main { max-width: 640px; margin: 0 auto; padding: 10px 12px 90px; }
+  .subbar { display: flex; gap: 8px; padding: 6px 2px 10px; flex-wrap: wrap; }
+  .chip { font-size: 13px; background: var(--surface2); color: var(--dim); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 13px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 13px 15px; margin-bottom: 11px; }
+  .card .top { display: flex; gap: 10px; align-items: flex-start; }
+  .pfp { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); object-fit: cover; flex: none; }
+  .card .who { flex: 1; min-width: 0; }
+  .card .who .name { font-weight: 600; }
+  .card .who .name a { color: var(--text); text-decoration: none; }
+  .card .who .sub { font-size: 12px; color: var(--dim); }
+  .card .who .sub .ch { color: var(--accent); }
+  .card .body { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .card .embed { margin-top: 7px; font-size: 13px; }
+  .card .embed a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .card .stats { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--dim); }
+  .card .stats button { background: none; border: none; color: var(--dim); padding: 0; display: inline-flex; gap: 5px; align-items: center; }
+  .card .stats button.act.on { color: var(--live); }
+  .card .stats button.act.recast.on { color: var(--good); }
+  .tag { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 6px; }
+  .thread { border-left: 2px solid var(--border); padding-left: 10px; margin: 7px 0 0; }
+  .thread div { color: var(--dim); font-size: 13px; margin: 2px 0; }
+  .thread .u { color: #b8b8c6; }
+  .draft { margin-top: 10px; padding: 9px 11px; background: #17141f; border: 1px solid #34294d; border-radius: 9px; }
+  .draft .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #a99bff; margin-bottom: 3px; }
+  .draft .t { white-space: pre-wrap; word-break: break-word; color: #ddd6ff; }
+  .draft.skip { border-color: var(--border); background: #16161c; }
+  .draft.skip .lab, .draft.skip .t { color: #6f6f7a; }
+  .reply { margin-top: 10px; }
+  .reply textarea, .compose textarea { width: 100%; resize: vertical; font: inherit; font-size: 15px; background: #0e0e15;
+    color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; }
+  .reply textarea { min-height: 52px; } .compose textarea { min-height: 130px; }
+  .reply textarea:focus, .compose textarea:focus { outline: none; border-color: var(--accent); }
+  .reply textarea[readonly] { background: #12101a; border-color: #34294d; color: #ddd6ff; }
+  .reply .btns, .compose .btns { display: flex; gap: 8px; align-items: center; margin-top: 7px; flex-wrap: wrap; }
+  .reply .cc, .compose .cc { font-size: 12px; color: var(--dim); }
+  .reply .note, .compose .note { font-size: 12px; color: #ffcf9a; }
+  .sent { margin-top: 10px; font-size: 13px; color: var(--good); }
+  .sent a { color: var(--good); }
+  .empty, .err { text-align: center; color: var(--dim); padding: 44px 16px; }
+  .err { color: #ff8a8a; }
+  .loading { text-align: center; color: var(--dim); padding: 30px; }
+  .compose select { font: inherit; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
+  a.open { font-size: 12px; color: var(--dim); text-decoration: none; }
+  a.open:hover { color: var(--accent); }
+  .uname { cursor: pointer; } .uname:hover { color: var(--accent); }
+  .tappable { cursor: pointer; }
+  .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
+  .searchbar input { flex: 1; font: inherit; font-size: 15px; background: #0e0e15; color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; }
+  .searchbar input:focus { outline: none; border-color: var(--accent); }
+  .digest { background: #16131f; border: 1px solid #34294d; border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }
+  .digest .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #a99bff; margin-bottom: 6px; }
+  .digest .t { white-space: pre-wrap; word-break: break-word; color: #ddd6ff; font-size: 14px; }
+  .urow { display: flex; gap: 10px; align-items: center; padding: 8px 2px; cursor: pointer; }
+  .urow:hover { background: var(--surface2); border-radius: 10px; }
+  .urow .un { font-weight: 600; } .urow .ub { font-size: 12px; color: var(--dim); }
+  #overlay { position: fixed; inset: 0; z-index: 50; background: rgba(6,6,10,.72); backdrop-filter: blur(3px); display: none; }
+  #overlay.on { display: block; }
+  #overlay .sheet { max-width: 640px; margin: 0 auto; height: 100%; overflow-y: auto; background: var(--bg); border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  #overlay .ohd { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+    background: rgba(12,12,18,.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  #overlay .ohd b { font-size: 15px; } #overlay .ohd .x { cursor: pointer; color: var(--dim); font-size: 20px; }
+  #overlay .obody { padding: 12px; }
+  .prof { display: flex; gap: 12px; align-items: center; padding: 4px 2px 12px; }
+  .prof .pfp { width: 56px; height: 56px; } .prof .pn { font-size: 18px; font-weight: 700; }
+  .prof .ps { font-size: 13px; color: var(--dim); }
+  .prof .badge { font-size: 11px; color: var(--good); }
+  .focuscast { border-color: var(--accent); }
+  body.deck main { max-width: 100%; }
+  .deck { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory; }
+  .deckcol { flex: 0 0 340px; max-width: 92vw; scroll-snap-align: start; }
+  .deckcol .dh { position: sticky; top: 0; background: var(--bg); padding: 6px 2px 8px; font-weight: 700; font-size: 14px; z-index: 2; border-bottom: 1px solid var(--border); }
+  .deckcol .dc { max-height: calc(100vh - 180px); overflow-y: auto; padding-top: 8px; }
+  @media (min-width: 760px) { .deckcol { flex: 1 1 0; max-width: none; } }
+  footer { text-align: center; color: #4a4a58; font-size: 11px; padding: 6px 0 30px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>zaal<span>caster</span></h1>
+    <div class="meta" id="meta"></div>
+  </div>
+  <div class="right">
+    <button class="ibtn" id="deckBtn" title="column deck view">deck</button>
+    <button class="ibtn" id="refresh" title="refresh (r)">refresh</button>
+    <a href="/dj.html" style="text-decoration:none"><button class="ibtn" type="button" title="space dj">dj</button></a>
+  </div>
+</header>
+
+<div class="tabs" id="tabs">
+  <button data-tab="daily" class="on">Daily <span class="k">1</span></button>
+  <button data-tab="feed">Feed <span class="k">2</span></button>
+  <button data-tab="inbox">Inbox <span class="k">3</span></button>
+  <button data-tab="channels">Chan <span class="k">4</span></button>
+  <button data-tab="search">Search <span class="k">5</span></button>
+  <button data-tab="compose">Post <span class="k">6</span></button>
+  <button data-tab="grow">Grow <span class="k">7</span></button>
+</div>
+
+<main id="main"></main>
+<div id="overlay"><div class="sheet"><div class="ohd"><b id="ohdTitle"></b><span class="x" id="overlayClose">&times;</span></div><div class="obody" id="obody"></div></div></div>
+<div id="palette" style="position:fixed;inset:0;z-index:70;background:rgba(6,6,10,.6);display:none;padding-top:12vh">
+  <div style="max-width:440px;margin:0 auto;background:#14141d;border:1px solid #33334d;border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+    <input id="palInput" placeholder="jump to... (tab name, @user, or search)" autocomplete="off"
+      style="width:100%;font:inherit;font-size:16px;background:none;color:#e9e9ee;border:none;border-bottom:1px solid #24242f;padding:14px 16px;box-sizing:border-box;outline:none">
+    <div id="palList" style="max-height:50vh;overflow-y:auto"></div>
+  </div>
+</div>
+<div id="gate" style="position:fixed;inset:0;z-index:100;background:#0c0c12;display:none;align-items:center;justify-content:center">
+  <div style="width:280px;max-width:86vw;text-align:center">
+    <h1 style="font-size:20px;margin:0 0 4px">zaal<span style="color:#855DCD">caster</span></h1>
+    <div style="color:#8a8a99;font-size:13px;margin-bottom:16px">enter password</div>
+    <input id="gatePw" type="password" autocomplete="current-password" placeholder="password"
+      style="width:100%;font:inherit;font-size:16px;background:#14141d;color:#e9e9ee;border:1px solid #24242f;border-radius:10px;padding:11px 13px;box-sizing:border-box">
+    <button id="gateBtn" style="width:100%;margin-top:10px;font:inherit;font-size:15px;font-weight:600;background:#6d4aff;color:#fff;border:none;border-radius:10px;padding:11px;cursor:pointer">enter</button>
+    <div id="gateErr" style="color:#ff8a6a;font-size:13px;margin-top:8px;min-height:16px"></div>
+  </div>
+</div>
+<footer>your farcaster - reads are free, nothing is sent without your confirm</footer>
+
+<script>
+  const main = document.getElementById('main')
+  const meta = document.getElementById('meta')
+  const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
+  const HOME_CHANNELS = ['zao', 'wavewarz', 'zabal']
+
+  let tab = 'feed'
+  const st = {
+    feed: { type: 'following', casts: [], loaded: false, digest: null, digesting: false },
+    inbox: { items: [], loaded: false, showAll: false, priority: false },
+    channels: { id: 'zao', casts: [], loaded: false, trending: [] },
+    search: { q: '', users: [], casts: [], loaded: true, searching: false },
+    grow: { loaded: false, data: null },
+  }
+
+  const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const when = (ts) => { if (!ts) return ''; const d = new Date(ts); return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+  const pfp = (u) => u.pfp ? `<img class="pfp" src="${esc(u.pfp)}" alt="">` : `<div class="pfp"></div>`
+
+  // ---- local (per-browser) state: bookmarks + muted keywords ----
+  const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
+  let bookmarks = lsGet('zc_bookmarks', [])           // array of compact casts
+  let muted = lsGet('zc_muted', [])                   // array of lowercased words
+  let scheduled = lsGet('zc_scheduled', [])           // [{id,text,channelId,quoteHash,quoteFid,at}]
+  let syncEnabled = false                             // server store on? (set at boot)
+
+  // one persist path: write localStorage (offline cache) + push to the server
+  // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
+  let pushT = null
+  function persist() {
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled)
+    if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
+    if (!syncEnabled) return
+    clearTimeout(pushT)
+    pushT = setTimeout(() => {
+      fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled } }) }).catch(() => {})
+    }, 800)
+  }
+  const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
+  function toggleBookmark(cast) {
+    if (isBookmarked(cast.hash)) bookmarks = bookmarks.filter((b) => b.hash !== cast.hash)
+    else bookmarks = [cast, ...bookmarks].slice(0, 500)
+    persist()
+  }
+  const isMuted = (text) => { const t = (text || '').toLowerCase(); return muted.some((w) => w && t.includes(w)) }
+  const dropMuted = (casts) => casts.filter((c) => !isMuted(c.text))
+  function findCast(hash) {
+    return st.feed.casts.find((c) => c.hash === hash) || st.channels.casts.find((c) => c.hash === hash)
+      || st.search.casts.find((c) => c.hash === hash) || bookmarks.find((c) => c.hash === hash) || null
+  }
+
+  // ---- shared cast card (feed + channels) ----
+  function castCard(c) {
+    const embeds = (c.embeds || []).map((e) => `<div class="embed"><a href="${esc(e)}" target="_blank" rel="noopener">${esc(e)}</a></div>`).join('')
+    return `<div class="card" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">
+      <div class="top">
+        <span data-act="profile" data-user="${esc(c.author)}" style="cursor:pointer">${pfp(c)}</span>
+        <div class="who">
+          <div class="name"><span class="uname" data-act="profile" data-user="${esc(c.author)}">${esc(c.display)}</span>
+            <span class="sub">@${esc(c.author)} - ${when(c.timestamp)}${c.channel ? ` - <span class="ch">/${esc(c.channel)}</span>` : ''}</span></div>
+          <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text)}</div>
+          ${embeds}
+          <div class="stats">
+            <button class="act like" data-act="like" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#9829; <span>${c.likes}</span></button>
+            <button class="act recast" data-act="recast" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#8635; <span>${c.recasts}</span></button>
+            <button data-act="thread" data-hash="${esc(c.hash)}">&#128172; ${c.replies}</button>
+            <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">reply</button>
+            <button data-act="quote" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">quote</button>
+            <button class="act bm ${isBookmarked(c.hash) ? 'on' : ''}" data-act="bookmark" data-hash="${esc(c.hash)}">${isBookmarked(c.hash) ? 'saved' : 'save'}</button>
+            <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a>
+          </div>
+          <div class="replyslot" data-slot="${esc(c.hash)}"></div>
+        </div>
+      </div>
+    </div>`
+  }
+
+  // inline reply composer used by feed/channel cards
+  function replyBox(hash, fid, draft) {
+    return `<div class="reply">
+      <textarea data-rhash="${esc(hash)}" data-rfid="${fid || ''}" placeholder="reply as @zaal...">${esc(draft || '')}</textarea>
+      <div class="btns"><button class="ibtn" data-act="replyarm" data-hash="${esc(hash)}">send reply</button>
+        <button class="ibtn" data-act="replycancel" data-hash="${esc(hash)}">cancel</button></div>
+    </div>`
+  }
+  function replyConfirm(hash, fid, text, sending) {
+    return `<div class="reply">
+      <textarea readonly>${esc(text)}</textarea>
+      <div class="btns"><span class="note">send exactly this as @zaal?</span>
+        <button class="ibtn primary" data-act="replyconfirm" data-hash="${esc(hash)}" data-fid="${fid || ''}">${sending ? 'sending...' : 'yes, send'}</button>
+        <button class="ibtn" data-act="replycancel" data-hash="${esc(hash)}">cancel</button></div>
+    </div>`
+  }
+
+  // ================= FEED =================
+  const moreBtn = (cursor, act) => cursor ? `<div class="subbar" style="justify-content:center"><button class="ibtn" data-act="${act}">load more</button></div>` : ''
+  async function loadFeed(append) {
+    if (!append) { st.feed.loaded = false; st.feed.cursor = null; render() }
+    try {
+      const url = `/api/feed?type=${st.feed.type}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
+      const r = await fetch(url)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'feed failed')
+      st.feed.casts = append ? st.feed.casts.concat(d.casts) : d.casts
+      st.feed.cursor = d.cursor; st.feed.loaded = true
+    } catch (e) { st.feed.err = e.message; st.feed.loaded = true }
+    render()
+  }
+  async function loadDigest() {
+    st.feed.digesting = true; render()
+    try {
+      const r = await fetch('/api/digest'); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'digest failed')
+      st.feed.digest = d.available ? d.digest : 'digest needs OPENROUTER_API_KEY'
+    } catch (e) { st.feed.digest = 'digest error: ' + e.message }
+    st.feed.digesting = false; render()
+  }
+  function renderFeed() {
+    const sub = `<div class="subbar">
+      <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">following</span>
+      <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
+      <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
+      <button class="ibtn" data-act="digest">${st.feed.digesting ? 'summarizing...' : 'what I missed'}</button>
+      <button class="ibtn" data-act="filters">filters</button></div>`
+    if (st.feed.type === 'saved') {
+      if (!bookmarks.length) return sub + '<div class="empty">no saved casts. tap "save" on any cast.</div>'
+      return sub + dropMuted(bookmarks).map(castCard).join('')
+    }
+    const dig = st.feed.digest ? `<div class="digest"><div class="lab">what you missed</div><div class="t">${esc(st.feed.digest)}</div></div>` : ''
+    if (!st.feed.loaded) return sub + dig + '<div class="loading">loading feed...</div>'
+    if (st.feed.err) return sub + `<div class="err">${esc(st.feed.err)}</div>`
+    const casts = dropMuted(st.feed.casts)
+    if (!casts.length) return sub + dig + '<div class="empty">no casts.</div>'
+    return sub + dig + casts.map(castCard).join('') + moreBtn(st.feed.cursor, 'morefeed')
+  }
+
+  // ================= SEARCH =================
+  async function runSearch() {
+    const q = st.search.q.trim(); if (!q) return
+    st.search.searching = true; render()
+    try {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'search failed')
+      st.search.users = d.users; st.search.casts = d.casts; st.search.err = null
+    } catch (e) { st.search.err = e.message }
+    st.search.searching = false; render()
+  }
+  function renderSearch() {
+    const bar = `<div class="searchbar"><input id="searchInput" placeholder="search people + casts..." value="${esc(st.search.q)}">
+      <button class="ibtn primary" data-act="dosearch">go</button></div>`
+    let body = ''
+    if (st.search.searching) body = '<div class="loading">searching...</div>'
+    else if (st.search.err) body = `<div class="err">${esc(st.search.err)}</div>`
+    else {
+      if (st.search.users.length) body += st.search.users.map((u) => `<div class="urow" data-act="profile" data-user="${esc(u.username)}">
+        ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
+        <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
+      if (st.search.casts.length) body += st.search.casts.map(castCard).join('')
+      if (!st.search.users.length && !st.search.casts.length && st.search.q) body = '<div class="empty">no results.</div>'
+    }
+    return bar + body
+  }
+
+  // ================= INBOX =================
+  async function loadInbox() {
+    st.inbox.loaded = false; render()
+    try {
+      const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}${st.inbox.priority ? '&priority=1' : ''}`)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'inbox failed')
+      st.inbox.items = d.items; st.inbox.loaded = true
+    } catch (e) { st.inbox.err = e.message; st.inbox.loaded = true }
+    render()
+  }
+  async function draftAll() {
+    const items = st.inbox.items.filter((it) => ANSWERABLE.has(it.type))
+    if (!items.length) return
+    meta.textContent = 'drafting...'
+    try {
+      const r = await fetch('/api/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'draft failed')
+      if (!d.available) { meta.textContent = 'drafts need OPENROUTER_API_KEY'; return }
+      for (const it of st.inbox.items) if (d.drafts[it.hash]) it.draft = d.drafts[it.hash]
+      meta.textContent = `${st.inbox.items.length} unanswered`; render()
+    } catch (e) { meta.textContent = 'draft error: ' + e.message }
+  }
+  function inboxItem(item) {
+    const chain = (item.thread && item.thread.length) ? item.thread : (item.parent ? [item.parent] : [])
+    const thread = chain.length ? `<div class="thread">${chain.slice(-2).map((c) => `<div><span class="u">@${esc(c.user)}</span>: ${esc((c.text || '').slice(0, 160))}</div>`).join('')}</div>` : ''
+    let draft = ''
+    if (item.draft === 'SKIP') draft = `<div class="draft skip"><div class="lab">draft</div><div class="t">no reply needed</div></div>`
+    else if (item.draft) draft = `<div class="draft"><div class="lab">draft in your voice</div><div class="t">${esc(item.draft)}</div></div>`
+    let reply = ''
+    if (item.sent) reply = `<div class="sent">sent - <a href="${esc(item.sentLink)}" target="_blank" rel="noopener">${esc(item.sentLink)}</a></div>`
+    else if (ANSWERABLE.has(item.type)) {
+      const val = item.replyText != null ? item.replyText : (item.draft && item.draft !== 'SKIP' ? item.draft : '')
+      reply = item.armed
+        ? `<div class="reply"><textarea readonly>${esc(val)}</textarea><div class="btns"><span class="note">send exactly this as @zaal?</span>
+             <button class="ibtn primary" data-act="iconfirm" data-hash="${esc(item.hash)}">${item.sending ? 'sending...' : 'yes, send'}</button>
+             <button class="ibtn" data-act="icancel" data-hash="${esc(item.hash)}">cancel</button></div></div>`
+        : `<div class="reply"><textarea data-ihash="${esc(item.hash)}" placeholder="reply, or draft above...">${esc(val)}</textarea>
+             <div class="btns"><button class="ibtn" data-act="iarm" data-hash="${esc(item.hash)}">send reply</button></div></div>`
+    }
+    return `<div class="card" data-hash="${esc(item.hash)}">
+      <div class="top"><div class="who">
+        <div class="name"><span class="tag">${esc(item.type)}</span> <a href="${esc(item.link)}" target="_blank" rel="noopener">@${esc(item.user)}</a>
+          <a class="open" href="${esc(item.link)}" target="_blank" rel="noopener">open</a></div>
+        ${thread}
+        <div class="body">${esc(item.text) || '<i>(no text)</i>'}</div>
+        ${draft}${reply}
+      </div></div>
+    </div>`
+  }
+  function renderInbox() {
+    const sub = `<div class="subbar">
+      <button class="ibtn primary" data-act="draftall">draft all</button>
+      <span class="chip ${st.inbox.showAll ? 'on' : ''}" data-act="toggleall">${st.inbox.showAll ? 'all types' : 'answerable only'}</span>
+      <span class="chip ${st.inbox.priority ? 'on' : ''}" data-act="togglepriority">${st.inbox.priority ? 'priority sorted' : 'newest first'}</span></div>`
+    if (!st.inbox.loaded) return sub + '<div class="loading">loading inbox...</div>'
+    if (st.inbox.err) return sub + `<div class="err">${esc(st.inbox.err)}</div>`
+    if (!st.inbox.items.length) return sub + '<div class="empty">inbox zero - everything answered.</div>'
+    return sub + st.inbox.items.map(inboxItem).join('')
+  }
+
+  // ================= CHANNELS =================
+  async function loadChannels(append) {
+    if (!append) { st.channels.loaded = false; st.channels.cursor = null; render() }
+    try {
+      const url = `/api/channel?id=${encodeURIComponent(st.channels.id)}&limit=30${append && st.channels.cursor ? '&cursor=' + encodeURIComponent(st.channels.cursor) : ''}`
+      const r = await fetch(url)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'channel failed')
+      st.channels.casts = append ? st.channels.casts.concat(d.casts) : d.casts
+      st.channels.cursor = d.cursor; st.channels.loaded = true
+    } catch (e) { st.channels.err = e.message; st.channels.loaded = true }
+    render()
+    if (!st.channels.trending.length) {
+      try { const t = await fetch('/api/channel?trending=1').then((x) => x.json()); if (t.trending) { st.channels.trending = t.trending; render() } } catch {}
+    }
+  }
+  function renderChannels() {
+    const chips = HOME_CHANNELS.concat(HOME_CHANNELS.includes(st.channels.id) ? [] : [st.channels.id])
+      .map((c) => `<span class="chip ${st.channels.id === c ? 'on' : ''}" data-chan="${esc(c)}">/${esc(c)}</span>`).join('')
+    const trend = (st.channels.trending || []).filter((t) => !HOME_CHANNELS.includes(t.id)).slice(0, 8)
+      .map((t) => `<span class="chip ${st.channels.id === t.id ? 'on' : ''}" data-chan="${esc(t.id)}" title="${t.casts1d} casts today">/${esc(t.id)}</span>`).join(' ')
+    const sub = `<div class="subbar">${chips}</div>`
+      + (trend ? `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">trending now:</span> ${trend}</div>` : '')
+    if (!st.channels.loaded) return sub + '<div class="loading">loading /' + esc(st.channels.id) + '...</div>'
+    if (st.channels.err) return sub + `<div class="err">${esc(st.channels.err)}</div>`
+    const casts = dropMuted(st.channels.casts)
+    if (!casts.length) return sub + '<div class="empty">no casts in /' + esc(st.channels.id) + '.</div>'
+    return sub + casts.map(castCard).join('') + moreBtn(st.channels.cursor, 'morechan')
+  }
+
+  // ================= COMPOSE =================
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null }
+  function quotePreview() {
+    if (!compose.quote) return ''
+    const q = compose.quote
+    return `<div class="thread" style="margin:0 0 8px"><div><span class="u">quoting @${esc(q.author)}</span>: ${esc((q.text || '').slice(0, 160))}
+      <span class="uname" data-act="unquote" style="color:#ff8a6a"> remove</span></div></div>`
+  }
+  function renderCompose() {
+    if (compose.sentLink) {
+      return `<div class="compose"><div class="sent" style="font-size:15px">posted - <a href="${esc(compose.sentLink)}" target="_blank" rel="noopener">${esc(compose.sentLink)}</a></div>
+        <div class="btns" style="margin-top:12px"><button class="ibtn" data-act="composenew">new cast</button></div></div>`
+    }
+    const chSel = `<select id="composeChannel">
+      <option value="">no channel</option>${HOME_CHANNELS.map((c) => `<option value="${c}" ${compose.channel === c ? 'selected' : ''}>/${c}</option>`).join('')}</select>`
+    if (compose.armed) {
+      return `<div class="compose">${quotePreview()}<textarea readonly>${esc(compose.text)}</textarea>
+        <div class="btns"><span class="note">${compose.quote ? 'quote-cast' : 'post'} this as @zaal${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
+          <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
+          <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
+    }
+    const pending = scheduled.filter((s) => !s.sent)
+    const queue = pending.length ? `<div class="subbar" style="margin-top:14px"><b style="color:#8a8a99;font-size:13px">scheduled (${pending.length})</b></div>`
+      + pending.map((s) => `<div class="urow" style="cursor:default"><div style="flex:1"><div>${esc((s.text || '').slice(0, 80))}</div>
+        <div class="ub">${new Date(s.at).toLocaleString()}${s.channelId ? ' - /' + esc(s.channelId) : ''}</div></div>
+        <span data-act="schedrm" data-id="${esc(s.id)}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('') : ''
+    const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
+    return `<div class="compose">${quotePreview()}<textarea id="composeText" placeholder="what's happening... (posts as @zaal)">${esc(compose.text)}</textarea>
+      <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
+      <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
+        <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
+      ${queue}</div>`
+  }
+
+  // ================= GROW =================
+  async function loadGrow() {
+    st.grow.loaded = false; render()
+    try {
+      const r = await fetch('/api/stats'); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'stats failed')
+      st.grow.data = d; st.grow.loaded = true
+    } catch (e) { st.grow.err = e.message; st.grow.loaded = true }
+    render()
+  }
+  function renderGrow() {
+    if (!st.grow.loaded) return '<div class="loading">loading your stats...</div>'
+    if (st.grow.err) return `<div class="err">${esc(st.grow.err)}</div>`
+    const d = st.grow.data
+    const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div></div>`
+    const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
+      <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
+      <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>
+        <span style="color:#855DCD">score ${c.score}</span>
+        <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a></div></div></div>`).join('')
+    const eng = (d.topEngagers || []).map((e) => `<span class="chip" data-act="profile" data-user="${esc(e.username)}">@${esc(e.username)} - ${e.n}</span>`).join(' ')
+    const suggest = (d.suggest || []).map((u) => `<div class="urow" data-act="profile" data-user="${esc(u.username)}">
+      ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
+      <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
+    return hdr
+      + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">who engages you most (reply back - it compounds)</b></div>'
+      + `<div class="subbar">${eng || '<span class="ub">no recent engagers</span>'}</div>`
+      + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">people to engage next</b></div>'
+      + (suggest || '<div class="subbar"><span class="ub">no suggestions right now</span></div>')
+      + '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">your top casts (by engagement)</b></div>'
+      + (casts || '<div class="empty">no casts yet.</div>')
+  }
+
+  // ================= DAILY (start-here dashboard) =================
+  const todayStr = () => new Date().toISOString().slice(0, 10)
+  const DAILY_DEFAULT = {
+    date: todayStr(),
+    tasks: [
+      { t: 'post a GM', done: false },
+      { t: 'clear inbox - reply or skip', done: false },
+      { t: 'catch GM Farcaster', done: false },
+      { t: 'engage 3 new people (Grow tab)', done: false },
+      { t: 'check /zao + /wavewarz', done: false },
+      { t: 'quote or boost 1 good cast', done: false },
+    ],
+    apps: [
+      { label: 'GM Farcaster', url: 'https://gmfarcaster.com' },
+      { label: 'Bountycaster', url: 'https://www.bountycaster.xyz' },
+      { label: 'Paragraph', url: 'https://paragraph.xyz' },
+      { label: 'Degen', url: 'https://www.degen.tips' },
+      { label: 'Rounds', url: 'https://rounds.wtf' },
+    ],
+    communities: ['zao', 'wavewarz', 'zabal', 'gmfarcaster', 'farcaster', 'founders'],
+    groups: [
+      { label: 'Farcaster DMs / group chats', url: 'https://farcaster.xyz/~/inbox' },
+    ],
+  }
+  let daily = lsGet('zc_daily', null)
+  if (!daily) { daily = DAILY_DEFAULT; lsSet('zc_daily', daily) }
+  // daily reset - clear task ticks on a new day
+  if (daily.date !== todayStr()) { daily.date = todayStr(); daily.tasks.forEach((x) => (x.done = false)); lsSet('zc_daily', daily) }
+  const saveDaily = () => persist()
+
+  function renderDaily() {
+    const done = daily.tasks.filter((t) => t.done).length
+    const tasks = daily.tasks.map((t, i) => `<div class="urow" style="cursor:default">
+      <span data-act="dtoggle" data-i="${i}" style="cursor:pointer;font-size:18px;width:22px">${t.done ? '☑' : '☐'}</span>
+      <div style="flex:1;${t.done ? 'color:#6f6f7a;text-decoration:line-through' : ''}">${esc(t.t)}</div>
+      <span data-act="dtaskrm" data-i="${i}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('')
+    const apps = daily.apps.map((a, i) => `<span class="chip"><a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(a.label)}</a> <span data-act="dapprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+    const comms = daily.communities.map((c, i) => `<span class="chip" data-act="dcomm" data-c="${esc(c)}">/${esc(c)} <span data-act="dcommrm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+    const groups = daily.groups.map((g, i) => `<span class="chip"><a href="${esc(g.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(g.label)}</a> <span data-act="dgrouprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @zaal - <b>${done}/${daily.tasks.length}</b> done today</div></div>
+      <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
+      ${tasks}
+      <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
+      <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
+      <div class="searchbar"><input id="dAppLabel" placeholder="app name" style="flex:1"><input id="dAppUrl" placeholder="https://..." style="flex:2"><button class="ibtn" data-act="dappadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">communities to check</b></div>
+      <div class="subbar">${comms || '<span class="ub">none</span>'}</div>
+      <div class="searchbar"><input id="dCommInput" placeholder="channel id (e.g. gmfarcaster)"><button class="ibtn" data-act="dcommadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">group chats</b></div>
+      <div class="subbar">${groups || '<span class="ub">none</span>'}</div>
+      <div class="searchbar"><input id="dGroupLabel" placeholder="group name" style="flex:1"><input id="dGroupUrl" placeholder="farcaster.xyz/~/group/..." style="flex:2"><button class="ibtn" data-act="dgroupadd">add</button></div>`
+  }
+
+  // ================= DECK (columns) =================
+  let deckMode = false
+  function renderDeck() {
+    const feedCol = !st.feed.loaded ? '<div class="loading">loading...</div>'
+      : dropMuted(st.feed.casts).map(castCard).join('') || '<div class="empty">no casts.</div>'
+    const inboxCol = !st.inbox.loaded ? '<div class="loading">loading...</div>'
+      : (st.inbox.items.length ? st.inbox.items.map(inboxItem).join('') : '<div class="empty">inbox zero.</div>')
+    const chanCol = !st.channels.loaded ? '<div class="loading">loading...</div>'
+      : dropMuted(st.channels.casts).map(castCard).join('') || '<div class="empty">no casts.</div>'
+    return `<div class="deck">
+      <div class="deckcol"><div class="dh">Feed</div><div class="dc">${feedCol}</div></div>
+      <div class="deckcol"><div class="dh">Inbox</div><div class="dc">${inboxCol}</div></div>
+      <div class="deckcol"><div class="dh">/${esc(st.channels.id)}</div><div class="dc">${chanCol}</div></div>
+    </div>`
+  }
+  function toggleDeck() {
+    deckMode = !deckMode
+    document.body.classList.toggle('deck', deckMode)
+    document.getElementById('deckBtn').classList.toggle('on', deckMode)
+    if (deckMode) { if (!st.feed.loaded) loadFeed(); if (!st.inbox.loaded) loadInbox(); if (!st.channels.loaded) loadChannels() }
+    render()
+  }
+  document.getElementById('deckBtn').addEventListener('click', toggleDeck)
+
+  // ================= RENDER + EVENTS =================
+  function render() {
+    document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab))
+    if (deckMode) { meta.textContent = 'deck'; main.innerHTML = renderDeck(); return }
+    if (tab === 'daily') { meta.textContent = ''; main.innerHTML = renderDaily() }
+    else if (tab === 'feed') { meta.textContent = st.feed.loaded ? `${st.feed.casts.length} casts` : ''; main.innerHTML = renderFeed() }
+    else if (tab === 'inbox') { meta.textContent = st.inbox.loaded ? `${st.inbox.items.length} unanswered` : ''; main.innerHTML = renderInbox() }
+    else if (tab === 'channels') { meta.textContent = ''; main.innerHTML = renderChannels() }
+    else if (tab === 'search') { meta.textContent = ''; main.innerHTML = renderSearch() }
+    else if (tab === 'compose') { meta.textContent = ''; main.innerHTML = renderCompose() }
+    else if (tab === 'grow') { meta.textContent = ''; main.innerHTML = renderGrow() }
+  }
+
+  function switchTab(t) {
+    if (deckMode) { deckMode = false; document.body.classList.remove('deck'); document.getElementById('deckBtn').classList.remove('on') }
+    tab = t; render()
+    if (t === 'feed' && !st.feed.loaded) loadFeed()
+    if (t === 'inbox' && !st.inbox.loaded) loadInbox()
+    if (t === 'channels' && !st.channels.loaded) loadChannels()
+    if (t === 'grow' && !st.grow.loaded) loadGrow()
+    if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
+  }
+
+  // ---- overlay: thread + profile detail ----
+  const overlay = document.getElementById('overlay')
+  function openOverlay(title, html) {
+    document.getElementById('ohdTitle').textContent = title
+    document.getElementById('obody').innerHTML = html
+    overlay.classList.add('on')
+  }
+  function closeOverlay() { overlay.classList.remove('on') }
+  document.getElementById('overlayClose').addEventListener('click', closeOverlay)
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay() })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay() })
+
+  async function openThread(hash) {
+    openOverlay('thread', '<div class="loading">loading thread...</div>')
+    try {
+      const r = await fetch(`/api/thread?hash=${encodeURIComponent(hash)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'thread failed')
+      let html = ''
+      for (const a of d.ancestors) html += castCard(a)
+      if (d.cast) html += `<div class="focuscast">${castCard(d.cast)}</div>`
+      for (const rep of d.replies) { html += castCard(rep); for (const s of (rep.sub || [])) html += `<div style="margin-left:14px">${castCard(s)}</div>` }
+      document.getElementById('obody').innerHTML = html || '<div class="empty">no thread.</div>'
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  async function openProfile(user) {
+    openOverlay('@' + user, '<div class="loading">loading profile...</div>')
+    try {
+      const r = await fetch(`/api/profile?user=${encodeURIComponent(user)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'profile failed')
+      const u = d.user
+      const rel = [u.youFollow ? 'you follow' : '', u.followsYou ? 'follows you' : ''].filter(Boolean).join(' - ')
+      const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
+        <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
+        ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
+        <a class="open" href="${esc(u.link)}" target="_blank" rel="noopener">open on farcaster</a></div></div>`
+      document.getElementById('obody').innerHTML = head + d.casts.map(castCard).join('')
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  // clicks inside the overlay: navigate deeper + react (reply happens in main views)
+  document.getElementById('obody').addEventListener('click', (e) => {
+    const tap = e.target.closest('[data-act="profile"], [data-act="thread"]')
+    if (tap && !e.target.closest('button')) {
+      if (tap.dataset.act === 'profile') return openProfile(tap.dataset.user)
+      if (tap.dataset.act === 'thread') return openThread(tap.dataset.hash)
+    }
+    const btn = e.target.closest('button[data-act]'); if (!btn) return
+    const act = btn.dataset.act
+    if (act === 'profile') return openProfile(btn.dataset.user)
+    if (act === 'thread') return openThread(btn.dataset.hash)
+    if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
+  })
+  document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) switchTab(b.dataset.tab) })
+  document.getElementById('refresh').addEventListener('click', () => {
+    if (tab === 'feed') loadFeed(); else if (tab === 'inbox') loadInbox(); else if (tab === 'channels') loadChannels()
+    else if (tab === 'grow') loadGrow()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
+    if (e.key === '1') switchTab('daily'); else if (e.key === '2') switchTab('feed')
+    else if (e.key === '3') switchTab('inbox'); else if (e.key === '4') switchTab('channels')
+    else if (e.key === '5') switchTab('search'); else if (e.key === '6') switchTab('compose')
+    else if (e.key === '7') switchTab('grow')
+    else if (e.key === 'r') document.getElementById('refresh').click()
+  })
+
+  const findInbox = (h) => st.inbox.items.find((i) => i.hash === h)
+  async function fireReact(btn) {
+    const type = btn.dataset.act
+    try {
+      const r = await fetch('/api/react', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, targetHash: btn.dataset.hash, targetFid: btn.dataset.fid || null }) })
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'react failed')
+      btn.classList.add('on'); const s = btn.querySelector('span'); if (s) s.textContent = (parseInt(s.textContent) || 0) + 1
+    } catch (e) { meta.textContent = 'react error: ' + e.message }
+  }
+  async function fireReply(hash, fid, text, done) {
+    const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentHash: hash, parentFid: fid || null, text }) })
+    const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'send failed')
+    done(d.link)
+  }
+
+  // input: keep textarea state without re-render (focus safety)
+  main.addEventListener('input', (e) => {
+    const t = e.target
+    if (t.dataset.ihash) { const it = findInbox(t.dataset.ihash); if (it) it.replyText = t.value }
+    else if (t.id === 'composeText') { compose.text = t.value; const cc = document.getElementById('composeCc'); if (cc) cc.textContent = t.value.length }
+    else if (t.id === 'composeChannel') { compose.channel = t.value }
+    else if (t.id === 'searchInput') { st.search.q = t.value }
+  })
+  main.addEventListener('keydown', (e) => { if (e.target.id === 'searchInput' && e.key === 'Enter') runSearch() })
+  main.addEventListener('change', (e) => { if (e.target.id === 'composeChannel') compose.channel = e.target.value })
+
+  main.addEventListener('click', async (e) => {
+    const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
+    const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
+    // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
+    const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
+    if (tap && !e.target.closest('button')) {
+      if (tap.dataset.act === 'profile') { openProfile(tap.dataset.user); return }
+      if (tap.dataset.act === 'thread') { openThread(tap.dataset.hash); return }
+      if (tap.dataset.act === 'unquote') { compose.quote = null; render(); return }
+    }
+    const btn = e.target.closest('[data-act]'); if (!btn) return
+    const act = btn.dataset.act, hash = btn.dataset.hash, fid = btn.dataset.fid
+
+    // navigation-ish actions
+    if (act === 'profile') { openProfile(btn.dataset.user); return }
+    if (act === 'thread') { openThread(hash); return }
+    // daily dashboard
+    if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
+    if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
+    if (act === 'dapprm') { daily.apps.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dappadd') { const l = document.getElementById('dAppLabel').value.trim(), u = document.getElementById('dAppUrl').value.trim(); if (l && u) { daily.apps.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
+    if (act === 'dcomm') { st.channels.id = btn.dataset.c; switchTab('channels'); loadChannels(); return }
+    if (act === 'dcommrm') { daily.communities.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dcommadd') { const v = document.getElementById('dCommInput').value.trim().replace(/^\//, '').toLowerCase(); if (v) { daily.communities.push(v); saveDaily(); render() } return }
+    if (act === 'dgrouprm') { daily.groups.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dgroupadd') { const l = document.getElementById('dGroupLabel').value.trim(), u = document.getElementById('dGroupUrl').value.trim(); if (l && u) { daily.groups.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
+
+    if (act === 'digest') { loadDigest(); return }
+    if (act === 'morefeed') { btn.textContent = 'loading...'; loadFeed(true); return }
+    if (act === 'morechan') { btn.textContent = 'loading...'; loadChannels(true); return }
+    if (act === 'dosearch') { runSearch(); return }
+    if (act === 'togglepriority') { st.inbox.priority = !st.inbox.priority; loadInbox(); return }
+    if (act === 'filters') { openFilters(); return }
+    if (act === 'bookmark') { const c = findCast(hash); if (c) { toggleBookmark(c); render() } return }
+    if (act === 'quote') {
+      const c = findCast(hash); if (!c) return
+      compose.quote = { hash: c.hash, fid: c.fid, author: c.author, text: c.text }
+      switchTab('compose'); return
+    }
+
+    // feed/channel reactions + inline reply
+    if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
+    if (act === 'replytoggle') {
+      const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`)
+      if (slot) slot.innerHTML = slot.innerHTML ? '' : replyBox(hash, fid, '')
+      return
+    }
+    if (act === 'replyarm') {
+      const ta = main.querySelector(`textarea[data-rhash="${CSS.escape(hash)}"]`); const text = ta ? ta.value.trim() : ''
+      if (!text) return
+      const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`); slot.innerHTML = replyConfirm(hash, ta.dataset.rfid, text, false)
+      return
+    }
+    if (act === 'replyconfirm') {
+      const ta = btn.closest('.reply').querySelector('textarea'); const text = ta.value
+      btn.textContent = 'sending...'
+      try { await fireReply(hash, fid, text, (link) => {
+        const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`); slot.innerHTML = `<div class="sent">sent - <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a></div>`
+      }) } catch (err) { meta.textContent = 'send error: ' + err.message; btn.textContent = 'yes, send' }
+      return
+    }
+    if (act === 'replycancel') { const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`); if (slot) slot.innerHTML = ''; return }
+
+    // inbox
+    if (act === 'draftall') { draftAll(); return }
+    if (act === 'toggleall') { st.inbox.showAll = !st.inbox.showAll; loadInbox(); return }
+    if (act === 'iarm') { const it = findInbox(hash); const ta = main.querySelector(`textarea[data-ihash="${CSS.escape(hash)}"]`); it.replyText = ta ? ta.value : (it.replyText || ''); if (!it.replyText.trim()) return; it.armed = true; render(); return }
+    if (act === 'icancel') { const it = findInbox(hash); it.armed = false; render(); return }
+    if (act === 'iconfirm') {
+      const it = findInbox(hash); if (it.sending) return; it.sending = true; render()
+      try { await fireReply(hash, it.fid, it.replyText, (link) => { it.sent = true; it.sentLink = link; it.armed = false; it.sending = false }) }
+      catch (err) { it.sending = false; it.armed = false; meta.textContent = 'send error: ' + err.message }
+      render(); return
+    }
+
+    // compose
+    if (act === 'schedule') {
+      const ta = document.getElementById('composeText'); const at = document.getElementById('composeAt')
+      const text = ta ? ta.value.trim() : ''; const when = at ? at.value : ''
+      if (!text) { meta.textContent = 'write something first'; return }
+      if (!when || Date.parse(when) <= Date.now()) { meta.textContent = 'pick a future time'; return }
+      const item = { id: 'sc' + Date.now() + Math.floor(performance.now()), text, channelId: compose.channel || null, at: new Date(when).toISOString(), sent: false }
+      if (compose.quote) { item.quoteHash = compose.quote.hash; item.quoteFid = compose.quote.fid }
+      scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
+    }
+    if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
+    if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; if (!compose.text) return; compose.armed = true; render(); return }
+    if (act === 'composecancel') { compose.armed = false; render(); return }
+    if (act === 'composeconfirm') {
+      if (compose.sending) return; compose.sending = true; render()
+      try {
+        const body = { text: compose.text, channelId: compose.channel || null }
+        if (compose.quote) { body.quoteHash = compose.quote.hash; body.quoteFid = compose.quote.fid }
+        const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
+        compose.sentLink = d.link; compose.sending = false; compose.armed = false; compose.quote = null
+      } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
+      render(); return
+    }
+    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.armed = false; compose.quote = null; render(); return }
+  })
+
+  // ---- filters overlay: muted keywords ----
+  function openFilters() {
+    openOverlay('filters', `<div class="obody">
+      <div class="digest" style="background:#151529;border-color:#24242f"><div class="lab">muted words</div>
+      <div class="ps" style="color:#8a8a99;margin-bottom:6px">casts containing any of these are hidden from feed, channels + search (this browser only)</div>
+      <textarea id="mutedInput" style="width:100%;min-height:80px;background:#0e0e15;color:#e9e9ee;border:1px solid #24242f;border-radius:10px;padding:9px;font:inherit">${esc(muted.join(', '))}</textarea>
+      <div class="btns" style="margin-top:8px"><button class="ibtn primary" data-act="savemuted">save</button>
+      <span class="ps" style="color:#8a8a99">comma-separated</span></div></div></div>`)
+  }
+  document.getElementById('obody').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-act="savemuted"]'); if (!b) return
+    const val = document.getElementById('mutedInput').value
+    muted = val.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
+    persist(); closeOverlay(); render()
+  })
+
+  // ---- password gate ----
+  const gate = document.getElementById('gate')
+  async function pullState() {
+    try {
+      const r = await fetch('/api/state'); const d = await r.json()
+      syncEnabled = !!d.enabled
+      if (d.enabled && d.state) {
+        const s = d.state
+        if (Array.isArray(s.bookmarks)) { bookmarks = s.bookmarks; lsSet('zc_bookmarks', bookmarks) }
+        if (Array.isArray(s.muted)) { muted = s.muted; lsSet('zc_muted', muted) }
+        if (Array.isArray(s.scheduled)) { scheduled = s.scheduled; lsSet('zc_scheduled', scheduled) }
+        if (s.daily && typeof s.daily === 'object') {
+          daily = s.daily
+          if (daily.date !== todayStr()) { daily.date = todayStr(); (daily.tasks || []).forEach((x) => (x.done = false)) }
+          lsSet('zc_daily', daily)
+        }
+      }
+    } catch { /* store unreachable - stay on localStorage */ }
+  }
+  async function startApp() { gate.style.display = 'none'; await pullState(); switchTab('daily') }
+  async function submitPw() {
+    const pw = document.getElementById('gatePw').value
+    document.getElementById('gateErr').textContent = ''
+    try {
+      const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) })
+      if (!r.ok) { document.getElementById('gateErr').textContent = 'wrong password'; return }
+      startApp()
+    } catch { document.getElementById('gateErr').textContent = 'error - try again' }
+  }
+  document.getElementById('gateBtn').addEventListener('click', submitPw)
+  document.getElementById('gatePw').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPw() })
+  function showGate() { gate.style.display = 'flex'; document.getElementById('gatePw').focus() }
+
+  // ---- cmd+k command palette ----
+  const palette = document.getElementById('palette')
+  const palInput = document.getElementById('palInput')
+  const palList = document.getElementById('palList')
+  let palItems = [], palSel = 0
+  const TABS = [['daily','Daily'],['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow']]
+  function palCommands(q) {
+    const s = q.trim().toLowerCase()
+    const cmds = []
+    for (const [t, label] of TABS) if (!s || label.toLowerCase().includes(s)) cmds.push({ label: 'Go to ' + label, run: () => switchTab(t) })
+    if (!s || 'draft all'.includes(s)) cmds.push({ label: 'Draft all (inbox)', run: () => { switchTab('inbox'); setTimeout(draftAll, 300) } })
+    if (!s || 'what i missed digest'.includes(s)) cmds.push({ label: 'What I missed (digest)', run: () => { switchTab('feed'); setTimeout(loadDigest, 100) } })
+    if (s.startsWith('@') && s.length > 1) cmds.unshift({ label: 'Open profile ' + q.trim(), run: () => openProfile(q.trim().slice(1)) })
+    else if (s.length > 1) cmds.push({ label: 'Search for "' + q.trim() + '"', run: () => { st.search.q = q.trim(); switchTab('search'); runSearch() } })
+    return cmds
+  }
+  function renderPal() {
+    palItems = palCommands(palInput.value); palSel = 0
+    palList.innerHTML = palItems.map((c, i) => `<div class="palrow" data-i="${i}" style="padding:11px 16px;cursor:pointer;${i === 0 ? 'background:#1e1e38' : ''}">${esc(c.label)}</div>`).join('') || '<div style="padding:14px 16px;color:#8a8a99">no match</div>'
+  }
+  function openPalette() { palette.style.display = 'block'; palInput.value = ''; renderPal(); palInput.focus() }
+  function closePalette() { palette.style.display = 'none' }
+  function runPal(i) { const c = palItems[i]; if (c) { closePalette(); c.run() } }
+  palInput.addEventListener('input', renderPal)
+  palInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { palSel = Math.min(palSel + 1, palItems.length - 1); highlightPal(); e.preventDefault() }
+    else if (e.key === 'ArrowUp') { palSel = Math.max(palSel - 1, 0); highlightPal(); e.preventDefault() }
+    else if (e.key === 'Enter') { runPal(palSel); e.preventDefault() }
+    else if (e.key === 'Escape') closePalette()
+  })
+  function highlightPal() { palList.querySelectorAll('.palrow').forEach((r, i) => r.style.background = i === palSel ? '#1e1e38' : '') }
+  palList.addEventListener('click', (e) => { const r = e.target.closest('.palrow'); if (r) runPal(Number(r.dataset.i)) })
+  palette.addEventListener('click', (e) => { if (e.target === palette) closePalette() })
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); palette.style.display === 'block' ? closePalette() : openPalette() }
+  })
+
+  // boot: check whether a password is required before loading anything
+  ;(async () => {
+    try {
+      const r = await fetch('/api/auth')
+      const d = await r.json()
+      if (d.enabled && !d.authed) showGate()
+      else startApp()
+    } catch { startApp() } // auth endpoint unreachable (e.g. gate off) - proceed
+  })()
+</script>
+</body>
+</html>

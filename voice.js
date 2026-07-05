@@ -7,9 +7,16 @@ import path from 'path'
 import { spawnSync } from 'node:child_process'
 import { ZAO_CONTEXT } from './context.js'
 
-const OPENROUTER_KEY_PATH = path.join(process.env.HOME, '.zao/private/openrouter.key')
+const HOME = process.env.HOME || ''
+const OPENROUTER_KEY_PATH = path.join(HOME, '.zao/private/openrouter.key')
+// Zaal's real edits from cockpit [e] - the highest-signal voice data. Lives
+// outside the repo, never committed. Overridable for tests.
+const EXAMPLES_PATH = process.env.VOICE_EXAMPLES_PATH
+  || path.join(HOME, '.zao/private/zaal-voice-examples.md')
 
+// process.env wins (Vercel: set OPENROUTER_API_KEY), then the local key file.
 function loadOpenRouterKey() {
+  if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY.trim()
   try {
     if (!fs.existsSync(OPENROUTER_KEY_PATH)) return null
     const key = fs.readFileSync(OPENROUTER_KEY_PATH, 'utf-8').trim()
@@ -19,7 +26,47 @@ function loadOpenRouterKey() {
   }
 }
 
-export const VOICE_PROMPT = `You draft Farcaster replies for Zaal (@zaal). Voice rules:
+// Append one edit pair. Called by cockpit when Zaal sends an [e]dited reply -
+// what he actually wrote beats any rule we could write down.
+export function saveVoiceExample({ theirText, draftWas, zaalWrote }) {
+  try {
+    const entry = [
+      `## ${new Date().toISOString()}`,
+      `them: ${(theirText || '').replace(/\s+/g, ' ').slice(0, 300)}`,
+      draftWas ? `draft was: ${draftWas.replace(/\s+/g, ' ').slice(0, 300)}` : null,
+      `zaal wrote: ${(zaalWrote || '').replace(/\s+/g, ' ').slice(0, 300)}`,
+      '',
+    ].filter((l) => l !== null).join('\n')
+    fs.appendFileSync(EXAMPLES_PATH, entry + '\n', { mode: 0o600 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function loadVoiceExamples(max = 5) {
+  try {
+    if (!fs.existsSync(EXAMPLES_PATH)) return []
+    const blocks = fs.readFileSync(EXAMPLES_PATH, 'utf-8').split(/^## /m).filter((b) => b.trim())
+    return blocks.slice(-max).map((b) => {
+      const them = b.match(/^them: (.+)$/m)?.[1]
+      const wrote = b.match(/^zaal wrote: (.+)$/m)?.[1]
+      return them && wrote ? { them, wrote } : null
+    }).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function voicePrompt() {
+  const examples = loadVoiceExamples()
+  const exampleBlock = examples.length
+    ? `\n\nReal examples of how zaal actually replies (match this register):\n${examples
+        .map((e) => `- them: "${e.them}"\n  zaal: "${e.wrote}"`)
+        .join('\n')}`
+    : ''
+
+  return `You draft Farcaster replies for Zaal (@zaal). Voice rules:
 - short, plain, direct. one or two sentences max. lowercase is fine.
 - "ppl", "u", "imho" are fine. no hype adjectives, no exclamation stacking.
 - no emojis, no em dashes (plain hyphens only).
@@ -28,17 +75,29 @@ export const VOICE_PROMPT = `You draft Farcaster replies for Zaal (@zaal). Voice
 - if an item really does not need a reply, output SKIP for it.
 
 Ground replies in these facts when relevant (do not force them, do not list them, just be accurate):
-${ZAO_CONTEXT}`
+${ZAO_CONTEXT}${exampleBlock}`
+}
 
-function buildBatchPrompt(items) {
+// Render the ancestor chain for the prompt: last 4 casts, 220 chars each,
+// so deep threads inform the draft without blowing up the prompt.
+function threadBlock(item) {
+  const chain = (item.thread && item.thread.length)
+    ? item.thread
+    : (item.parent ? [item.parent] : [])
+  if (!chain.length) return ''
+  const lines = chain
+    .slice(-4)
+    .map((c) => `  @${c.user}: "${c.text.slice(0, 220)}"`)
+    .join('\n')
+  return `conversation so far (oldest first):\n${lines}\n`
+}
+
+export function buildBatchPrompt(items) {
   const itemsBlock = items
-    .map((item, i) => {
-      const parent = item.parent ? `zaal's cast they are responding to: "${item.parent.text}"\n` : ''
-      return `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${parent}their message: "${item.text}"`
-    })
+    .map((item, i) => `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${threadBlock(item)}their message: "${item.text}"`)
     .join('\n\n')
 
-  return `${VOICE_PROMPT}
+  return `${voicePrompt()}
 
 For each item below output exactly one line in the form:
 ITEM <n>: <draft reply text or SKIP>
@@ -98,4 +157,43 @@ export async function generateDrafts(items) {
     return 'claude-cli'
   }
   return null
+}
+
+// One model call over recent feed casts -> a short "what I missed" digest for
+// Zaal. OpenRouter first (Vercel), claude CLI fallback (local). Returns the
+// digest string or null if unavailable.
+async function callModel(prompt, maxTokens) {
+  const key = loadOpenRouterKey()
+  if (key) {
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'anthropic/claude-fable-5', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature: 0.4 }),
+        signal: AbortSignal.timeout(60000),
+      })
+      if (r.ok) {
+        const d = await r.json()
+        const t = d.choices?.[0]?.message?.content?.trim()
+        if (t) return t
+      }
+    } catch { /* fall through */ }
+  }
+  const c = spawnSync('claude', ['-p', prompt], { encoding: 'utf8', timeout: 120000 })
+  if (c.status === 0 && c.stdout.trim()) return c.stdout.trim()
+  return null
+}
+
+export async function digestFeed(casts) {
+  if (!casts.length) return null
+  const block = casts.slice(0, 40)
+    .map((c) => `@${c.author}: "${(c.text || '').replace(/\s+/g, ' ').slice(0, 240)}"${c.channel ? ` [/${c.channel}]` : ''}`)
+    .join('\n')
+  const prompt = `You are briefing Zaal (@zaal) on what he missed on Farcaster. Below are recent casts from people he follows.
+
+Write a tight digest: 4-7 bullet points grouping the important themes, launches, questions aimed at him, and anything ZAO/WaveWarZ-related. Each bullet one line, plain, lowercase ok, no emojis, no em dashes. Name the people (@handle). Skip pure noise/gm. End with a one-line "worth a reply:" naming 1-2 casts if any deserve his response.
+
+Casts:
+${block}`
+  return callModel(prompt, 700)
 }
