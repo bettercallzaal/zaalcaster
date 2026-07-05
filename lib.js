@@ -190,7 +190,8 @@ function requireSigner(env) {
 }
 
 export async function postCast(text, options = {}) {
-  const { embedUrl = null, parentHash = null, parentFid = null, channelId = null } = options
+  const { embedUrl = null, parentHash = null, parentFid = null, channelId = null,
+    quoteHash = null, quoteFid = null } = options
   const env = loadEnv()
 
   const payload = {
@@ -198,9 +199,11 @@ export async function postCast(text, options = {}) {
     text,
   }
 
-  if (embedUrl) {
-    payload.embeds = [{ url: embedUrl }]
-  }
+  const embeds = []
+  if (embedUrl) embeds.push({ url: embedUrl })
+  // quote cast: embed another cast by id (needs both hash + author fid)
+  if (quoteHash && quoteFid) embeds.push({ cast_id: { hash: quoteHash, fid: parseInt(quoteFid, 10) } })
+  if (embeds.length) payload.embeds = embeds
 
   if (parentHash) {
     payload.parent = parentHash

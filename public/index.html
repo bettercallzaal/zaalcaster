@@ -146,6 +146,24 @@
   const when = (ts) => { if (!ts) return ''; const d = new Date(ts); return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }
   const pfp = (u) => u.pfp ? `<img class="pfp" src="${esc(u.pfp)}" alt="">` : `<div class="pfp"></div>`
 
+  // ---- local (per-browser) state: bookmarks + muted keywords ----
+  const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
+  let bookmarks = lsGet('zc_bookmarks', [])           // array of compact casts
+  let muted = lsGet('zc_muted', [])                   // array of lowercased words
+  const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
+  function toggleBookmark(cast) {
+    if (isBookmarked(cast.hash)) bookmarks = bookmarks.filter((b) => b.hash !== cast.hash)
+    else bookmarks = [cast, ...bookmarks].slice(0, 500)
+    lsSet('zc_bookmarks', bookmarks)
+  }
+  const isMuted = (text) => { const t = (text || '').toLowerCase(); return muted.some((w) => w && t.includes(w)) }
+  const dropMuted = (casts) => casts.filter((c) => !isMuted(c.text))
+  function findCast(hash) {
+    return st.feed.casts.find((c) => c.hash === hash) || st.channels.casts.find((c) => c.hash === hash)
+      || st.search.casts.find((c) => c.hash === hash) || bookmarks.find((c) => c.hash === hash) || null
+  }
+
   // ---- shared cast card (feed + channels) ----
   function castCard(c) {
     const embeds = (c.embeds || []).map((e) => `<div class="embed"><a href="${esc(e)}" target="_blank" rel="noopener">${esc(e)}</a></div>`).join('')
@@ -162,6 +180,8 @@
             <button class="act recast" data-act="recast" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#8635; <span>${c.recasts}</span></button>
             <button data-act="thread" data-hash="${esc(c.hash)}">&#128172; ${c.replies}</button>
             <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">reply</button>
+            <button data-act="quote" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">quote</button>
+            <button class="act bm ${isBookmarked(c.hash) ? 'on' : ''}" data-act="bookmark" data-hash="${esc(c.hash)}">${isBookmarked(c.hash) ? 'saved' : 'save'}</button>
             <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a>
           </div>
           <div class="replyslot" data-slot="${esc(c.hash)}"></div>
@@ -210,12 +230,19 @@
     const sub = `<div class="subbar">
       <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">following</span>
       <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
-      <button class="ibtn" data-act="digest">${st.feed.digesting ? 'summarizing...' : 'what I missed'}</button></div>`
+      <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
+      <button class="ibtn" data-act="digest">${st.feed.digesting ? 'summarizing...' : 'what I missed'}</button>
+      <button class="ibtn" data-act="filters">filters</button></div>`
+    if (st.feed.type === 'saved') {
+      if (!bookmarks.length) return sub + '<div class="empty">no saved casts. tap "save" on any cast.</div>'
+      return sub + dropMuted(bookmarks).map(castCard).join('')
+    }
     const dig = st.feed.digest ? `<div class="digest"><div class="lab">what you missed</div><div class="t">${esc(st.feed.digest)}</div></div>` : ''
     if (!st.feed.loaded) return sub + dig + '<div class="loading">loading feed...</div>'
     if (st.feed.err) return sub + `<div class="err">${esc(st.feed.err)}</div>`
-    if (!st.feed.casts.length) return sub + dig + '<div class="empty">no casts.</div>'
-    return sub + dig + st.feed.casts.map(castCard).join('')
+    const casts = dropMuted(st.feed.casts)
+    if (!casts.length) return sub + dig + '<div class="empty">no casts.</div>'
+    return sub + dig + casts.map(castCard).join('')
   }
 
   // ================= SEARCH =================
@@ -321,12 +348,19 @@
     const sub = `<div class="subbar">${chips}</div>`
     if (!st.channels.loaded) return sub + '<div class="loading">loading /' + esc(st.channels.id) + '...</div>'
     if (st.channels.err) return sub + `<div class="err">${esc(st.channels.err)}</div>`
-    if (!st.channels.casts.length) return sub + '<div class="empty">no casts in /' + esc(st.channels.id) + '.</div>'
-    return sub + st.channels.casts.map(castCard).join('')
+    const casts = dropMuted(st.channels.casts)
+    if (!casts.length) return sub + '<div class="empty">no casts in /' + esc(st.channels.id) + '.</div>'
+    return sub + casts.map(castCard).join('')
   }
 
   // ================= COMPOSE =================
-  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null }
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null }
+  function quotePreview() {
+    if (!compose.quote) return ''
+    const q = compose.quote
+    return `<div class="thread" style="margin:0 0 8px"><div><span class="u">quoting @${esc(q.author)}</span>: ${esc((q.text || '').slice(0, 160))}
+      <span class="uname" data-act="unquote" style="color:#ff8a6a"> remove</span></div></div>`
+  }
   function renderCompose() {
     if (compose.sentLink) {
       return `<div class="compose"><div class="sent" style="font-size:15px">posted - <a href="${esc(compose.sentLink)}" target="_blank" rel="noopener">${esc(compose.sentLink)}</a></div>
@@ -335,8 +369,8 @@
     const chSel = `<select id="composeChannel">
       <option value="">no channel</option>${HOME_CHANNELS.map((c) => `<option value="${c}" ${compose.channel === c ? 'selected' : ''}>/${c}</option>`).join('')}</select>`
     if (compose.armed) {
-      return `<div class="compose"><textarea readonly>${esc(compose.text)}</textarea>
-        <div class="btns"><span class="note">post this as @zaal${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
+      return `<div class="compose">${quotePreview()}<textarea readonly>${esc(compose.text)}</textarea>
+        <div class="btns"><span class="note">${compose.quote ? 'quote-cast' : 'post'} this as @zaal${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
           <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
           <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
     }
@@ -454,13 +488,14 @@
   main.addEventListener('change', (e) => { if (e.target.id === 'composeChannel') compose.channel = e.target.value })
 
   main.addEventListener('click', async (e) => {
-    const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; loadFeed(); return }
+    const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
-    // tappable elements that are not buttons (profile from pfp/name/urow, thread from body)
-    const tap = e.target.closest('[data-act="profile"], [data-act="thread"]')
+    // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
+    const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
     if (tap && !e.target.closest('button')) {
       if (tap.dataset.act === 'profile') { openProfile(tap.dataset.user); return }
       if (tap.dataset.act === 'thread') { openThread(tap.dataset.hash); return }
+      if (tap.dataset.act === 'unquote') { compose.quote = null; render(); return }
     }
     const btn = e.target.closest('button[data-act]'); if (!btn) return
     const act = btn.dataset.act, hash = btn.dataset.hash, fid = btn.dataset.fid
@@ -471,6 +506,13 @@
     if (act === 'digest') { loadDigest(); return }
     if (act === 'dosearch') { runSearch(); return }
     if (act === 'togglepriority') { st.inbox.priority = !st.inbox.priority; loadInbox(); return }
+    if (act === 'filters') { openFilters(); return }
+    if (act === 'bookmark') { const c = findCast(hash); if (c) { toggleBookmark(c); render() } return }
+    if (act === 'quote') {
+      const c = findCast(hash); if (!c) return
+      compose.quote = { hash: c.hash, fid: c.fid, author: c.author, text: c.text }
+      switchTab('compose'); return
+    }
 
     // feed/channel reactions + inline reply
     if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
@@ -513,13 +555,31 @@
     if (act === 'composeconfirm') {
       if (compose.sending) return; compose.sending = true; render()
       try {
-        const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: compose.text, channelId: compose.channel || null }) })
+        const body = { text: compose.text, channelId: compose.channel || null }
+        if (compose.quote) { body.quoteHash = compose.quote.hash; body.quoteFid = compose.quote.fid }
+        const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
-        compose.sentLink = d.link; compose.sending = false; compose.armed = false
+        compose.sentLink = d.link; compose.sending = false; compose.armed = false; compose.quote = null
       } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
       render(); return
     }
-    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.armed = false; render(); return }
+    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.armed = false; compose.quote = null; render(); return }
+  })
+
+  // ---- filters overlay: muted keywords ----
+  function openFilters() {
+    openOverlay('filters', `<div class="obody">
+      <div class="digest" style="background:#151529;border-color:#24242f"><div class="lab">muted words</div>
+      <div class="ps" style="color:#8a8a99;margin-bottom:6px">casts containing any of these are hidden from feed, channels + search (this browser only)</div>
+      <textarea id="mutedInput" style="width:100%;min-height:80px;background:#0e0e15;color:#e9e9ee;border:1px solid #24242f;border-radius:10px;padding:9px;font:inherit">${esc(muted.join(', '))}</textarea>
+      <div class="btns" style="margin-top:8px"><button class="ibtn primary" data-act="savemuted">save</button>
+      <span class="ps" style="color:#8a8a99">comma-separated</span></div></div></div>`)
+  }
+  document.getElementById('obody').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-act="savemuted"]'); if (!b) return
+    const val = document.getElementById('mutedInput').value
+    muted = val.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
+    lsSet('zc_muted', muted); closeOverlay(); render()
   })
 
   // boot
