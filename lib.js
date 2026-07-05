@@ -148,6 +148,23 @@ export async function searchCasts(query, options = {}) {
   return response
 }
 
+export async function searchUsers(query, options = {}) {
+  const { limit = 8 } = options
+  const env = loadEnv()
+  const params = new URLSearchParams({ q: query, limit: String(limit), viewer_fid: env.ZAAL_FID })
+  const response = await fetchNeynar(`/farcaster/user/search?${params}`)
+  return response
+}
+
+// Bulk user lookup (with Zaal as viewer, for scores + follow context).
+export async function getUsersByFids(fids) {
+  if (!fids.length) return []
+  const env = loadEnv()
+  const params = new URLSearchParams({ fids: fids.join(','), viewer_fid: env.ZAAL_FID })
+  const response = await fetchNeynar(`/farcaster/user/bulk?${params}`)
+  return response.users || []
+}
+
 // Look up a user by fid (number) or username (with or without @).
 // viewer_fid is Zaal so the result includes follow relationship both ways.
 export async function getUser(fidOrUsername) {

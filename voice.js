@@ -158,3 +158,42 @@ export async function generateDrafts(items) {
   }
   return null
 }
+
+// One model call over recent feed casts -> a short "what I missed" digest for
+// Zaal. OpenRouter first (Vercel), claude CLI fallback (local). Returns the
+// digest string or null if unavailable.
+async function callModel(prompt, maxTokens) {
+  const key = loadOpenRouterKey()
+  if (key) {
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'anthropic/claude-fable-5', messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens, temperature: 0.4 }),
+        signal: AbortSignal.timeout(60000),
+      })
+      if (r.ok) {
+        const d = await r.json()
+        const t = d.choices?.[0]?.message?.content?.trim()
+        if (t) return t
+      }
+    } catch { /* fall through */ }
+  }
+  const c = spawnSync('claude', ['-p', prompt], { encoding: 'utf8', timeout: 120000 })
+  if (c.status === 0 && c.stdout.trim()) return c.stdout.trim()
+  return null
+}
+
+export async function digestFeed(casts) {
+  if (!casts.length) return null
+  const block = casts.slice(0, 40)
+    .map((c) => `@${c.author}: "${(c.text || '').replace(/\s+/g, ' ').slice(0, 240)}"${c.channel ? ` [/${c.channel}]` : ''}`)
+    .join('\n')
+  const prompt = `You are briefing Zaal (@zaal) on what he missed on Farcaster. Below are recent casts from people he follows.
+
+Write a tight digest: 4-7 bullet points grouping the important themes, launches, questions aimed at him, and anything ZAO/WaveWarZ-related. Each bullet one line, plain, lowercase ok, no emojis, no em dashes. Name the people (@handle). Skip pure noise/gm. End with a one-line "worth a reply:" naming 1-2 casts if any deserve his response.
+
+Casts:
+${block}`
+  return callModel(prompt, 700)
+}
