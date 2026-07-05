@@ -18,6 +18,7 @@
     "zaalcaster-channel": "./bin/channels.js",
     "zaalcaster-like": "./bin/like.js",
     "zaalcaster-cockpit": "./bin/cockpit.js",
+    "zaalcaster-intro": "./bin/intro.js",
     "zaalcaster-spam": "./bin/spam.js",
     "zaalcaster-spaces": "./bin/spaces.js"
   },
@@ -36,7 +37,8 @@
     "post": "node bin/post.js",
     "reply": "node bin/reply.js",
     "search": "node bin/search.js",
-    "channel": "node bin/channels.js"
+    "channel": "node bin/channels.js",
+    "intro": "node bin/intro.js"
   },
   "keywords": [
     "farcaster",
