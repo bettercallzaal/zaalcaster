@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const ENV_PATH = path.join(process.env.HOME || '', '.zao/private/farcaster-zaal.env')
+// Personal spam list - usernames and/or fids to drop from the inbound work
+// list. Lives outside the repo (never committed). One entry per line, '#'
+// comments allowed; a bare username (no @) or a numeric fid.
+export const SPAM_PATH = path.join(process.env.HOME || '', '.zao/private/zaalcaster-spam.txt')
 const NEYNAR_BASE_URL = 'https://api.neynar.com/v2'
 
 let env = null
@@ -256,9 +260,31 @@ export async function getAnsweredParents(pages = 3) {
 
 // Unanswered inbound items (the engage/cockpit work list): notifications Zaal
 // has not replied to yet, newest first, with parent-cast context attached.
+// Spam set: lowercased usernames + fid strings to filter out of inbound.
+// Sources: SPAM_LIST env var (comma-separated, for Vercel) + the local file.
+export function loadSpamSet() {
+  const set = new Set()
+  const add = (raw) => {
+    const v = String(raw || '').trim().replace(/^@/, '').toLowerCase()
+    if (v && !v.startsWith('#')) set.add(v)
+  }
+  if (process.env.SPAM_LIST) {
+    for (const part of process.env.SPAM_LIST.split(',')) add(part)
+  }
+  try {
+    if (fs.existsSync(SPAM_PATH)) {
+      for (const line of fs.readFileSync(SPAM_PATH, 'utf-8').split('\n')) add(line)
+    }
+  } catch {
+    // unreadable list - fail open (show everything) rather than hide inbound
+  }
+  return set
+}
+
 export async function getUnansweredInbound(options = {}) {
   const { limit = 15, includeAll = false, withContext = true } = options
   const answerable = new Set(['reply', 'mention', 'quote'])
+  const spam = loadSpamSet()
 
   const [notifs, answered] = await Promise.all([
     getNotifications({ limit }),
@@ -270,6 +296,8 @@ export async function getUnansweredInbound(options = {}) {
     const c = n.cast || {}
     if (!includeAll && !answerable.has(n.type)) continue
     if (!c.hash || answered.has(c.hash)) continue
+    const uname = (c.author?.username || '').toLowerCase()
+    if (spam.has(uname) || (c.author?.fid && spam.has(String(c.author.fid)))) continue
     items.push({
       type: n.type,
       user: c.author?.username || '?',
