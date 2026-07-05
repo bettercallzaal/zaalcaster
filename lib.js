@@ -4,42 +4,53 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const ENV_PATH = path.join(process.env.HOME, '.zao/private/farcaster-zaal.env')
+const ENV_PATH = path.join(process.env.HOME || '', '.zao/private/farcaster-zaal.env')
 const NEYNAR_BASE_URL = 'https://api.neynar.com/v2'
 
 let env = null
 
+// Env resolves from two places so the same lib runs as a local CLI and as a
+// Vercel serverless function:
+//   1. process.env - Vercel (set NEYNAR_API_KEY / ZAAL_FID / ZAAL_SIGNER_UUID
+//      in the project's Environment Variables). Wins when NEYNAR_API_KEY is set.
+//   2. ~/.zao/private/farcaster-zaal.env - the local CLI creds file.
+// Throws (never process.exit) so serverless handlers can catch and return 500
+// instead of killing the function; CLI bins already catch and print.
 export function loadEnv() {
   if (env) return env
 
-  if (!fs.existsSync(ENV_PATH)) {
-    console.error(`Error: Missing env file at ${ENV_PATH}`)
-    console.error('Create ~/.zao/private/farcaster-zaal.env with:')
-    console.error('  NEYNAR_API_KEY=your_key_here')
-    console.error('  ZAAL_SIGNER_UUID=your_signer_uuid_here')
-    console.error('  ZAAL_FID=19640')
-    process.exit(1)
+  if (process.env.NEYNAR_API_KEY) {
+    env = {
+      NEYNAR_API_KEY: process.env.NEYNAR_API_KEY,
+      ZAAL_FID: process.env.ZAAL_FID || '19640',
+      ZAAL_SIGNER_UUID: process.env.ZAAL_SIGNER_UUID || '',
+    }
+    return env
   }
 
-  env = {}
+  if (!fs.existsSync(ENV_PATH)) {
+    throw new Error(
+      `Missing credentials. Set NEYNAR_API_KEY (+ ZAAL_FID, ZAAL_SIGNER_UUID) in the ` +
+      `environment, or create ${ENV_PATH} with NEYNAR_API_KEY / ZAAL_SIGNER_UUID / ZAAL_FID=19640.`,
+    )
+  }
+
+  const parsed = {}
   const content = fs.readFileSync(ENV_PATH, 'utf-8')
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed || trimmed.startsWith('#')) continue
     const [key, ...rest] = trimmed.split('=')
-    env[key] = rest.join('=')
+    parsed[key] = rest.join('=')
   }
 
   // Reads only need the API key + fid. The signer is checked at post time so
   // timeline/notifs/search/engage work before the signer is set up.
-  const required = ['NEYNAR_API_KEY', 'ZAAL_FID']
-  for (const key of required) {
-    if (!env[key]) {
-      console.error(`Error: Missing ${key} in ${ENV_PATH}`)
-      process.exit(1)
-    }
+  for (const key of ['NEYNAR_API_KEY', 'ZAAL_FID']) {
+    if (!parsed[key]) throw new Error(`Missing ${key} in ${ENV_PATH}`)
   }
 
+  env = parsed
   return env
 }
 
@@ -53,12 +64,11 @@ async function fetchNeynar(endpoint, options = {}) {
   }
 
   const res = await fetch(url, { ...options, headers })
-  const json = await res.json()
+  const json = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    console.error(`Neynar API error: ${res.status}`)
-    console.error(json)
-    process.exit(1)
+    const detail = json?.message || JSON.stringify(json).slice(0, 200)
+    throw new Error(`Neynar API error ${res.status}: ${detail}`)
   }
 
   return json
@@ -139,8 +149,7 @@ export async function getUser(fidOrUsername) {
 
 function requireSigner(env) {
   if (!env.ZAAL_SIGNER_UUID) {
-    console.error('Error: ZAAL_SIGNER_UUID missing - run npm run mint-signer first. Reads work without it.')
-    process.exit(1)
+    throw new Error('ZAAL_SIGNER_UUID missing - run npm run mint-signer (or set it in the Vercel env). Reads work without it.')
   }
   return env.ZAAL_SIGNER_UUID
 }

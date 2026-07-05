@@ -7,13 +7,16 @@ import path from 'path'
 import { spawnSync } from 'node:child_process'
 import { ZAO_CONTEXT } from './context.js'
 
-const OPENROUTER_KEY_PATH = path.join(process.env.HOME, '.zao/private/openrouter.key')
+const HOME = process.env.HOME || ''
+const OPENROUTER_KEY_PATH = path.join(HOME, '.zao/private/openrouter.key')
 // Zaal's real edits from cockpit [e] - the highest-signal voice data. Lives
 // outside the repo, never committed. Overridable for tests.
 const EXAMPLES_PATH = process.env.VOICE_EXAMPLES_PATH
-  || path.join(process.env.HOME, '.zao/private/zaal-voice-examples.md')
+  || path.join(HOME, '.zao/private/zaal-voice-examples.md')
 
+// process.env wins (Vercel: set OPENROUTER_API_KEY), then the local key file.
 function loadOpenRouterKey() {
+  if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY.trim()
   try {
     if (!fs.existsSync(OPENROUTER_KEY_PATH)) return null
     const key = fs.readFileSync(OPENROUTER_KEY_PATH, 'utf-8').trim()

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>zaalcaster</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0c0c0f;
+    color: #e8e8ea;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    position: sticky; top: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    background: #131318;
+    border-bottom: 1px solid #24242c;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  header .meta { font-size: 13px; color: #8a8a94; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  button, .toggle {
+    font: inherit; font-size: 13px;
+    background: #1d1d25; color: #e8e8ea;
+    border: 1px solid #2e2e38; border-radius: 8px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover, .toggle:hover { background: #26263040; border-color: #3a3a46; }
+  .toggle.on { background: #6d4aff33; border-color: #6d4aff; color: #cbb8ff; }
+  main { max-width: 680px; margin: 0 auto; padding: 12px; }
+  .item {
+    background: #131318;
+    border: 1px solid #22222a;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .item .who { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .item .who a { color: #a99bff; text-decoration: none; font-weight: 600; }
+  .item .who a:hover { text-decoration: underline; }
+  .tag {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+    color: #8a8a94; border: 1px solid #2e2e38; border-radius: 5px;
+    padding: 1px 6px;
+  }
+  .thread { border-left: 2px solid #2e2e38; padding-left: 10px; margin: 6px 0; }
+  .thread div { color: #9a9aa4; font-size: 13px; margin: 2px 0; }
+  .thread .u { color: #b8b8c2; }
+  .them { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .empty, .err { text-align: center; color: #8a8a94; padding: 48px 16px; }
+  .err { color: #ff8a8a; }
+  a.open { font-size: 13px; color: #8a8a94; text-decoration: none; }
+  a.open:hover { color: #cbb8ff; }
+  footer { text-align: center; color: #55555f; font-size: 12px; padding: 24px 0 40px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>zaalcaster</h1>
+    <div class="meta" id="meta">loading...</div>
+  </div>
+  <div class="controls">
+    <span class="toggle" id="allToggle" title="include likes / recasts / follows">all</span>
+    <button id="refresh">refresh</button>
+  </div>
+</header>
+<main id="list"></main>
+<footer>read-only preview - reply + send land in the next build</footer>
+
+<script>
+  const list = document.getElementById('list')
+  const meta = document.getElementById('meta')
+  const allToggle = document.getElementById('allToggle')
+  let showAll = false
+
+  function esc(s) {
+    return (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  }
+
+  function renderThread(item) {
+    const chain = (item.thread && item.thread.length) ? item.thread : (item.parent ? [item.parent] : [])
+    if (!chain.length) return ''
+    const rows = chain.slice(-3).map(
+      (c) => `<div><span class="u">@${esc(c.user)}</span>: ${esc((c.text || '').slice(0, 200))}</div>`
+    ).join('')
+    return `<div class="thread">${rows}</div>`
+  }
+
+  function renderItem(item) {
+    return `<div class="item">
+      <div class="who">
+        <span class="tag">${esc(item.type)}</span>
+        <a href="${esc(item.link)}" target="_blank" rel="noopener">@${esc(item.user)}</a>
+        <a class="open" href="${esc(item.link)}" target="_blank" rel="noopener">open</a>
+      </div>
+      ${renderThread(item)}
+      <div class="them">${esc(item.text) || '<i>(no text)</i>'}</div>
+    </div>`
+  }
+
+  async function load() {
+    meta.textContent = 'loading...'
+    list.innerHTML = ''
+    try {
+      const res = await fetch(`/api/inbox?limit=25${showAll ? '&all=1' : ''}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'failed to load')
+      if (!data.items.length) {
+        list.innerHTML = '<div class="empty">inbox zero - everything answered.</div>'
+        meta.textContent = '0 items'
+        return
+      }
+      meta.textContent = `${data.count} ${showAll ? 'notifications' : 'unanswered'}`
+      list.innerHTML = data.items.map(renderItem).join('')
+    } catch (err) {
+      list.innerHTML = `<div class="err">${esc(err.message)}</div>`
+      meta.textContent = 'error'
+    }
+  }
+
+  allToggle.addEventListener('click', () => {
+    showAll = !showAll
+    allToggle.classList.toggle('on', showAll)
+    load()
+  })
+  document.getElementById('refresh').addEventListener('click', load)
+  load()
+</script>
+</body>
+</html>
