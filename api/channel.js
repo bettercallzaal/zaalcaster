@@ -36,7 +36,8 @@ export default async function handler(req, res) {
     }
     const id = (req.query.id || 'zao,wavewarz,zabal').replace(/[^a-zA-Z0-9,_-]/g, '')
     const limit = Math.min(Number(req.query.limit) || 25, 50)
-    const data = await getChannelFeed(id, { limit })
+    const cursor = req.query.cursor || null
+    const data = await getChannelFeed(id, { limit, cursor })
 
     res.setHeader('Cache-Control', 'no-store')
     res.status(200).json({ id, casts: (data.casts || []).map(compact), cursor: data.next?.cursor || null })

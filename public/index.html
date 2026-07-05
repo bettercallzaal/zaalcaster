@@ -220,12 +220,15 @@
   }
 
   // ================= FEED =================
-  async function loadFeed() {
-    st.feed.loaded = false; render()
+  const moreBtn = (cursor, act) => cursor ? `<div class="subbar" style="justify-content:center"><button class="ibtn" data-act="${act}">load more</button></div>` : ''
+  async function loadFeed(append) {
+    if (!append) { st.feed.loaded = false; st.feed.cursor = null; render() }
     try {
-      const r = await fetch(`/api/feed?type=${st.feed.type}&limit=30`)
+      const url = `/api/feed?type=${st.feed.type}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
+      const r = await fetch(url)
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'feed failed')
-      st.feed.casts = d.casts; st.feed.loaded = true
+      st.feed.casts = append ? st.feed.casts.concat(d.casts) : d.casts
+      st.feed.cursor = d.cursor; st.feed.loaded = true
     } catch (e) { st.feed.err = e.message; st.feed.loaded = true }
     render()
   }
@@ -254,7 +257,7 @@
     if (st.feed.err) return sub + `<div class="err">${esc(st.feed.err)}</div>`
     const casts = dropMuted(st.feed.casts)
     if (!casts.length) return sub + dig + '<div class="empty">no casts.</div>'
-    return sub + dig + casts.map(castCard).join('')
+    return sub + dig + casts.map(castCard).join('') + moreBtn(st.feed.cursor, 'morefeed')
   }
 
   // ================= SEARCH =================
@@ -345,12 +348,14 @@
   }
 
   // ================= CHANNELS =================
-  async function loadChannels() {
-    st.channels.loaded = false; render()
+  async function loadChannels(append) {
+    if (!append) { st.channels.loaded = false; st.channels.cursor = null; render() }
     try {
-      const r = await fetch(`/api/channel?id=${encodeURIComponent(st.channels.id)}&limit=30`)
+      const url = `/api/channel?id=${encodeURIComponent(st.channels.id)}&limit=30${append && st.channels.cursor ? '&cursor=' + encodeURIComponent(st.channels.cursor) : ''}`
+      const r = await fetch(url)
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'channel failed')
-      st.channels.casts = d.casts; st.channels.loaded = true
+      st.channels.casts = append ? st.channels.casts.concat(d.casts) : d.casts
+      st.channels.cursor = d.cursor; st.channels.loaded = true
     } catch (e) { st.channels.err = e.message; st.channels.loaded = true }
     render()
     if (!st.channels.trending.length) {
@@ -368,7 +373,7 @@
     if (st.channels.err) return sub + `<div class="err">${esc(st.channels.err)}</div>`
     const casts = dropMuted(st.channels.casts)
     if (!casts.length) return sub + '<div class="empty">no casts in /' + esc(st.channels.id) + '.</div>'
-    return sub + casts.map(castCard).join('')
+    return sub + casts.map(castCard).join('') + moreBtn(st.channels.cursor, 'morechan')
   }
 
   // ================= COMPOSE =================
@@ -559,6 +564,8 @@
     if (act === 'profile') { openProfile(btn.dataset.user); return }
     if (act === 'thread') { openThread(hash); return }
     if (act === 'digest') { loadDigest(); return }
+    if (act === 'morefeed') { btn.textContent = 'loading...'; loadFeed(true); return }
+    if (act === 'morechan') { btn.textContent = 'loading...'; loadChannels(true); return }
     if (act === 'dosearch') { runSearch(); return }
     if (act === 'togglepriority') { st.inbox.priority = !st.inbox.priority; loadInbox(); return }
     if (act === 'filters') { openFilters(); return }
