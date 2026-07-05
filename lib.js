@@ -212,6 +212,18 @@ function requireSigner(env) {
   return env.SIGNER
 }
 
+// Map raw Neynar/post errors to something the user can act on.
+export function friendlyPostError(err) {
+  const m = err instanceof Error ? err.message : String(err || 'post failed')
+  if (/signer not found/i.test(m)) {
+    return "Posting isn't set up: your Neynar API key and signer don't match. Re-copy BOTH NEYNAR_API_KEY and SIGNER_UUID from your creds file into the env (they must be the same pair)."
+  }
+  if (/SIGNER_UUID missing/i.test(m)) {
+    return 'Posting is off: no signer set. Run npm run mint-signer, then set SIGNER_UUID in the env.'
+  }
+  return m
+}
+
 export async function postCast(text, options = {}) {
   const { embedUrl = null, parentHash = null, parentFid = null, channelId = null,
     quoteHash = null, quoteFid = null } = options
