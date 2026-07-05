@@ -128,7 +128,7 @@
 <body>
 <header>
   <div>
-    <h1>zaal<span>caster</span></h1>
+    <h1 id="wordmark">zaal<span>caster</span></h1>
     <div class="meta" id="meta"></div>
   </div>
   <div class="right">
@@ -174,7 +174,7 @@
   const main = document.getElementById('main')
   const meta = document.getElementById('meta')
   const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
-  const HOME_CHANNELS = ['zao', 'wavewarz', 'zabal']
+  let HOME_CHANNELS = ['zao', 'wavewarz', 'zabal'] // overridden from config on boot
 
   let tab = 'feed'
   const st = {
@@ -894,11 +894,28 @@
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); palette.style.display === 'block' ? closePalette() : openPalette() }
   })
 
+  // brand the UI from config.js (name, channels, Daily seed) so a fork adapts
+  function applyConfig(cfg) {
+    if (!cfg) return
+    if (cfg.appName) {
+      document.title = cfg.appName
+      const m = cfg.appName.match(/^(.*?)(caster)$/i)
+      document.getElementById('wordmark').innerHTML = m ? `${esc(m[1])}<span>${esc(m[2])}</span>` : esc(cfg.appName)
+    }
+    if (Array.isArray(cfg.homeChannels) && cfg.homeChannels.length) {
+      HOME_CHANNELS = cfg.homeChannels
+      if (!st.channels.id || st.channels.id === 'zao') st.channels.id = HOME_CHANNELS[0]
+    }
+    // seed Daily from config only when the user has nothing yet (fresh fork)
+    if (cfg.daily && !localStorage.getItem('zc_daily')) { daily = { date: todayStr(), ...cfg.daily }; lsSet('zc_daily', daily) }
+  }
+
   // boot: check whether a password is required before loading anything
   ;(async () => {
     try {
       const r = await fetch('/api/auth')
       const d = await r.json()
+      applyConfig(d.config)
       if (d.enabled && !d.authed) showGate()
       else startApp()
     } catch { startApp() } // auth endpoint unreachable (e.g. gate off) - proceed
