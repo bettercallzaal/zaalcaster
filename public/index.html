@@ -124,12 +124,13 @@
 </header>
 
 <div class="tabs" id="tabs">
-  <button data-tab="feed" class="on">Feed <span class="k">1</span></button>
-  <button data-tab="inbox">Inbox <span class="k">2</span></button>
-  <button data-tab="channels">Chan <span class="k">3</span></button>
-  <button data-tab="search">Search <span class="k">4</span></button>
-  <button data-tab="compose">Post <span class="k">5</span></button>
-  <button data-tab="grow">Grow <span class="k">6</span></button>
+  <button data-tab="daily" class="on">Daily <span class="k">1</span></button>
+  <button data-tab="feed">Feed <span class="k">2</span></button>
+  <button data-tab="inbox">Inbox <span class="k">3</span></button>
+  <button data-tab="channels">Chan <span class="k">4</span></button>
+  <button data-tab="search">Search <span class="k">5</span></button>
+  <button data-tab="compose">Post <span class="k">6</span></button>
+  <button data-tab="grow">Grow <span class="k">7</span></button>
 </div>
 
 <main id="main"></main>
@@ -449,6 +450,60 @@
       + (casts || '<div class="empty">no casts yet.</div>')
   }
 
+  // ================= DAILY (start-here dashboard) =================
+  const todayStr = () => new Date().toISOString().slice(0, 10)
+  const DAILY_DEFAULT = {
+    date: todayStr(),
+    tasks: [
+      { t: 'post a GM', done: false },
+      { t: 'clear inbox - reply or skip', done: false },
+      { t: 'catch GM Farcaster', done: false },
+      { t: 'engage 3 new people (Grow tab)', done: false },
+      { t: 'check /zao + /wavewarz', done: false },
+      { t: 'quote or boost 1 good cast', done: false },
+    ],
+    apps: [
+      { label: 'GM Farcaster', url: 'https://gmfarcaster.com' },
+      { label: 'Bountycaster', url: 'https://www.bountycaster.xyz' },
+      { label: 'Paragraph', url: 'https://paragraph.xyz' },
+      { label: 'Degen', url: 'https://www.degen.tips' },
+      { label: 'Rounds', url: 'https://rounds.wtf' },
+    ],
+    communities: ['zao', 'wavewarz', 'zabal', 'gmfarcaster', 'farcaster', 'founders'],
+    groups: [
+      { label: 'Farcaster DMs / group chats', url: 'https://farcaster.xyz/~/inbox' },
+    ],
+  }
+  let daily = lsGet('zc_daily', null)
+  if (!daily) { daily = DAILY_DEFAULT; lsSet('zc_daily', daily) }
+  // daily reset - clear task ticks on a new day
+  if (daily.date !== todayStr()) { daily.date = todayStr(); daily.tasks.forEach((x) => (x.done = false)); lsSet('zc_daily', daily) }
+  const saveDaily = () => lsSet('zc_daily', daily)
+
+  function renderDaily() {
+    const done = daily.tasks.filter((t) => t.done).length
+    const tasks = daily.tasks.map((t, i) => `<div class="urow" style="cursor:default">
+      <span data-act="dtoggle" data-i="${i}" style="cursor:pointer;font-size:18px;width:22px">${t.done ? '☑' : '☐'}</span>
+      <div style="flex:1;${t.done ? 'color:#6f6f7a;text-decoration:line-through' : ''}">${esc(t.t)}</div>
+      <span data-act="dtaskrm" data-i="${i}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('')
+    const apps = daily.apps.map((a, i) => `<span class="chip"><a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(a.label)}</a> <span data-act="dapprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+    const comms = daily.communities.map((c, i) => `<span class="chip" data-act="dcomm" data-c="${esc(c)}">/${esc(c)} <span data-act="dcommrm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+    const groups = daily.groups.map((g, i) => `<span class="chip"><a href="${esc(g.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(g.label)}</a> <span data-act="dgrouprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @zaal - <b>${done}/${daily.tasks.length}</b> done today</div></div>
+      <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
+      ${tasks}
+      <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
+      <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
+      <div class="searchbar"><input id="dAppLabel" placeholder="app name" style="flex:1"><input id="dAppUrl" placeholder="https://..." style="flex:2"><button class="ibtn" data-act="dappadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">communities to check</b></div>
+      <div class="subbar">${comms || '<span class="ub">none</span>'}</div>
+      <div class="searchbar"><input id="dCommInput" placeholder="channel id (e.g. gmfarcaster)"><button class="ibtn" data-act="dcommadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">group chats</b></div>
+      <div class="subbar">${groups || '<span class="ub">none</span>'}</div>
+      <div class="searchbar"><input id="dGroupLabel" placeholder="group name" style="flex:1"><input id="dGroupUrl" placeholder="farcaster.xyz/~/group/..." style="flex:2"><button class="ibtn" data-act="dgroupadd">add</button></div>`
+  }
+
   // ================= DECK (columns) =================
   let deckMode = false
   function renderDeck() {
@@ -477,7 +532,8 @@
   function render() {
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab))
     if (deckMode) { meta.textContent = 'deck'; main.innerHTML = renderDeck(); return }
-    if (tab === 'feed') { meta.textContent = st.feed.loaded ? `${st.feed.casts.length} casts` : ''; main.innerHTML = renderFeed() }
+    if (tab === 'daily') { meta.textContent = ''; main.innerHTML = renderDaily() }
+    else if (tab === 'feed') { meta.textContent = st.feed.loaded ? `${st.feed.casts.length} casts` : ''; main.innerHTML = renderFeed() }
     else if (tab === 'inbox') { meta.textContent = st.inbox.loaded ? `${st.inbox.items.length} unanswered` : ''; main.innerHTML = renderInbox() }
     else if (tab === 'channels') { meta.textContent = ''; main.innerHTML = renderChannels() }
     else if (tab === 'search') { meta.textContent = ''; main.innerHTML = renderSearch() }
@@ -553,9 +609,10 @@
   })
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
-    if (e.key === '1') switchTab('feed'); else if (e.key === '2') switchTab('inbox')
-    else if (e.key === '3') switchTab('channels'); else if (e.key === '4') switchTab('search')
-    else if (e.key === '5') switchTab('compose'); else if (e.key === '6') switchTab('grow')
+    if (e.key === '1') switchTab('daily'); else if (e.key === '2') switchTab('feed')
+    else if (e.key === '3') switchTab('inbox'); else if (e.key === '4') switchTab('channels')
+    else if (e.key === '5') switchTab('search'); else if (e.key === '6') switchTab('compose')
+    else if (e.key === '7') switchTab('grow')
     else if (e.key === 'r') document.getElementById('refresh').click()
   })
 
@@ -597,12 +654,24 @@
       if (tap.dataset.act === 'thread') { openThread(tap.dataset.hash); return }
       if (tap.dataset.act === 'unquote') { compose.quote = null; render(); return }
     }
-    const btn = e.target.closest('button[data-act]'); if (!btn) return
+    const btn = e.target.closest('[data-act]'); if (!btn) return
     const act = btn.dataset.act, hash = btn.dataset.hash, fid = btn.dataset.fid
 
     // navigation-ish actions
     if (act === 'profile') { openProfile(btn.dataset.user); return }
     if (act === 'thread') { openThread(hash); return }
+    // daily dashboard
+    if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
+    if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
+    if (act === 'dapprm') { daily.apps.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dappadd') { const l = document.getElementById('dAppLabel').value.trim(), u = document.getElementById('dAppUrl').value.trim(); if (l && u) { daily.apps.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
+    if (act === 'dcomm') { st.channels.id = btn.dataset.c; switchTab('channels'); loadChannels(); return }
+    if (act === 'dcommrm') { daily.communities.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dcommadd') { const v = document.getElementById('dCommInput').value.trim().replace(/^\//, '').toLowerCase(); if (v) { daily.communities.push(v); saveDaily(); render() } return }
+    if (act === 'dgrouprm') { daily.groups.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
+    if (act === 'dgroupadd') { const l = document.getElementById('dGroupLabel').value.trim(), u = document.getElementById('dGroupUrl').value.trim(); if (l && u) { daily.groups.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
+
     if (act === 'digest') { loadDigest(); return }
     if (act === 'morefeed') { btn.textContent = 'loading...'; loadFeed(true); return }
     if (act === 'morechan') { btn.textContent = 'loading...'; loadChannels(true); return }
@@ -686,7 +755,7 @@
 
   // ---- password gate ----
   const gate = document.getElementById('gate')
-  function startApp() { gate.style.display = 'none'; switchTab('feed') }
+  function startApp() { gate.style.display = 'none'; switchTab('daily') }
   async function submitPw() {
     const pw = document.getElementById('gatePw').value
     document.getElementById('gateErr').textContent = ''
@@ -705,7 +774,7 @@
   const palInput = document.getElementById('palInput')
   const palList = document.getElementById('palList')
   let palItems = [], palSel = 0
-  const TABS = [['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow']]
+  const TABS = [['daily','Daily'],['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow']]
   function palCommands(q) {
     const s = q.trim().toLowerCase()
     const cmds = []
