@@ -2,6 +2,7 @@
 // direct replies) for the tap-to-thread view. Read-only.
 
 import { getConversation } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 
 function node(cast) {
   const a = cast.author || {}
@@ -16,6 +17,7 @@ function node(cast) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   try {
     const hash = (req.query.hash || '').trim()
     if (!hash) { res.status(400).json({ error: 'missing hash' }); return }

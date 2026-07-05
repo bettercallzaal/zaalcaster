@@ -7,6 +7,7 @@
 // UI just shows items without a suggestion.
 
 import { generateDrafts } from '../voice.js'
+import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
@@ -22,6 +23,7 @@ async function readJsonBody(req) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'POST only' })
     return

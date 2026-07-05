@@ -2,9 +2,11 @@
 // Read-only. Needs OPENROUTER_API_KEY on Vercel (claude CLI locally).
 
 import { getFollowingFeed } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 import { digestFeed } from '../voice.js'
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   try {
     const feed = await getFollowingFeed({ limit: 40 })
     const casts = (feed.casts || []).map((c) => ({

@@ -126,6 +126,16 @@
 
 <main id="main"></main>
 <div id="overlay"><div class="sheet"><div class="ohd"><b id="ohdTitle"></b><span class="x" id="overlayClose">&times;</span></div><div class="obody" id="obody"></div></div></div>
+<div id="gate" style="position:fixed;inset:0;z-index:100;background:#0c0c12;display:none;align-items:center;justify-content:center">
+  <div style="width:280px;max-width:86vw;text-align:center">
+    <h1 style="font-size:20px;margin:0 0 4px">zaal<span style="color:#855DCD">caster</span></h1>
+    <div style="color:#8a8a99;font-size:13px;margin-bottom:16px">enter password</div>
+    <input id="gatePw" type="password" autocomplete="current-password" placeholder="password"
+      style="width:100%;font:inherit;font-size:16px;background:#14141d;color:#e9e9ee;border:1px solid #24242f;border-radius:10px;padding:11px 13px;box-sizing:border-box">
+    <button id="gateBtn" style="width:100%;margin-top:10px;font:inherit;font-size:15px;font-weight:600;background:#6d4aff;color:#fff;border:none;border-radius:10px;padding:11px;cursor:pointer">enter</button>
+    <div id="gateErr" style="color:#ff8a6a;font-size:13px;margin-top:8px;min-height:16px"></div>
+  </div>
+</div>
 <footer>your farcaster - reads are free, nothing is sent without your confirm</footer>
 
 <script>
@@ -582,8 +592,31 @@
     lsSet('zc_muted', muted); closeOverlay(); render()
   })
 
-  // boot
-  switchTab('feed')
+  // ---- password gate ----
+  const gate = document.getElementById('gate')
+  function startApp() { gate.style.display = 'none'; switchTab('feed') }
+  async function submitPw() {
+    const pw = document.getElementById('gatePw').value
+    document.getElementById('gateErr').textContent = ''
+    try {
+      const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) })
+      if (!r.ok) { document.getElementById('gateErr').textContent = 'wrong password'; return }
+      startApp()
+    } catch { document.getElementById('gateErr').textContent = 'error - try again' }
+  }
+  document.getElementById('gateBtn').addEventListener('click', submitPw)
+  document.getElementById('gatePw').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPw() })
+  function showGate() { gate.style.display = 'flex'; document.getElementById('gatePw').focus() }
+
+  // boot: check whether a password is required before loading anything
+  ;(async () => {
+    try {
+      const r = await fetch('/api/auth')
+      const d = await r.json()
+      if (d.enabled && !d.authed) showGate()
+      else startApp()
+    } catch { startApp() } // auth endpoint unreachable (e.g. gate off) - proceed
+  })()
 </script>
 </body>
 </html>

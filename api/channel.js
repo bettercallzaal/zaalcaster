@@ -3,6 +3,7 @@
 // Read-only, same compact cast shape as /api/feed.
 
 import { getChannelFeed } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 
 function compact(cast) {
   const a = cast.author || {}
@@ -24,6 +25,7 @@ function compact(cast) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   try {
     const id = (req.query.id || 'zao,wavewarz,zabal').replace(/[^a-zA-Z0-9,_-]/g, '')
     const limit = Math.min(Number(req.query.limit) || 25, 50)

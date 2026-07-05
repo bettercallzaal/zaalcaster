@@ -4,6 +4,7 @@
 // the UI fires it on click (no confirm) - but it still needs the signer.
 
 import { postReaction } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
@@ -15,6 +16,7 @@ async function readJsonBody(req) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   try {
     const body = await readJsonBody(req)

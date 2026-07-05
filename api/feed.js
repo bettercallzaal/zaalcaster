@@ -3,6 +3,7 @@
 // Read-only, returns a compact, safe cast shape for the UI.
 
 import { getFollowingFeed, getTrendingFeed } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 
 function compact(cast) {
   const a = cast.author || {}
@@ -24,6 +25,7 @@ function compact(cast) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   try {
     const type = req.query.type === 'trending' ? 'trending' : 'following'
     const limit = Math.min(Number(req.query.limit) || 25, 50)
