@@ -205,6 +205,25 @@ export async function getUser(fidOrUsername) {
   return response.user || null
 }
 
+// Is posting actually wired up? Checks the signer resolves under the API key.
+// Returns { ready, reason }: ok | no-signer | mismatch | error.
+export async function getPostingHealth() {
+  const env = loadEnv()
+  if (!env.SIGNER) return { ready: false, reason: 'no-signer' }
+  try {
+    const res = await fetch(`${NEYNAR_BASE_URL}/farcaster/signer?signer_uuid=${env.SIGNER}`, {
+      headers: { 'X-API-Key': env.NEYNAR_API_KEY },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.status === 404) return { ready: false, reason: 'mismatch' }
+    if (!res.ok) return { ready: false, reason: 'error' }
+    const d = await res.json()
+    return d.status === 'approved' ? { ready: true, reason: 'ok', fid: d.fid } : { ready: false, reason: d.status || 'not-approved' }
+  } catch {
+    return { ready: false, reason: 'error' }
+  }
+}
+
 function requireSigner(env) {
   if (!env.SIGNER) {
     throw new Error('SIGNER_UUID missing - run npm run mint-signer (or set it in the env). Reads work without it.')
