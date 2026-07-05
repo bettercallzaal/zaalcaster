@@ -107,6 +107,20 @@ export async function getChannelFeed(channelId, options = {}) {
   return response
 }
 
+export async function getTrendingFeed(options = {}) {
+  const { limit = 20, cursor = null, timeWindow = '24h' } = options
+
+  const params = new URLSearchParams({
+    limit: String(limit),
+    time_window: timeWindow,
+  })
+
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/farcaster/feed/trending?${params}`)
+  return response
+}
+
 export async function getNotifications(options = {}) {
   const { limit = 20, cursor = null } = options
   const env = loadEnv()
