@@ -1,10 +1,12 @@
-// POST /api/send - reply to a cast from the web cockpit.
-// Body: { parentHash, parentFid, text }
+// POST /api/send - post a cast from the web cockpit. Reply or top-level.
+// Body: { text, parentHash?, parentFid?, channelId? }
+//   parentHash present -> reply; absent -> new top-level cast.
+//   channelId optional -> post into a channel.
 // Returns: { ok, hash, link } or { error }.
 //
 // Behind Vercel deployment protection (only Zaal's login reaches it). Still,
 // the UI must show exact text + an explicit confirm before calling this - the
-// confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 400 if unset).
+// confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
 import { postCast } from '../lib.js'
 
@@ -22,14 +24,15 @@ export default async function handler(req, res) {
   try {
     const body = await readJsonBody(req)
     const text = typeof body.text === 'string' ? body.text.trim() : ''
-    const parentHash = typeof body.parentHash === 'string' ? body.parentHash : ''
+    const parentHash = typeof body.parentHash === 'string' && body.parentHash ? body.parentHash : null
     const parentFid = body.parentFid ?? null
+    const channelId = typeof body.channelId === 'string' && body.channelId ? body.channelId : null
 
     if (!text) { res.status(400).json({ error: 'empty text' }); return }
-    if (!parentHash) { res.status(400).json({ error: 'missing parentHash' }); return }
     if (text.length > 1024) { res.status(400).json({ error: 'text too long' }); return }
 
-    const response = await postCast(text, { parentHash, parentFid })
+    // parentHash present -> reply; absent -> top-level cast (Compose)
+    const response = await postCast(text, { parentHash, parentFid, channelId })
     const cast = response.cast
     res.status(200).json({
       ok: true,

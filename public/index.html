@@ -2,284 +2,391 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>zaalcaster</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #0c0c0f;
-    color: #e8e8ea;
-    -webkit-font-smoothing: antialiased;
+  :root {
+    color-scheme: dark;
+    --bg: #0c0c12; --surface: #14141d; --surface2: #1a1a26; --border: #24242f;
+    --text: #e9e9ee; --dim: #8a8a99; --accent: #855DCD; --accent2: #6d4aff;
+    --live: #D85A30; --good: #7ee0a0;
   }
-  header {
-    position: sticky; top: 0;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 12px;
-    padding: 14px 16px;
-    background: #131318;
-    border-bottom: 1px solid #24242c;
-  }
-  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
-  header .meta { font-size: 13px; color: #8a8a94; }
-  .controls { display: flex; gap: 8px; align-items: center; }
-  button, .toggle {
-    font: inherit; font-size: 13px;
-    background: #1d1d25; color: #e8e8ea;
-    border: 1px solid #2e2e38; border-radius: 8px;
-    padding: 6px 12px; cursor: pointer;
-  }
-  button:hover, .toggle:hover { background: #26263040; border-color: #3a3a46; }
-  .toggle.on { background: #6d4aff33; border-color: #6d4aff; color: #cbb8ff; }
-  main { max-width: 680px; margin: 0 auto; padding: 12px; }
-  .item {
-    background: #131318;
-    border: 1px solid #22222a;
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 12px;
-  }
-  .item .who { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  .item .who a { color: #a99bff; text-decoration: none; font-weight: 600; }
-  .item .who a:hover { text-decoration: underline; }
-  .tag {
-    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
-    color: #8a8a94; border: 1px solid #2e2e38; border-radius: 5px;
-    padding: 1px 6px;
-  }
-  .thread { border-left: 2px solid #2e2e38; padding-left: 10px; margin: 6px 0; }
-  .thread div { color: #9a9aa4; font-size: 13px; margin: 2px 0; }
-  .thread .u { color: #b8b8c2; }
-  .them { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
-  .draft {
-    margin-top: 10px; padding: 10px 12px;
-    background: #17141f; border: 1px solid #34294d; border-radius: 9px;
-  }
-  .draft .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #a99bff; margin-bottom: 4px; }
-  .draft .text { white-space: pre-wrap; word-break: break-word; color: #ddd6ff; }
-  .draft.skip { border-color: #2e2e38; background: #16161c; }
-  .draft.skip .label, .draft.skip .text { color: #7a7a84; }
-  .item .actions { margin-top: 8px; }
-  .item .actions button { font-size: 12px; padding: 4px 10px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 12px 16px; background: rgba(12,12,18,.86); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .3px; }
+  header h1 span { color: var(--accent); }
+  header .meta { font-size: 12px; color: var(--dim); }
+  header .right { display: flex; gap: 8px; align-items: center; }
+  button { font: inherit; cursor: pointer; }
+  .ibtn { font-size: 13px; background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 11px; }
+  .ibtn:hover { border-color: var(--accent); }
+  .ibtn.primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  .tabs { position: sticky; top: 49px; z-index: 15; display: flex; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .tabs button { flex: 1; background: none; border: none; color: var(--dim); padding: 11px 4px; font-size: 14px; font-weight: 600;
+    border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .tabs button .k { font-size: 10px; color: var(--dim); font-weight: 400; }
+  main { max-width: 640px; margin: 0 auto; padding: 10px 12px 90px; }
+  .subbar { display: flex; gap: 8px; padding: 6px 2px 10px; flex-wrap: wrap; }
+  .chip { font-size: 13px; background: var(--surface2); color: var(--dim); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 13px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 13px 15px; margin-bottom: 11px; }
+  .card .top { display: flex; gap: 10px; align-items: flex-start; }
+  .pfp { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); object-fit: cover; flex: none; }
+  .card .who { flex: 1; min-width: 0; }
+  .card .who .name { font-weight: 600; }
+  .card .who .name a { color: var(--text); text-decoration: none; }
+  .card .who .sub { font-size: 12px; color: var(--dim); }
+  .card .who .sub .ch { color: var(--accent); }
+  .card .body { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .card .embed { margin-top: 7px; font-size: 13px; }
+  .card .embed a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .card .stats { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--dim); }
+  .card .stats button { background: none; border: none; color: var(--dim); padding: 0; display: inline-flex; gap: 5px; align-items: center; }
+  .card .stats button.act.on { color: var(--live); }
+  .card .stats button.act.recast.on { color: var(--good); }
+  .tag { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 6px; }
+  .thread { border-left: 2px solid var(--border); padding-left: 10px; margin: 7px 0 0; }
+  .thread div { color: var(--dim); font-size: 13px; margin: 2px 0; }
+  .thread .u { color: #b8b8c6; }
+  .draft { margin-top: 10px; padding: 9px 11px; background: #17141f; border: 1px solid #34294d; border-radius: 9px; }
+  .draft .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #a99bff; margin-bottom: 3px; }
+  .draft .t { white-space: pre-wrap; word-break: break-word; color: #ddd6ff; }
+  .draft.skip { border-color: var(--border); background: #16161c; }
+  .draft.skip .lab, .draft.skip .t { color: #6f6f7a; }
   .reply { margin-top: 10px; }
-  .reply textarea {
-    width: 100%; min-height: 54px; resize: vertical; font: inherit; font-size: 14px;
-    background: #0f0f16; color: #e8e8ea; border: 1px solid #2e2e38; border-radius: 9px;
-    padding: 8px 10px; box-sizing: border-box;
-  }
-  .reply textarea:focus { outline: none; border-color: #855DCD; }
+  .reply textarea, .compose textarea { width: 100%; resize: vertical; font: inherit; font-size: 15px; background: #0e0e15;
+    color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; }
+  .reply textarea { min-height: 52px; } .compose textarea { min-height: 130px; }
+  .reply textarea:focus, .compose textarea:focus { outline: none; border-color: var(--accent); }
   .reply textarea[readonly] { background: #12101a; border-color: #34294d; color: #ddd6ff; }
-  .reply .btns { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
-  .reply button { font: inherit; font-size: 13px; border-radius: 8px; padding: 6px 12px; cursor: pointer;
-    background: #1d1d25; color: #e8e8ea; border: 1px solid #33334d; }
-  .reply button.primary { background: #6d4aff; border-color: #6d4aff; color: #fff; font-weight: 600; }
-  .reply button:hover { border-color: #855DCD; }
-  .reply .cc { font-size: 12px; color: #7a7a8a; }
-  .reply .confirm-note { font-size: 12px; color: #ffcf9a; }
-  .sent { margin-top: 10px; font-size: 13px; color: #7ee0a0; }
-  .sent a { color: #7ee0a0; }
-  .empty, .err { text-align: center; color: #8a8a94; padding: 48px 16px; }
+  .reply .btns, .compose .btns { display: flex; gap: 8px; align-items: center; margin-top: 7px; flex-wrap: wrap; }
+  .reply .cc, .compose .cc { font-size: 12px; color: var(--dim); }
+  .reply .note, .compose .note { font-size: 12px; color: #ffcf9a; }
+  .sent { margin-top: 10px; font-size: 13px; color: var(--good); }
+  .sent a { color: var(--good); }
+  .empty, .err { text-align: center; color: var(--dim); padding: 44px 16px; }
   .err { color: #ff8a8a; }
-  a.open { font-size: 13px; color: #8a8a94; text-decoration: none; }
-  a.open:hover { color: #cbb8ff; }
-  footer { text-align: center; color: #55555f; font-size: 12px; padding: 24px 0 40px; }
+  .loading { text-align: center; color: var(--dim); padding: 30px; }
+  .compose select { font: inherit; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
+  a.open { font-size: 12px; color: var(--dim); text-decoration: none; }
+  a.open:hover { color: var(--accent); }
+  footer { text-align: center; color: #4a4a58; font-size: 11px; padding: 6px 0 30px; }
 </style>
 </head>
 <body>
 <header>
   <div>
-    <h1>zaalcaster</h1>
-    <div class="meta" id="meta">loading...</div>
+    <h1>zaal<span>caster</span></h1>
+    <div class="meta" id="meta"></div>
   </div>
-  <div class="controls">
-    <span class="toggle" id="allToggle" title="include likes / recasts / follows">all</span>
-    <button id="draftAll" title="draft replies in your voice">draft all</button>
-    <button id="refresh">refresh</button>
-    <a href="/dj.html" title="mix computer audio into a space" style="text-decoration:none"><button type="button">space dj</button></a>
+  <div class="right">
+    <button class="ibtn" id="refresh" title="refresh (r)">refresh</button>
+    <a href="/dj.html" style="text-decoration:none"><button class="ibtn" type="button" title="space dj">dj</button></a>
   </div>
 </header>
-<main id="list"></main>
-<footer>nothing is sent until you click "send reply" then "yes, send" - the confirm is your yes</footer>
+
+<div class="tabs" id="tabs">
+  <button data-tab="feed" class="on">Feed <span class="k">1</span></button>
+  <button data-tab="inbox">Inbox <span class="k">2</span></button>
+  <button data-tab="channels">Channels <span class="k">3</span></button>
+  <button data-tab="compose">Compose <span class="k">4</span></button>
+</div>
+
+<main id="main"></main>
+<footer>your farcaster - reads are free, nothing is sent without your confirm</footer>
 
 <script>
-  const list = document.getElementById('list')
+  const main = document.getElementById('main')
   const meta = document.getElementById('meta')
-  const allToggle = document.getElementById('allToggle')
-  const draftAllBtn = document.getElementById('draftAll')
   const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
-  let showAll = false
-  let items = []
+  const HOME_CHANNELS = ['zao', 'wavewarz', 'zabal']
 
-  function esc(s) {
-    return (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  let tab = 'feed'
+  const st = {
+    feed: { type: 'following', casts: [], loaded: false },
+    inbox: { items: [], loaded: false, showAll: false },
+    channels: { id: 'zao', casts: [], loaded: false },
   }
 
-  function renderThread(item) {
-    const chain = (item.thread && item.thread.length) ? item.thread : (item.parent ? [item.parent] : [])
-    if (!chain.length) return ''
-    const rows = chain.slice(-3).map(
-      (c) => `<div><span class="u">@${esc(c.user)}</span>: ${esc((c.text || '').slice(0, 200))}</div>`
-    ).join('')
-    return `<div class="thread">${rows}</div>`
-  }
+  const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const when = (ts) => { if (!ts) return ''; const d = new Date(ts); return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+  const pfp = (u) => u.pfp ? `<img class="pfp" src="${esc(u.pfp)}" alt="">` : `<div class="pfp"></div>`
 
-  function renderDraft(item) {
-    if (item.draft === undefined || item.draft === null) return ''
-    if (item.draft === 'SKIP') {
-      return `<div class="draft skip"><div class="label">draft</div><div class="text">no reply needed</div></div>`
-    }
-    return `<div class="draft"><div class="label">draft in your voice</div><div class="text">${esc(item.draft)}</div></div>`
-  }
-
-  function renderReply(item) {
-    if (!ANSWERABLE.has(item.type)) return ''
-    if (item.sent) {
-      return `<div class="sent">sent - <a href="${esc(item.sentLink)}" target="_blank" rel="noopener">${esc(item.sentLink)}</a></div>`
-    }
-    const val = item.replyText != null ? item.replyText : (item.draft && item.draft !== 'SKIP' ? item.draft : '')
-    const h = esc(item.hash)
-    if (item.armed) {
-      return `<div class="reply">
-        <textarea readonly data-hash="${h}">${esc(val)}</textarea>
-        <div class="btns">
-          <span class="confirm-note">send exactly this as @zaal?</span>
-          <button class="primary" data-act="confirm" data-hash="${h}">${item.sending ? 'sending...' : 'yes, send'}</button>
-          <button data-act="cancel" data-hash="${h}">cancel</button>
+  // ---- shared cast card (feed + channels) ----
+  function castCard(c) {
+    const embeds = (c.embeds || []).map((e) => `<div class="embed"><a href="${esc(e)}" target="_blank" rel="noopener">${esc(e)}</a></div>`).join('')
+    return `<div class="card" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">
+      <div class="top">
+        ${pfp(c)}
+        <div class="who">
+          <div class="name"><a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.display)}</a>
+            <span class="sub">@${esc(c.author)} - ${when(c.timestamp)}${c.channel ? ` - <span class="ch">/${esc(c.channel)}</span>` : ''}</span></div>
+          <div class="body">${esc(c.text)}</div>
+          ${embeds}
+          <div class="stats">
+            <button class="act like" data-act="like" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#9829; <span>${c.likes}</span></button>
+            <button class="act recast" data-act="recast" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#8635; <span>${c.recasts}</span></button>
+            <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#128172; ${c.replies}</button>
+            <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a>
+          </div>
+          <div class="replyslot" data-slot="${esc(c.hash)}"></div>
         </div>
-      </div>`
-    }
+      </div>
+    </div>`
+  }
+
+  // inline reply composer used by feed/channel cards
+  function replyBox(hash, fid, draft) {
     return `<div class="reply">
-      <textarea data-hash="${h}" placeholder="write a reply, or draft one above...">${esc(val)}</textarea>
-      <div class="btns">
-        <button data-act="arm" data-hash="${h}">send reply</button>
-        <span class="cc" data-cc="${h}">${val.length}</span>
-      </div>
+      <textarea data-rhash="${esc(hash)}" data-rfid="${fid || ''}" placeholder="reply as @zaal...">${esc(draft || '')}</textarea>
+      <div class="btns"><button class="ibtn" data-act="replyarm" data-hash="${esc(hash)}">send reply</button>
+        <button class="ibtn" data-act="replycancel" data-hash="${esc(hash)}">cancel</button></div>
+    </div>`
+  }
+  function replyConfirm(hash, fid, text, sending) {
+    return `<div class="reply">
+      <textarea readonly>${esc(text)}</textarea>
+      <div class="btns"><span class="note">send exactly this as @zaal?</span>
+        <button class="ibtn primary" data-act="replyconfirm" data-hash="${esc(hash)}" data-fid="${fid || ''}">${sending ? 'sending...' : 'yes, send'}</button>
+        <button class="ibtn" data-act="replycancel" data-hash="${esc(hash)}">cancel</button></div>
     </div>`
   }
 
-  function renderItem(item) {
-    return `<div class="item" data-hash="${esc(item.hash)}">
-      <div class="who">
-        <span class="tag">${esc(item.type)}</span>
-        <a href="${esc(item.link)}" target="_blank" rel="noopener">@${esc(item.user)}</a>
-        <a class="open" href="${esc(item.link)}" target="_blank" rel="noopener">open</a>
-      </div>
-      ${renderThread(item)}
-      <div class="them">${esc(item.text) || '<i>(no text)</i>'}</div>
-      ${renderDraft(item)}
-      ${renderReply(item)}
-    </div>`
-  }
-
-  function findItem(hash) { return items.find((i) => i.hash === hash) }
-
-  // Typing must not re-render (would drop focus) - update state silently.
-  list.addEventListener('input', (e) => {
-    const ta = e.target.closest('textarea[data-hash]')
-    if (!ta || ta.hasAttribute('readonly')) return
-    const item = findItem(ta.dataset.hash)
-    if (item) { item.replyText = ta.value; const cc = list.querySelector(`[data-cc="${item.hash}"]`); if (cc) cc.textContent = ta.value.length }
-  })
-
-  list.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-act]')
-    if (!btn) return
-    const item = findItem(btn.dataset.hash)
-    if (!item) return
-    const act = btn.dataset.act
-    if (act === 'arm') {
-      const ta = list.querySelector(`textarea[data-hash="${item.hash}"]`)
-      item.replyText = ta ? ta.value : (item.replyText || '')
-      if (!item.replyText.trim()) return
-      item.armed = true; render()
-    } else if (act === 'cancel') {
-      item.armed = false; render()
-    } else if (act === 'confirm') {
-      if (item.sending) return
-      item.sending = true; render()
-      try {
-        const res = await fetch('/api/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parentHash: item.hash, parentFid: item.fid, text: item.replyText }),
-        })
-        const data = await res.json()
-        if (!res.ok || !data.ok) throw new Error(data.error || 'send failed')
-        item.sent = true; item.sentLink = data.link; item.armed = false; item.sending = false
-        render()
-      } catch (err) {
-        item.sending = false; item.armed = false; render()
-        meta.textContent = 'send error: ' + err.message
-      }
-    }
-  })
-
-  function render() {
-    list.innerHTML = items.map(renderItem).join('')
-  }
-
-  async function load() {
-    meta.textContent = 'loading...'
-    list.innerHTML = ''
-    items = []
+  // ================= FEED =================
+  async function loadFeed() {
+    st.feed.loaded = false; render()
     try {
-      const res = await fetch(`/api/inbox?limit=25${showAll ? '&all=1' : ''}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'failed to load')
-      items = data.items
-      if (!items.length) {
-        list.innerHTML = '<div class="empty">inbox zero - everything answered.</div>'
-        meta.textContent = '0 items'
-        return
-      }
-      meta.textContent = `${data.count} ${showAll ? 'notifications' : 'unanswered'}`
-      render()
-    } catch (err) {
-      list.innerHTML = `<div class="err">${esc(err.message)}</div>`
-      meta.textContent = 'error'
-    }
+      const r = await fetch(`/api/feed?type=${st.feed.type}&limit=30`)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'feed failed')
+      st.feed.casts = d.casts; st.feed.loaded = true
+    } catch (e) { st.feed.err = e.message; st.feed.loaded = true }
+    render()
+  }
+  function renderFeed() {
+    const sub = `<div class="subbar">
+      <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">following</span>
+      <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span></div>`
+    if (!st.feed.loaded) return sub + '<div class="loading">loading feed...</div>'
+    if (st.feed.err) return sub + `<div class="err">${esc(st.feed.err)}</div>`
+    if (!st.feed.casts.length) return sub + '<div class="empty">no casts.</div>'
+    return sub + st.feed.casts.map(castCard).join('')
   }
 
+  // ================= INBOX =================
+  async function loadInbox() {
+    st.inbox.loaded = false; render()
+    try {
+      const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}`)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'inbox failed')
+      st.inbox.items = d.items; st.inbox.loaded = true
+    } catch (e) { st.inbox.err = e.message; st.inbox.loaded = true }
+    render()
+  }
   async function draftAll() {
-    const answerable = items.filter((it) => ANSWERABLE.has(it.type))
-    if (!answerable.length) return
-    draftAllBtn.disabled = true
-    const label = draftAllBtn.textContent
-    draftAllBtn.textContent = 'drafting...'
+    const items = st.inbox.items.filter((it) => ANSWERABLE.has(it.type))
+    if (!items.length) return
+    meta.textContent = 'drafting...'
     try {
-      const res = await fetch('/api/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: answerable }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'draft failed')
-      if (!data.available) {
-        meta.textContent = 'drafts unavailable (set OPENROUTER_API_KEY)'
-      } else {
-        for (const it of items) {
-          if (data.drafts[it.hash]) it.draft = data.drafts[it.hash]
-        }
-        render()
-      }
-    } catch (err) {
-      meta.textContent = 'draft error: ' + err.message
-    } finally {
-      draftAllBtn.disabled = false
-      draftAllBtn.textContent = label
+      const r = await fetch('/api/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'draft failed')
+      if (!d.available) { meta.textContent = 'drafts need OPENROUTER_API_KEY'; return }
+      for (const it of st.inbox.items) if (d.drafts[it.hash]) it.draft = d.drafts[it.hash]
+      meta.textContent = `${st.inbox.items.length} unanswered`; render()
+    } catch (e) { meta.textContent = 'draft error: ' + e.message }
+  }
+  function inboxItem(item) {
+    const chain = (item.thread && item.thread.length) ? item.thread : (item.parent ? [item.parent] : [])
+    const thread = chain.length ? `<div class="thread">${chain.slice(-2).map((c) => `<div><span class="u">@${esc(c.user)}</span>: ${esc((c.text || '').slice(0, 160))}</div>`).join('')}</div>` : ''
+    let draft = ''
+    if (item.draft === 'SKIP') draft = `<div class="draft skip"><div class="lab">draft</div><div class="t">no reply needed</div></div>`
+    else if (item.draft) draft = `<div class="draft"><div class="lab">draft in your voice</div><div class="t">${esc(item.draft)}</div></div>`
+    let reply = ''
+    if (item.sent) reply = `<div class="sent">sent - <a href="${esc(item.sentLink)}" target="_blank" rel="noopener">${esc(item.sentLink)}</a></div>`
+    else if (ANSWERABLE.has(item.type)) {
+      const val = item.replyText != null ? item.replyText : (item.draft && item.draft !== 'SKIP' ? item.draft : '')
+      reply = item.armed
+        ? `<div class="reply"><textarea readonly>${esc(val)}</textarea><div class="btns"><span class="note">send exactly this as @zaal?</span>
+             <button class="ibtn primary" data-act="iconfirm" data-hash="${esc(item.hash)}">${item.sending ? 'sending...' : 'yes, send'}</button>
+             <button class="ibtn" data-act="icancel" data-hash="${esc(item.hash)}">cancel</button></div></div>`
+        : `<div class="reply"><textarea data-ihash="${esc(item.hash)}" placeholder="reply, or draft above...">${esc(val)}</textarea>
+             <div class="btns"><button class="ibtn" data-act="iarm" data-hash="${esc(item.hash)}">send reply</button></div></div>`
     }
+    return `<div class="card" data-hash="${esc(item.hash)}">
+      <div class="top"><div class="who">
+        <div class="name"><span class="tag">${esc(item.type)}</span> <a href="${esc(item.link)}" target="_blank" rel="noopener">@${esc(item.user)}</a>
+          <a class="open" href="${esc(item.link)}" target="_blank" rel="noopener">open</a></div>
+        ${thread}
+        <div class="body">${esc(item.text) || '<i>(no text)</i>'}</div>
+        ${draft}${reply}
+      </div></div>
+    </div>`
+  }
+  function renderInbox() {
+    const sub = `<div class="subbar">
+      <button class="ibtn primary" data-act="draftall">draft all</button>
+      <span class="chip ${st.inbox.showAll ? 'on' : ''}" data-act="toggleall">${st.inbox.showAll ? 'all types' : 'answerable only'}</span></div>`
+    if (!st.inbox.loaded) return sub + '<div class="loading">loading inbox...</div>'
+    if (st.inbox.err) return sub + `<div class="err">${esc(st.inbox.err)}</div>`
+    if (!st.inbox.items.length) return sub + '<div class="empty">inbox zero - everything answered.</div>'
+    return sub + st.inbox.items.map(inboxItem).join('')
   }
 
-  allToggle.addEventListener('click', () => {
-    showAll = !showAll
-    allToggle.classList.toggle('on', showAll)
-    load()
+  // ================= CHANNELS =================
+  async function loadChannels() {
+    st.channels.loaded = false; render()
+    try {
+      const r = await fetch(`/api/channel?id=${encodeURIComponent(st.channels.id)}&limit=30`)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'channel failed')
+      st.channels.casts = d.casts; st.channels.loaded = true
+    } catch (e) { st.channels.err = e.message; st.channels.loaded = true }
+    render()
+  }
+  function renderChannels() {
+    const chips = HOME_CHANNELS.concat(HOME_CHANNELS.includes(st.channels.id) ? [] : [st.channels.id])
+      .map((c) => `<span class="chip ${st.channels.id === c ? 'on' : ''}" data-chan="${esc(c)}">/${esc(c)}</span>`).join('')
+    const sub = `<div class="subbar">${chips}</div>`
+    if (!st.channels.loaded) return sub + '<div class="loading">loading /' + esc(st.channels.id) + '...</div>'
+    if (st.channels.err) return sub + `<div class="err">${esc(st.channels.err)}</div>`
+    if (!st.channels.casts.length) return sub + '<div class="empty">no casts in /' + esc(st.channels.id) + '.</div>'
+    return sub + st.channels.casts.map(castCard).join('')
+  }
+
+  // ================= COMPOSE =================
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null }
+  function renderCompose() {
+    if (compose.sentLink) {
+      return `<div class="compose"><div class="sent" style="font-size:15px">posted - <a href="${esc(compose.sentLink)}" target="_blank" rel="noopener">${esc(compose.sentLink)}</a></div>
+        <div class="btns" style="margin-top:12px"><button class="ibtn" data-act="composenew">new cast</button></div></div>`
+    }
+    const chSel = `<select id="composeChannel">
+      <option value="">no channel</option>${HOME_CHANNELS.map((c) => `<option value="${c}" ${compose.channel === c ? 'selected' : ''}>/${c}</option>`).join('')}</select>`
+    if (compose.armed) {
+      return `<div class="compose"><textarea readonly>${esc(compose.text)}</textarea>
+        <div class="btns"><span class="note">post this as @zaal${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
+          <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
+          <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
+    }
+    return `<div class="compose"><textarea id="composeText" placeholder="what's happening... (posts as @zaal)">${esc(compose.text)}</textarea>
+      <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post</button><span class="cc" id="composeCc">${compose.text.length}</span></div></div>`
+  }
+
+  // ================= RENDER + EVENTS =================
+  function render() {
+    document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab))
+    if (tab === 'feed') { meta.textContent = st.feed.loaded ? `${st.feed.casts.length} casts` : ''; main.innerHTML = renderFeed() }
+    else if (tab === 'inbox') { meta.textContent = st.inbox.loaded ? `${st.inbox.items.length} unanswered` : ''; main.innerHTML = renderInbox() }
+    else if (tab === 'channels') { meta.textContent = ''; main.innerHTML = renderChannels() }
+    else if (tab === 'compose') { meta.textContent = ''; main.innerHTML = renderCompose() }
+  }
+
+  function switchTab(t) {
+    tab = t; render()
+    if (t === 'feed' && !st.feed.loaded) loadFeed()
+    if (t === 'inbox' && !st.inbox.loaded) loadInbox()
+    if (t === 'channels' && !st.channels.loaded) loadChannels()
+  }
+  document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) switchTab(b.dataset.tab) })
+  document.getElementById('refresh').addEventListener('click', () => {
+    if (tab === 'feed') loadFeed(); else if (tab === 'inbox') loadInbox(); else if (tab === 'channels') loadChannels()
   })
-  draftAllBtn.addEventListener('click', draftAll)
-  document.getElementById('refresh').addEventListener('click', load)
-  load()
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
+    if (e.key === '1') switchTab('feed'); else if (e.key === '2') switchTab('inbox')
+    else if (e.key === '3') switchTab('channels'); else if (e.key === '4') switchTab('compose')
+    else if (e.key === 'r') document.getElementById('refresh').click()
+  })
+
+  const findInbox = (h) => st.inbox.items.find((i) => i.hash === h)
+  async function fireReact(btn) {
+    const type = btn.dataset.act
+    try {
+      const r = await fetch('/api/react', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, targetHash: btn.dataset.hash, targetFid: btn.dataset.fid || null }) })
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'react failed')
+      btn.classList.add('on'); const s = btn.querySelector('span'); if (s) s.textContent = (parseInt(s.textContent) || 0) + 1
+    } catch (e) { meta.textContent = 'react error: ' + e.message }
+  }
+  async function fireReply(hash, fid, text, done) {
+    const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentHash: hash, parentFid: fid || null, text }) })
+    const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'send failed')
+    done(d.link)
+  }
+
+  // input: keep textarea state without re-render (focus safety)
+  main.addEventListener('input', (e) => {
+    const t = e.target
+    if (t.dataset.ihash) { const it = findInbox(t.dataset.ihash); if (it) it.replyText = t.value }
+    else if (t.id === 'composeText') { compose.text = t.value; const cc = document.getElementById('composeCc'); if (cc) cc.textContent = t.value.length }
+    else if (t.id === 'composeChannel') { compose.channel = t.value }
+  })
+  main.addEventListener('change', (e) => { if (e.target.id === 'composeChannel') compose.channel = e.target.value })
+
+  main.addEventListener('click', async (e) => {
+    const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; loadFeed(); return }
+    const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
+    const btn = e.target.closest('button[data-act]'); if (!btn) return
+    const act = btn.dataset.act, hash = btn.dataset.hash, fid = btn.dataset.fid
+
+    // feed/channel reactions + inline reply
+    if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
+    if (act === 'replytoggle') {
+      const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`)
+      if (slot) slot.innerHTML = slot.innerHTML ? '' : replyBox(hash, fid, '')
+      return
+    }
+    if (act === 'replyarm') {
+      const ta = main.querySelector(`textarea[data-rhash="${CSS.escape(hash)}"]`); const text = ta ? ta.value.trim() : ''
+      if (!text) return
+      const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`); slot.innerHTML = replyConfirm(hash, ta.dataset.rfid, text, false)
+      return
+    }
+    if (act === 'replyconfirm') {
+      const ta = btn.closest('.reply').querySelector('textarea'); const text = ta.value
+      btn.textContent = 'sending...'
+      try { await fireReply(hash, fid, text, (link) => {
+        const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`); slot.innerHTML = `<div class="sent">sent - <a href="${esc(link)}" target="_blank" rel="noopener">${esc(link)}</a></div>`
+      }) } catch (err) { meta.textContent = 'send error: ' + err.message; btn.textContent = 'yes, send' }
+      return
+    }
+    if (act === 'replycancel') { const slot = main.querySelector(`[data-slot="${CSS.escape(hash)}"]`); if (slot) slot.innerHTML = ''; return }
+
+    // inbox
+    if (act === 'draftall') { draftAll(); return }
+    if (act === 'toggleall') { st.inbox.showAll = !st.inbox.showAll; loadInbox(); return }
+    if (act === 'iarm') { const it = findInbox(hash); const ta = main.querySelector(`textarea[data-ihash="${CSS.escape(hash)}"]`); it.replyText = ta ? ta.value : (it.replyText || ''); if (!it.replyText.trim()) return; it.armed = true; render(); return }
+    if (act === 'icancel') { const it = findInbox(hash); it.armed = false; render(); return }
+    if (act === 'iconfirm') {
+      const it = findInbox(hash); if (it.sending) return; it.sending = true; render()
+      try { await fireReply(hash, it.fid, it.replyText, (link) => { it.sent = true; it.sentLink = link; it.armed = false; it.sending = false }) }
+      catch (err) { it.sending = false; it.armed = false; meta.textContent = 'send error: ' + err.message }
+      render(); return
+    }
+
+    // compose
+    if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; if (!compose.text) return; compose.armed = true; render(); return }
+    if (act === 'composecancel') { compose.armed = false; render(); return }
+    if (act === 'composeconfirm') {
+      if (compose.sending) return; compose.sending = true; render()
+      try {
+        const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: compose.text, channelId: compose.channel || null }) })
+        const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
+        compose.sentLink = d.link; compose.sending = false; compose.armed = false
+      } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
+      render(); return
+    }
+    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.armed = false; render(); return }
+  })
+
+  // boot
+  switchTab('feed')
 </script>
 </body>
 </html>
