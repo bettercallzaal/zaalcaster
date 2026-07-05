@@ -2,7 +2,7 @@
 // engages you most, and follower count. Read-only.
 
 import { blockedByAuth } from '../auth.js'
-import { getUserCasts, getNotifications, getUser } from '../lib.js'
+import { getUserCasts, getNotifications, getUser, getFollowSuggestions } from '../lib.js'
 
 // engagement weight: replies + recasts count more than likes (they spread you)
 function score(c) {
@@ -21,10 +21,11 @@ function actors(n) {
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   try {
-    const [castsRes, notifsRes, me] = await Promise.all([
+    const [castsRes, notifsRes, me, suggestions] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       getNotifications({ limit: 25 }).catch(() => ({ notifications: [] })),
       getUser(process.env.ZAAL_FID || '19640').catch(() => null),
+      getFollowSuggestions({ limit: 12 }).catch(() => []),
     ])
 
     const topCasts = (castsRes.casts || [])
@@ -42,12 +43,17 @@ export default async function handler(req, res) {
     const topEngagers = [...counts.entries()].filter(([u]) => u && u !== 'zaal')
       .sort((a, b) => b[1] - a[1]).slice(0, 10).map(([username, n]) => ({ username, n }))
 
+    const suggest = (suggestions || []).map((u) => ({
+      username: u.username, display: u.display_name || u.username, pfp: u.pfp_url || null,
+      followers: u.follower_count || 0, bio: (u.profile?.bio?.text || '').replace(/\s+/g, ' ').slice(0, 90),
+    })).slice(0, 12)
+
     res.setHeader('Cache-Control', 'no-store')
     res.status(200).json({
       followers: me?.follower_count ?? null,
       following: me?.following_count ?? null,
       score: me?.experimental?.neynar_user_score ?? null,
-      topCasts, topEngagers,
+      topCasts, topEngagers, suggest,
     })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'stats failed' })
