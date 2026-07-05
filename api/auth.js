@@ -1,10 +1,12 @@
-// /api/auth - the password gate.
-//   GET  -> { enabled, authed }  (frontend asks whether it must show a prompt)
+// /api/auth - the password gate + public branding config for the frontend.
+//   GET  -> { enabled, authed, config }  (config: appName, username,
+//            homeChannels, daily - so the UI brands itself from config.js)
 //   POST { password } -> sets the session cookie on success, else 401
 //
 // When APP_PASSWORD is unset the gate is off (enabled:false, authed:true).
 
 import { authEnabled, checkAuth, verifyPassword, loginCookie } from '../auth.js'
+import { config } from '../config.js'
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
@@ -18,7 +20,16 @@ async function readJsonBody(req) {
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200).json({ enabled: authEnabled(), authed: checkAuth(req) })
+    res.status(200).json({
+      enabled: authEnabled(),
+      authed: checkAuth(req),
+      config: {
+        appName: config.appName,
+        username: config.username,
+        homeChannels: config.homeChannels,
+        daily: config.daily,
+      },
+    })
     return
   }
   if (req.method === 'POST') {
