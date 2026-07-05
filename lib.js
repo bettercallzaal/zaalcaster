@@ -107,6 +107,17 @@ export async function getChannelFeed(channelId, options = {}) {
   return response
 }
 
+// Trending channels right now - where the action is, so Zaal can jump in.
+export async function getTrendingChannels(options = {}) {
+  const { limit = 10, timeWindow = '1d' } = options
+  const params = new URLSearchParams({ limit: String(limit), time_window: timeWindow })
+  const response = await fetchNeynar(`/farcaster/channel/trending?${params}`)
+  return (response.channels || []).map((a) => {
+    const c = a.channel || a
+    return { id: c.id, name: c.name || c.id, image: c.image_url || null, casts1d: Number(a.cast_count_1d || 0) }
+  }).filter((c) => c.id)
+}
+
 // Suggested accounts to follow/engage - people Neynar thinks are relevant to
 // Zaal but that he is not already deep with. A growth surface.
 export async function getFollowSuggestions(options = {}) {

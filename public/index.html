@@ -149,7 +149,7 @@
   const st = {
     feed: { type: 'following', casts: [], loaded: false, digest: null, digesting: false },
     inbox: { items: [], loaded: false, showAll: false, priority: false },
-    channels: { id: 'zao', casts: [], loaded: false },
+    channels: { id: 'zao', casts: [], loaded: false, trending: [] },
     search: { q: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null },
   }
@@ -353,11 +353,17 @@
       st.channels.casts = d.casts; st.channels.loaded = true
     } catch (e) { st.channels.err = e.message; st.channels.loaded = true }
     render()
+    if (!st.channels.trending.length) {
+      try { const t = await fetch('/api/channel?trending=1').then((x) => x.json()); if (t.trending) { st.channels.trending = t.trending; render() } } catch {}
+    }
   }
   function renderChannels() {
     const chips = HOME_CHANNELS.concat(HOME_CHANNELS.includes(st.channels.id) ? [] : [st.channels.id])
       .map((c) => `<span class="chip ${st.channels.id === c ? 'on' : ''}" data-chan="${esc(c)}">/${esc(c)}</span>`).join('')
+    const trend = (st.channels.trending || []).filter((t) => !HOME_CHANNELS.includes(t.id)).slice(0, 8)
+      .map((t) => `<span class="chip ${st.channels.id === t.id ? 'on' : ''}" data-chan="${esc(t.id)}" title="${t.casts1d} casts today">/${esc(t.id)}</span>`).join(' ')
     const sub = `<div class="subbar">${chips}</div>`
+      + (trend ? `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">trending now:</span> ${trend}</div>` : '')
     if (!st.channels.loaded) return sub + '<div class="loading">loading /' + esc(st.channels.id) + '...</div>'
     if (st.channels.err) return sub + `<div class="err">${esc(st.channels.err)}</div>`
     const casts = dropMuted(st.channels.casts)
