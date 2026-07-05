@@ -2,7 +2,7 @@
 // Query: ?id=zao  (comma-separated ids ok, e.g. zao,wavewarz,zabal)  ?limit=25
 // Read-only, same compact cast shape as /api/feed.
 
-import { getChannelFeed } from '../lib.js'
+import { getChannelFeed, getTrendingChannels } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compact(cast) {
@@ -27,6 +27,13 @@ function compact(cast) {
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   try {
+    // ?trending=1 -> just the list of hot channels (for the chip row)
+    if (req.query.trending === '1') {
+      const channels = await getTrendingChannels({ limit: 10 })
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ trending: channels })
+      return
+    }
     const id = (req.query.id || 'zao,wavewarz,zabal').replace(/[^a-zA-Z0-9,_-]/g, '')
     const limit = Math.min(Number(req.query.limit) || 25, 50)
     const data = await getChannelFeed(id, { limit })
