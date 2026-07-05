@@ -107,6 +107,16 @@ export async function getChannelFeed(channelId, options = {}) {
   return response
 }
 
+// Suggested accounts to follow/engage - people Neynar thinks are relevant to
+// Zaal but that he is not already deep with. A growth surface.
+export async function getFollowSuggestions(options = {}) {
+  const { limit = 12 } = options
+  const env = loadEnv()
+  const params = new URLSearchParams({ fid: env.ZAAL_FID, limit: String(limit) })
+  const response = await fetchNeynar(`/farcaster/following/suggested?${params}`)
+  return response.users || []
+}
+
 export async function getTrendingFeed(options = {}) {
   const { limit = 20, cursor = null, timeWindow = '24h' } = options
 

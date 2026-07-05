@@ -412,10 +412,15 @@
         <span style="color:#855DCD">score ${c.score}</span>
         <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a></div></div></div>`).join('')
     const eng = (d.topEngagers || []).map((e) => `<span class="chip" data-act="profile" data-user="${esc(e.username)}">@${esc(e.username)} - ${e.n}</span>`).join(' ')
+    const suggest = (d.suggest || []).map((u) => `<div class="urow" data-act="profile" data-user="${esc(u.username)}">
+      ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
+      <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
     return hdr
-      + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">who engages you most</b></div>'
+      + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">who engages you most (reply back - it compounds)</b></div>'
       + `<div class="subbar">${eng || '<span class="ub">no recent engagers</span>'}</div>`
-      + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">your top casts (by engagement)</b></div>'
+      + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">people to engage next</b></div>'
+      + (suggest || '<div class="subbar"><span class="ub">no suggestions right now</span></div>')
+      + '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">your top casts (by engagement)</b></div>'
       + (casts || '<div class="empty">no casts yet.</div>')
   }
 
