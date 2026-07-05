@@ -2,5 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/cron/post-due", "schedule": "*/5 * * * *" }
   ]
 }
