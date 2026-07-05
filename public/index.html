@@ -77,6 +77,30 @@
   .compose select { font: inherit; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
   a.open { font-size: 12px; color: var(--dim); text-decoration: none; }
   a.open:hover { color: var(--accent); }
+  .uname { cursor: pointer; } .uname:hover { color: var(--accent); }
+  .tappable { cursor: pointer; }
+  .searchbar { display: flex; gap: 8px; margin-bottom: 10px; }
+  .searchbar input { flex: 1; font: inherit; font-size: 15px; background: #0e0e15; color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; }
+  .searchbar input:focus { outline: none; border-color: var(--accent); }
+  .digest { background: #16131f; border: 1px solid #34294d; border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }
+  .digest .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #a99bff; margin-bottom: 6px; }
+  .digest .t { white-space: pre-wrap; word-break: break-word; color: #ddd6ff; font-size: 14px; }
+  .urow { display: flex; gap: 10px; align-items: center; padding: 8px 2px; cursor: pointer; }
+  .urow:hover { background: var(--surface2); border-radius: 10px; }
+  .urow .un { font-weight: 600; } .urow .ub { font-size: 12px; color: var(--dim); }
+  #overlay { position: fixed; inset: 0; z-index: 50; background: rgba(6,6,10,.72); backdrop-filter: blur(3px); display: none; }
+  #overlay.on { display: block; }
+  #overlay .sheet { max-width: 640px; margin: 0 auto; height: 100%; overflow-y: auto; background: var(--bg); border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  #overlay .ohd { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+    background: rgba(12,12,18,.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  #overlay .ohd b { font-size: 15px; } #overlay .ohd .x { cursor: pointer; color: var(--dim); font-size: 20px; }
+  #overlay .obody { padding: 12px; }
+  .prof { display: flex; gap: 12px; align-items: center; padding: 4px 2px 12px; }
+  .prof .pfp { width: 56px; height: 56px; } .prof .pn { font-size: 18px; font-weight: 700; }
+  .prof .ps { font-size: 13px; color: var(--dim); }
+  .prof .badge { font-size: 11px; color: var(--good); }
+  .focuscast { border-color: var(--accent); }
   footer { text-align: center; color: #4a4a58; font-size: 11px; padding: 6px 0 30px; }
 </style>
 </head>
@@ -95,11 +119,13 @@
 <div class="tabs" id="tabs">
   <button data-tab="feed" class="on">Feed <span class="k">1</span></button>
   <button data-tab="inbox">Inbox <span class="k">2</span></button>
-  <button data-tab="channels">Channels <span class="k">3</span></button>
-  <button data-tab="compose">Compose <span class="k">4</span></button>
+  <button data-tab="channels">Chan <span class="k">3</span></button>
+  <button data-tab="search">Search <span class="k">4</span></button>
+  <button data-tab="compose">Post <span class="k">5</span></button>
 </div>
 
 <main id="main"></main>
+<div id="overlay"><div class="sheet"><div class="ohd"><b id="ohdTitle"></b><span class="x" id="overlayClose">&times;</span></div><div class="obody" id="obody"></div></div></div>
 <footer>your farcaster - reads are free, nothing is sent without your confirm</footer>
 
 <script>
@@ -110,9 +136,10 @@
 
   let tab = 'feed'
   const st = {
-    feed: { type: 'following', casts: [], loaded: false },
-    inbox: { items: [], loaded: false, showAll: false },
+    feed: { type: 'following', casts: [], loaded: false, digest: null, digesting: false },
+    inbox: { items: [], loaded: false, showAll: false, priority: false },
     channels: { id: 'zao', casts: [], loaded: false },
+    search: { q: '', users: [], casts: [], loaded: true, searching: false },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -124,16 +151,17 @@
     const embeds = (c.embeds || []).map((e) => `<div class="embed"><a href="${esc(e)}" target="_blank" rel="noopener">${esc(e)}</a></div>`).join('')
     return `<div class="card" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">
       <div class="top">
-        ${pfp(c)}
+        <span data-act="profile" data-user="${esc(c.author)}" style="cursor:pointer">${pfp(c)}</span>
         <div class="who">
-          <div class="name"><a href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.display)}</a>
+          <div class="name"><span class="uname" data-act="profile" data-user="${esc(c.author)}">${esc(c.display)}</span>
             <span class="sub">@${esc(c.author)} - ${when(c.timestamp)}${c.channel ? ` - <span class="ch">/${esc(c.channel)}</span>` : ''}</span></div>
-          <div class="body">${esc(c.text)}</div>
+          <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text)}</div>
           ${embeds}
           <div class="stats">
             <button class="act like" data-act="like" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#9829; <span>${c.likes}</span></button>
             <button class="act recast" data-act="recast" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#8635; <span>${c.recasts}</span></button>
-            <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#128172; ${c.replies}</button>
+            <button data-act="thread" data-hash="${esc(c.hash)}">&#128172; ${c.replies}</button>
+            <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">reply</button>
             <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a>
           </div>
           <div class="replyslot" data-slot="${esc(c.hash)}"></div>
@@ -169,21 +197,59 @@
     } catch (e) { st.feed.err = e.message; st.feed.loaded = true }
     render()
   }
+  async function loadDigest() {
+    st.feed.digesting = true; render()
+    try {
+      const r = await fetch('/api/digest'); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'digest failed')
+      st.feed.digest = d.available ? d.digest : 'digest needs OPENROUTER_API_KEY'
+    } catch (e) { st.feed.digest = 'digest error: ' + e.message }
+    st.feed.digesting = false; render()
+  }
   function renderFeed() {
     const sub = `<div class="subbar">
       <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">following</span>
-      <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span></div>`
-    if (!st.feed.loaded) return sub + '<div class="loading">loading feed...</div>'
+      <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
+      <button class="ibtn" data-act="digest">${st.feed.digesting ? 'summarizing...' : 'what I missed'}</button></div>`
+    const dig = st.feed.digest ? `<div class="digest"><div class="lab">what you missed</div><div class="t">${esc(st.feed.digest)}</div></div>` : ''
+    if (!st.feed.loaded) return sub + dig + '<div class="loading">loading feed...</div>'
     if (st.feed.err) return sub + `<div class="err">${esc(st.feed.err)}</div>`
-    if (!st.feed.casts.length) return sub + '<div class="empty">no casts.</div>'
-    return sub + st.feed.casts.map(castCard).join('')
+    if (!st.feed.casts.length) return sub + dig + '<div class="empty">no casts.</div>'
+    return sub + dig + st.feed.casts.map(castCard).join('')
+  }
+
+  // ================= SEARCH =================
+  async function runSearch() {
+    const q = st.search.q.trim(); if (!q) return
+    st.search.searching = true; render()
+    try {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'search failed')
+      st.search.users = d.users; st.search.casts = d.casts; st.search.err = null
+    } catch (e) { st.search.err = e.message }
+    st.search.searching = false; render()
+  }
+  function renderSearch() {
+    const bar = `<div class="searchbar"><input id="searchInput" placeholder="search people + casts..." value="${esc(st.search.q)}">
+      <button class="ibtn primary" data-act="dosearch">go</button></div>`
+    let body = ''
+    if (st.search.searching) body = '<div class="loading">searching...</div>'
+    else if (st.search.err) body = `<div class="err">${esc(st.search.err)}</div>`
+    else {
+      if (st.search.users.length) body += st.search.users.map((u) => `<div class="urow" data-act="profile" data-user="${esc(u.username)}">
+        ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
+        <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
+      if (st.search.casts.length) body += st.search.casts.map(castCard).join('')
+      if (!st.search.users.length && !st.search.casts.length && st.search.q) body = '<div class="empty">no results.</div>'
+    }
+    return bar + body
   }
 
   // ================= INBOX =================
   async function loadInbox() {
     st.inbox.loaded = false; render()
     try {
-      const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}`)
+      const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}${st.inbox.priority ? '&priority=1' : ''}`)
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'inbox failed')
       st.inbox.items = d.items; st.inbox.loaded = true
     } catch (e) { st.inbox.err = e.message; st.inbox.loaded = true }
@@ -231,7 +297,8 @@
   function renderInbox() {
     const sub = `<div class="subbar">
       <button class="ibtn primary" data-act="draftall">draft all</button>
-      <span class="chip ${st.inbox.showAll ? 'on' : ''}" data-act="toggleall">${st.inbox.showAll ? 'all types' : 'answerable only'}</span></div>`
+      <span class="chip ${st.inbox.showAll ? 'on' : ''}" data-act="toggleall">${st.inbox.showAll ? 'all types' : 'answerable only'}</span>
+      <span class="chip ${st.inbox.priority ? 'on' : ''}" data-act="togglepriority">${st.inbox.priority ? 'priority sorted' : 'newest first'}</span></div>`
     if (!st.inbox.loaded) return sub + '<div class="loading">loading inbox...</div>'
     if (st.inbox.err) return sub + `<div class="err">${esc(st.inbox.err)}</div>`
     if (!st.inbox.items.length) return sub + '<div class="empty">inbox zero - everything answered.</div>'
@@ -283,6 +350,7 @@
     if (tab === 'feed') { meta.textContent = st.feed.loaded ? `${st.feed.casts.length} casts` : ''; main.innerHTML = renderFeed() }
     else if (tab === 'inbox') { meta.textContent = st.inbox.loaded ? `${st.inbox.items.length} unanswered` : ''; main.innerHTML = renderInbox() }
     else if (tab === 'channels') { meta.textContent = ''; main.innerHTML = renderChannels() }
+    else if (tab === 'search') { meta.textContent = ''; main.innerHTML = renderSearch() }
     else if (tab === 'compose') { meta.textContent = ''; main.innerHTML = renderCompose() }
   }
 
@@ -291,7 +359,60 @@
     if (t === 'feed' && !st.feed.loaded) loadFeed()
     if (t === 'inbox' && !st.inbox.loaded) loadInbox()
     if (t === 'channels' && !st.channels.loaded) loadChannels()
+    if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
   }
+
+  // ---- overlay: thread + profile detail ----
+  const overlay = document.getElementById('overlay')
+  function openOverlay(title, html) {
+    document.getElementById('ohdTitle').textContent = title
+    document.getElementById('obody').innerHTML = html
+    overlay.classList.add('on')
+  }
+  function closeOverlay() { overlay.classList.remove('on') }
+  document.getElementById('overlayClose').addEventListener('click', closeOverlay)
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay() })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay() })
+
+  async function openThread(hash) {
+    openOverlay('thread', '<div class="loading">loading thread...</div>')
+    try {
+      const r = await fetch(`/api/thread?hash=${encodeURIComponent(hash)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'thread failed')
+      let html = ''
+      for (const a of d.ancestors) html += castCard(a)
+      if (d.cast) html += `<div class="focuscast">${castCard(d.cast)}</div>`
+      for (const rep of d.replies) { html += castCard(rep); for (const s of (rep.sub || [])) html += `<div style="margin-left:14px">${castCard(s)}</div>` }
+      document.getElementById('obody').innerHTML = html || '<div class="empty">no thread.</div>'
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  async function openProfile(user) {
+    openOverlay('@' + user, '<div class="loading">loading profile...</div>')
+    try {
+      const r = await fetch(`/api/profile?user=${encodeURIComponent(user)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'profile failed')
+      const u = d.user
+      const rel = [u.youFollow ? 'you follow' : '', u.followsYou ? 'follows you' : ''].filter(Boolean).join(' - ')
+      const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
+        <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
+        ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
+        <a class="open" href="${esc(u.link)}" target="_blank" rel="noopener">open on farcaster</a></div></div>`
+      document.getElementById('obody').innerHTML = head + d.casts.map(castCard).join('')
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  // clicks inside the overlay: navigate deeper + react (reply happens in main views)
+  document.getElementById('obody').addEventListener('click', (e) => {
+    const tap = e.target.closest('[data-act="profile"], [data-act="thread"]')
+    if (tap && !e.target.closest('button')) {
+      if (tap.dataset.act === 'profile') return openProfile(tap.dataset.user)
+      if (tap.dataset.act === 'thread') return openThread(tap.dataset.hash)
+    }
+    const btn = e.target.closest('button[data-act]'); if (!btn) return
+    const act = btn.dataset.act
+    if (act === 'profile') return openProfile(btn.dataset.user)
+    if (act === 'thread') return openThread(btn.dataset.hash)
+    if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
+  })
   document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) switchTab(b.dataset.tab) })
   document.getElementById('refresh').addEventListener('click', () => {
     if (tab === 'feed') loadFeed(); else if (tab === 'inbox') loadInbox(); else if (tab === 'channels') loadChannels()
@@ -299,7 +420,8 @@
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
     if (e.key === '1') switchTab('feed'); else if (e.key === '2') switchTab('inbox')
-    else if (e.key === '3') switchTab('channels'); else if (e.key === '4') switchTab('compose')
+    else if (e.key === '3') switchTab('channels'); else if (e.key === '4') switchTab('search')
+    else if (e.key === '5') switchTab('compose')
     else if (e.key === 'r') document.getElementById('refresh').click()
   })
 
@@ -326,14 +448,29 @@
     if (t.dataset.ihash) { const it = findInbox(t.dataset.ihash); if (it) it.replyText = t.value }
     else if (t.id === 'composeText') { compose.text = t.value; const cc = document.getElementById('composeCc'); if (cc) cc.textContent = t.value.length }
     else if (t.id === 'composeChannel') { compose.channel = t.value }
+    else if (t.id === 'searchInput') { st.search.q = t.value }
   })
+  main.addEventListener('keydown', (e) => { if (e.target.id === 'searchInput' && e.key === 'Enter') runSearch() })
   main.addEventListener('change', (e) => { if (e.target.id === 'composeChannel') compose.channel = e.target.value })
 
   main.addEventListener('click', async (e) => {
     const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; loadFeed(); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
+    // tappable elements that are not buttons (profile from pfp/name/urow, thread from body)
+    const tap = e.target.closest('[data-act="profile"], [data-act="thread"]')
+    if (tap && !e.target.closest('button')) {
+      if (tap.dataset.act === 'profile') { openProfile(tap.dataset.user); return }
+      if (tap.dataset.act === 'thread') { openThread(tap.dataset.hash); return }
+    }
     const btn = e.target.closest('button[data-act]'); if (!btn) return
     const act = btn.dataset.act, hash = btn.dataset.hash, fid = btn.dataset.fid
+
+    // navigation-ish actions
+    if (act === 'profile') { openProfile(btn.dataset.user); return }
+    if (act === 'thread') { openThread(hash); return }
+    if (act === 'digest') { loadDigest(); return }
+    if (act === 'dosearch') { runSearch(); return }
+    if (act === 'togglepriority') { st.inbox.priority = !st.inbox.priority; loadInbox(); return }
 
     // feed/channel reactions + inline reply
     if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
