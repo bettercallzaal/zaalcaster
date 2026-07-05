@@ -53,6 +53,16 @@
   .thread div { color: #9a9aa4; font-size: 13px; margin: 2px 0; }
   .thread .u { color: #b8b8c2; }
   .them { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .draft {
+    margin-top: 10px; padding: 10px 12px;
+    background: #17141f; border: 1px solid #34294d; border-radius: 9px;
+  }
+  .draft .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #a99bff; margin-bottom: 4px; }
+  .draft .text { white-space: pre-wrap; word-break: break-word; color: #ddd6ff; }
+  .draft.skip { border-color: #2e2e38; background: #16161c; }
+  .draft.skip .label, .draft.skip .text { color: #7a7a84; }
+  .item .actions { margin-top: 8px; }
+  .item .actions button { font-size: 12px; padding: 4px 10px; }
   .empty, .err { text-align: center; color: #8a8a94; padding: 48px 16px; }
   .err { color: #ff8a8a; }
   a.open { font-size: 13px; color: #8a8a94; text-decoration: none; }
@@ -68,17 +78,21 @@
   </div>
   <div class="controls">
     <span class="toggle" id="allToggle" title="include likes / recasts / follows">all</span>
+    <button id="draftAll" title="draft replies in your voice">draft all</button>
     <button id="refresh">refresh</button>
   </div>
 </header>
 <main id="list"></main>
-<footer>read-only preview - reply + send land in the next build</footer>
+<footer>drafts are suggestions - nothing is ever sent without your confirmation (coming next build)</footer>
 
 <script>
   const list = document.getElementById('list')
   const meta = document.getElementById('meta')
   const allToggle = document.getElementById('allToggle')
+  const draftAllBtn = document.getElementById('draftAll')
+  const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
   let showAll = false
+  let items = []
 
   function esc(s) {
     return (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -93,8 +107,16 @@
     return `<div class="thread">${rows}</div>`
   }
 
+  function renderDraft(item) {
+    if (item.draft === undefined || item.draft === null) return ''
+    if (item.draft === 'SKIP') {
+      return `<div class="draft skip"><div class="label">draft</div><div class="text">no reply needed</div></div>`
+    }
+    return `<div class="draft"><div class="label">draft in your voice</div><div class="text">${esc(item.draft)}</div></div>`
+  }
+
   function renderItem(item) {
-    return `<div class="item">
+    return `<div class="item" data-hash="${esc(item.hash)}">
       <div class="who">
         <span class="tag">${esc(item.type)}</span>
         <a href="${esc(item.link)}" target="_blank" rel="noopener">@${esc(item.user)}</a>
@@ -102,26 +124,63 @@
       </div>
       ${renderThread(item)}
       <div class="them">${esc(item.text) || '<i>(no text)</i>'}</div>
+      ${renderDraft(item)}
     </div>`
+  }
+
+  function render() {
+    list.innerHTML = items.map(renderItem).join('')
   }
 
   async function load() {
     meta.textContent = 'loading...'
     list.innerHTML = ''
+    items = []
     try {
       const res = await fetch(`/api/inbox?limit=25${showAll ? '&all=1' : ''}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'failed to load')
-      if (!data.items.length) {
+      items = data.items
+      if (!items.length) {
         list.innerHTML = '<div class="empty">inbox zero - everything answered.</div>'
         meta.textContent = '0 items'
         return
       }
       meta.textContent = `${data.count} ${showAll ? 'notifications' : 'unanswered'}`
-      list.innerHTML = data.items.map(renderItem).join('')
+      render()
     } catch (err) {
       list.innerHTML = `<div class="err">${esc(err.message)}</div>`
       meta.textContent = 'error'
+    }
+  }
+
+  async function draftAll() {
+    const answerable = items.filter((it) => ANSWERABLE.has(it.type))
+    if (!answerable.length) return
+    draftAllBtn.disabled = true
+    const label = draftAllBtn.textContent
+    draftAllBtn.textContent = 'drafting...'
+    try {
+      const res = await fetch('/api/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: answerable }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'draft failed')
+      if (!data.available) {
+        meta.textContent = 'drafts unavailable (set OPENROUTER_API_KEY)'
+      } else {
+        for (const it of items) {
+          if (data.drafts[it.hash]) it.draft = data.drafts[it.hash]
+        }
+        render()
+      }
+    } catch (err) {
+      meta.textContent = 'draft error: ' + err.message
+    } finally {
+      draftAllBtn.disabled = false
+      draftAllBtn.textContent = label
     }
   }
 
@@ -130,6 +189,7 @@
     allToggle.classList.toggle('on', showAll)
     load()
   })
+  draftAllBtn.addEventListener('click', draftAll)
   document.getElementById('refresh').addEventListener('click', load)
   load()
 </script>
