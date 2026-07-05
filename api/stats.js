@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     const [castsRes, notifsRes, me, suggestions] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       getNotifications({ limit: 25 }).catch(() => ({ notifications: [] })),
-      getUser(process.env.ZAAL_FID || '19640').catch(() => null),
+      getUser(process.env.FID || '19640').catch(() => null),
       getFollowSuggestions({ limit: 12 }).catch(() => []),
     ])
 

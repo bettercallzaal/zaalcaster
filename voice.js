@@ -5,7 +5,7 @@
 import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'node:child_process'
-import { ZAO_CONTEXT } from './context.js'
+import { config } from './config.js'
 
 const HOME = process.env.HOME || ''
 const OPENROUTER_KEY_PATH = path.join(HOME, '.zao/private/openrouter.key')
@@ -59,23 +59,19 @@ function loadVoiceExamples(max = 5) {
 }
 
 function voicePrompt() {
+  const u = config.username
   const examples = loadVoiceExamples()
   const exampleBlock = examples.length
-    ? `\n\nReal examples of how zaal actually replies (match this register):\n${examples
-        .map((e) => `- them: "${e.them}"\n  zaal: "${e.wrote}"`)
+    ? `\n\nReal examples of how ${u} actually replies (match this register):\n${examples
+        .map((e) => `- them: "${e.them}"\n  ${u}: "${e.wrote}"`)
         .join('\n')}`
     : ''
 
-  return `You draft Farcaster replies for Zaal (@zaal). Voice rules:
-- short, plain, direct. one or two sentences max. lowercase is fine.
-- "ppl", "u", "imho" are fine. no hype adjectives, no exclamation stacking.
-- no emojis, no em dashes (plain hyphens only).
-- answer the actual thing they asked or said; add one concrete detail when it helps.
-- keep it under 280 chars.
-- if an item really does not need a reply, output SKIP for it.
+  return `You draft Farcaster replies for ${u} (@${u}). Voice rules:
+${config.voiceRules}
 
 Ground replies in these facts when relevant (do not force them, do not list them, just be accurate):
-${ZAO_CONTEXT}${exampleBlock}`
+${config.context}${exampleBlock}`
 }
 
 // Render the ancestor chain for the prompt: last 4 casts, 220 chars each,
@@ -189,9 +185,9 @@ export async function digestFeed(casts) {
   const block = casts.slice(0, 40)
     .map((c) => `@${c.author}: "${(c.text || '').replace(/\s+/g, ' ').slice(0, 240)}"${c.channel ? ` [/${c.channel}]` : ''}`)
     .join('\n')
-  const prompt = `You are briefing Zaal (@zaal) on what he missed on Farcaster. Below are recent casts from people he follows.
+  const prompt = `You are briefing ${config.username} (@${config.username}) on what he missed on Farcaster. Below are recent casts from people he follows.
 
-Write a tight digest: 4-7 bullet points grouping the important themes, launches, questions aimed at him, and anything ZAO/WaveWarZ-related. Each bullet one line, plain, lowercase ok, no emojis, no em dashes. Name the people (@handle). Skip pure noise/gm. End with a one-line "worth a reply:" naming 1-2 casts if any deserve his response.
+Write a tight digest: 4-7 bullet points grouping the important themes, launches, questions aimed at him, and anything relevant. Each bullet one line, plain, lowercase ok, no emojis, no em dashes. Name the people (@handle). Skip pure noise/gm. End with a one-line "worth a reply:" naming 1-2 casts if any deserve his response.
 
 Casts:
 ${block}`
