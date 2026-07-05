@@ -21,6 +21,7 @@ Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Ne
 - bin/user.js - profile lookup (mutual follows, neynar score, --casts n)
 - bin/channels.js - /zao /wavewarz /zabal (or any channel id)
 - bin/mint-signer.js - full signer mint flow (see Known state)
+- bin/spam.js - personal spam filter (spam add/remove/list). Filtered usernames/fids drop out of getUnansweredInbound automatically, so engage/cockpit/web all respect it. List at ~/.zao/private/zaalcaster-spam.txt (never committed); Vercel uses the SPAM_LIST env var (comma-separated). loadSpamSet() fails open if the file is unreadable.
 - bin/timeline.js, notifs.js, search.js, post.js, reply.js (reply takes hash OR farcaster.xyz link)
 - Farcaster link format: https://farcaster.xyz/<username>/<0x + first 8 hash chars>
 
