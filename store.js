@@ -6,8 +6,19 @@
 // fall back to per-browser localStorage. This is what makes the Daily
 // dashboard, bookmarks, and the scheduled-post queue sync across devices.
 
-const URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || ''
-const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || ''
+// Resolve the REST url/token from whatever names the Vercel integration used
+// (KV_*, UPSTASH_REDIS_*, STORAGE_*, or any custom prefix ending in
+// _REST_API_URL / _REST_API_TOKEN). Makes the store work regardless of prefix.
+function resolve() {
+  const e = process.env
+  let url = e.KV_REST_API_URL || e.UPSTASH_REDIS_REST_URL || e.STORAGE_REST_API_URL || ''
+  let token = e.KV_REST_API_TOKEN || e.UPSTASH_REDIS_REST_TOKEN || e.STORAGE_REST_API_TOKEN || ''
+  if (!url) { const k = Object.keys(e).find((x) => x.endsWith('_REST_API_URL')); if (k) url = e[k] }
+  if (!token) { const k = Object.keys(e).find((x) => x.endsWith('_REST_API_TOKEN') && !x.includes('READ_ONLY')); if (k) token = e[k] }
+  return { url, token }
+}
+const URL = resolve().url
+const TOKEN = resolve().token
 
 export function storeEnabled() {
   return !!(URL && TOKEN)
