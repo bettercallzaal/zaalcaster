@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Zaalcaster Space DJ",
+  "version": "1.0.0",
+  "description": "Mix any tab's audio into your Juke space mic - play music, clips, and sound effects live while you host on juke.audio.",
+  "action": { "default_title": "Toggle Space DJ panel" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": [
+    "tabs",
+    "storage",
+    "desktopCapture",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": ["https://juke.audio/*", "https://*.juke.audio/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://juke.audio/*", "https://*.juke.audio/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://juke.audio/*", "https://*.juke.audio/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
