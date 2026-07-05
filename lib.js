@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { config } from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -14,28 +15,28 @@ const NEYNAR_BASE_URL = 'https://api.neynar.com/v2'
 let env = null
 
 // Env resolves from two places so the same lib runs as a local CLI and as a
-// Vercel serverless function:
-//   1. process.env - Vercel (set NEYNAR_API_KEY / ZAAL_FID / ZAAL_SIGNER_UUID
-//      in the project's Environment Variables). Wins when NEYNAR_API_KEY is set.
+// Vercel serverless function. Generic names (USER_FID / SIGNER_UUID) are
+// canonical; the ZAAL_* names are kept as backward-compatible fallbacks so an
+// existing deploy keeps working. Internally we expose env.FID / env.SIGNER.
+//   1. process.env - Vercel (set NEYNAR_API_KEY / USER_FID / SIGNER_UUID).
 //   2. ~/.zao/private/farcaster-zaal.env - the local CLI creds file.
-// Throws (never process.exit) so serverless handlers can catch and return 500
-// instead of killing the function; CLI bins already catch and print.
+// Throws (never process.exit) so serverless handlers can catch and return 500.
 export function loadEnv() {
   if (env) return env
 
   if (process.env.NEYNAR_API_KEY) {
     env = {
       NEYNAR_API_KEY: process.env.NEYNAR_API_KEY,
-      ZAAL_FID: process.env.ZAAL_FID || '19640',
-      ZAAL_SIGNER_UUID: process.env.ZAAL_SIGNER_UUID || '',
+      FID: process.env.USER_FID || process.env.ZAAL_FID || config.fid,
+      SIGNER: process.env.SIGNER_UUID || process.env.ZAAL_SIGNER_UUID || '',
     }
     return env
   }
 
   if (!fs.existsSync(ENV_PATH)) {
     throw new Error(
-      `Missing credentials. Set NEYNAR_API_KEY (+ ZAAL_FID, ZAAL_SIGNER_UUID) in the ` +
-      `environment, or create ${ENV_PATH} with NEYNAR_API_KEY / ZAAL_SIGNER_UUID / ZAAL_FID=19640.`,
+      `Missing credentials. Set NEYNAR_API_KEY (+ USER_FID, SIGNER_UUID) in the ` +
+      `environment, or create ${ENV_PATH} with NEYNAR_API_KEY / SIGNER_UUID / USER_FID.`,
     )
   }
 
@@ -48,13 +49,14 @@ export function loadEnv() {
     parsed[key] = rest.join('=')
   }
 
-  // Reads only need the API key + fid. The signer is checked at post time so
-  // timeline/notifs/search/engage work before the signer is set up.
-  for (const key of ['NEYNAR_API_KEY', 'ZAAL_FID']) {
-    if (!parsed[key]) throw new Error(`Missing ${key} in ${ENV_PATH}`)
-  }
+  if (!parsed.NEYNAR_API_KEY) throw new Error(`Missing NEYNAR_API_KEY in ${ENV_PATH}`)
 
-  env = parsed
+  env = {
+    NEYNAR_API_KEY: parsed.NEYNAR_API_KEY,
+    FID: parsed.USER_FID || parsed.ZAAL_FID || config.fid,
+    SIGNER: parsed.SIGNER_UUID || parsed.ZAAL_SIGNER_UUID || '',
+  }
+  if (!env.FID) throw new Error(`Missing USER_FID (or ZAAL_FID) in ${ENV_PATH}`)
   return env
 }
 
@@ -83,7 +85,7 @@ export async function getFollowingFeed(options = {}) {
   const env = loadEnv()
 
   const params = new URLSearchParams({
-    fid: env.ZAAL_FID,
+    fid: env.FID,
     limit: String(limit),
   })
 
@@ -123,7 +125,7 @@ export async function getTrendingChannels(options = {}) {
 export async function getFollowSuggestions(options = {}) {
   const { limit = 12 } = options
   const env = loadEnv()
-  const params = new URLSearchParams({ fid: env.ZAAL_FID, limit: String(limit) })
+  const params = new URLSearchParams({ fid: env.FID, limit: String(limit) })
   const response = await fetchNeynar(`/farcaster/following/suggested?${params}`)
   return response.users || []
 }
@@ -147,7 +149,7 @@ export async function getNotifications(options = {}) {
   const env = loadEnv()
 
   const params = new URLSearchParams({
-    fid: env.ZAAL_FID,
+    fid: env.FID,
     limit: String(limit),
   })
 
@@ -172,7 +174,7 @@ export async function searchCasts(query, options = {}) {
 export async function searchUsers(query, options = {}) {
   const { limit = 8 } = options
   const env = loadEnv()
-  const params = new URLSearchParams({ q: query, limit: String(limit), viewer_fid: env.ZAAL_FID })
+  const params = new URLSearchParams({ q: query, limit: String(limit), viewer_fid: env.FID })
   const response = await fetchNeynar(`/farcaster/user/search?${params}`)
   return response
 }
@@ -181,7 +183,7 @@ export async function searchUsers(query, options = {}) {
 export async function getUsersByFids(fids) {
   if (!fids.length) return []
   const env = loadEnv()
-  const params = new URLSearchParams({ fids: fids.join(','), viewer_fid: env.ZAAL_FID })
+  const params = new URLSearchParams({ fids: fids.join(','), viewer_fid: env.FID })
   const response = await fetchNeynar(`/farcaster/user/bulk?${params}`)
   return response.users || []
 }
@@ -193,21 +195,21 @@ export async function getUser(fidOrUsername) {
   const raw = String(fidOrUsername).replace(/^@/, '')
 
   if (/^\d+$/.test(raw)) {
-    const params = new URLSearchParams({ fids: raw, viewer_fid: env.ZAAL_FID })
+    const params = new URLSearchParams({ fids: raw, viewer_fid: env.FID })
     const response = await fetchNeynar(`/farcaster/user/bulk?${params}`)
     return response.users?.[0] || null
   }
 
-  const params = new URLSearchParams({ username: raw, viewer_fid: env.ZAAL_FID })
+  const params = new URLSearchParams({ username: raw, viewer_fid: env.FID })
   const response = await fetchNeynar(`/farcaster/user/by_username?${params}`)
   return response.user || null
 }
 
 function requireSigner(env) {
-  if (!env.ZAAL_SIGNER_UUID) {
-    throw new Error('ZAAL_SIGNER_UUID missing - run npm run mint-signer (or set it in the Vercel env). Reads work without it.')
+  if (!env.SIGNER) {
+    throw new Error('SIGNER_UUID missing - run npm run mint-signer (or set it in the env). Reads work without it.')
   }
-  return env.ZAAL_SIGNER_UUID
+  return env.SIGNER
 }
 
 export async function postCast(text, options = {}) {
@@ -286,7 +288,7 @@ export async function getUserCasts(options = {}) {
   const env = loadEnv()
 
   const params = new URLSearchParams({
-    fid: String(fid || env.ZAAL_FID),
+    fid: String(fid || env.FID),
     limit: String(limit),
     include_replies: String(includeReplies),
   })
