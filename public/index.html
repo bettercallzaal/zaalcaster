@@ -102,6 +102,21 @@
   .prof .badge { font-size: 11px; color: var(--good); }
   .focuscast { border-color: var(--accent); }
   body.deck main { max-width: 100%; }
+  #ptr { position: fixed; top: 0; left: 0; right: 0; text-align: center; color: var(--accent); font-size: 13px;
+    padding: 8px; transform: translateY(-40px); transition: transform .15s; z-index: 25; pointer-events: none; }
+  #ptr.show { transform: translateY(50px); }
+  /* mobile: tabs to the bottom (thumb zone), bigger touch targets, safe areas */
+  @media (max-width: 640px) {
+    .tabs { position: fixed; top: auto; bottom: 0; left: 0; right: 0; border-top: 1px solid var(--border);
+      border-bottom: none; padding-bottom: env(safe-area-inset-bottom, 0); z-index: 30;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.3); }
+    .tabs button { font-size: 12px; padding: 10px 2px 9px; }
+    .tabs button .k { display: none; }
+    main { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0)); }
+    .card .stats { gap: 18px; }
+    .card .stats button, .reply button, .ibtn, .chip { min-height: 34px; }
+    header { padding: 12px 14px; }
+  }
   .deck { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory; }
   .deckcol { flex: 0 0 340px; max-width: 92vw; scroll-snap-align: start; }
   .deckcol .dh { position: sticky; top: 0; background: var(--bg); padding: 6px 2px 8px; font-weight: 700; font-size: 14px; z-index: 2; border-bottom: 1px solid var(--border); }
@@ -133,6 +148,7 @@
   <button data-tab="grow">Grow <span class="k">7</span></button>
 </div>
 
+<div id="ptr">pull to refresh</div>
 <main id="main"></main>
 <div id="overlay"><div class="sheet"><div class="ohd"><b id="ohdTitle"></b><span class="x" id="overlayClose">&times;</span></div><div class="obody" id="obody"></div></div></div>
 <div id="palette" style="position:fixed;inset:0;z-index:70;background:rgba(6,6,10,.6);display:none;padding-top:12vh">
@@ -632,6 +648,26 @@
     if (tab === 'feed') loadFeed(); else if (tab === 'inbox') loadInbox(); else if (tab === 'channels') loadChannels()
     else if (tab === 'grow') loadGrow()
   })
+
+  // pull-to-refresh (mobile): pull down from the top of the page to refresh
+  const ptr = document.getElementById('ptr')
+  let ptrStartY = 0, ptrActive = false
+  document.addEventListener('touchstart', (e) => {
+    if (window.scrollY <= 0 && !document.getElementById('overlay').classList.contains('on')) {
+      ptrStartY = e.touches[0].clientY; ptrActive = true
+    }
+  }, { passive: true })
+  document.addEventListener('touchmove', (e) => {
+    if (!ptrActive) return
+    const dy = e.touches[0].clientY - ptrStartY
+    ptr.classList.toggle('show', dy > 70 && window.scrollY <= 0)
+  }, { passive: true })
+  document.addEventListener('touchend', (e) => {
+    if (!ptrActive) return
+    const dy = e.changedTouches[0].clientY - ptrStartY
+    if (dy > 70 && window.scrollY <= 0) document.getElementById('refresh').click()
+    ptr.classList.remove('show'); ptrActive = false
+  }, { passive: true })
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
     if (e.key === '1') switchTab('daily'); else if (e.key === '2') switchTab('feed')
