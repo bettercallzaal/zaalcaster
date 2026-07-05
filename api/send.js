@@ -8,7 +8,7 @@
 // the UI must show exact text + an explicit confirm before calling this - the
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
-import { postCast, friendlyPostError } from '../lib.js'
+import { postCast, friendlyPostError, getPostingHealth } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -22,6 +22,13 @@ async function readJsonBody(req) {
 
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
+  // GET -> posting health check (is the signer wired up under the key?)
+  if (req.method === 'GET') {
+    const h = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
+    res.setHeader('Cache-Control', 'no-store')
+    res.status(200).json(h)
+    return
+  }
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   try {
     const body = await readJsonBody(req)

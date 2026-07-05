@@ -433,16 +433,26 @@
     return `<div class="thread" style="margin:0 0 8px"><div><span class="u">quoting @${esc(q.author)}</span>: ${esc((q.text || '').slice(0, 160))}
       <span class="uname" data-act="unquote" style="color:#ff8a6a"> remove</span></div></div>`
   }
+  function postingBanner() {
+    if (!postingHealth || postingHealth.ready) return ''
+    const msg = postingHealth.reason === 'mismatch'
+      ? 'posting not set up: your NEYNAR_API_KEY and signer do not match. re-copy BOTH from your creds file (same pair), then redeploy.'
+      : postingHealth.reason === 'no-signer'
+        ? 'posting off: no signer set. mint one (npm run mint-signer) and set SIGNER_UUID.'
+        : 'could not verify posting - reads still work.'
+    return `<div class="digest" style="background:#2a1414;border-color:#5a2a2a;margin-bottom:10px"><div class="t" style="color:#ffb0a0">${esc(msg)}</div></div>`
+  }
   function renderCompose() {
     if (compose.sentLink) {
       return `<div class="compose"><div class="sent" style="font-size:15px">posted - <a href="${esc(compose.sentLink)}" target="_blank" rel="noopener">${esc(compose.sentLink)}</a></div>
         <div class="btns" style="margin-top:12px"><button class="ibtn" data-act="composenew">new cast</button></div></div>`
     }
+    const banner = postingBanner()
     const chSel = `<select id="composeChannel">
       <option value="">no channel</option>${HOME_CHANNELS.map((c) => `<option value="${c}" ${compose.channel === c ? 'selected' : ''}>/${c}</option>`).join('')}</select>`
     if (compose.armed) {
-      return `<div class="compose">${quotePreview()}<textarea readonly>${esc(compose.text)}</textarea>
-        <div class="btns"><span class="note">${compose.quote ? 'quote-cast' : 'post'} this as @zaal${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
+      return `<div class="compose">${banner}${quotePreview()}<textarea readonly>${esc(compose.text)}</textarea>
+        <div class="btns"><span class="note">${compose.quote ? 'quote-cast' : 'post'} this as @${esc(ME)}${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
           <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
           <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
     }
@@ -452,7 +462,7 @@
         <div class="ub">${new Date(s.at).toLocaleString()}${s.channelId ? ' - /' + esc(s.channelId) : ''}</div></div>
         <span data-act="schedrm" data-id="${esc(s.id)}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('') : ''
     const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
-    return `<div class="compose">${quotePreview()}<textarea id="composeText" placeholder="what's happening... (posts as @zaal)">${esc(compose.text)}</textarea>
+    return `<div class="compose">${banner}${quotePreview()}<textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
       <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
         <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
@@ -851,7 +861,11 @@
       }
     } catch { /* store unreachable - stay on localStorage */ }
   }
-  async function startApp() { gate.style.display = 'none'; await pullState(); switchTab('daily') }
+  let postingHealth = null
+  async function checkPosting() {
+    try { postingHealth = await fetch('/api/send').then((r) => r.json()); if (tab === 'compose') render() } catch {}
+  }
+  async function startApp() { gate.style.display = 'none'; await pullState(); switchTab('daily'); checkPosting() }
   async function submitPw() {
     const pw = document.getElementById('gatePw').value
     document.getElementById('gateErr').textContent = ''
