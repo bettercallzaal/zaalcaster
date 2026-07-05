@@ -382,7 +382,7 @@
   async function loadChannels(append) {
     if (!append) { st.channels.loaded = false; st.channels.cursor = null; render() }
     try {
-      const url = `/api/channel?id=${encodeURIComponent(st.channels.id)}&limit=30${append && st.channels.cursor ? '&cursor=' + encodeURIComponent(st.channels.cursor) : ''}`
+      const url = `/api/feed?type=channel&id=${encodeURIComponent(st.channels.id)}&limit=30${append && st.channels.cursor ? '&cursor=' + encodeURIComponent(st.channels.cursor) : ''}`
       const r = await fetch(url)
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'channel failed')
       st.channels.casts = append ? st.channels.casts.concat(d.casts) : d.casts
@@ -390,7 +390,7 @@
     } catch (e) { st.channels.err = e.message; st.channels.loaded = true }
     render()
     if (!st.channels.trending.length) {
-      try { const t = await fetch('/api/channel?trending=1').then((x) => x.json()); if (t.trending) { st.channels.trending = t.trending; render() } } catch {}
+      try { const t = await fetch('/api/feed?trending=1').then((x) => x.json()); if (t.trending) { st.channels.trending = t.trending; render() } } catch {}
     }
   }
   function renderChannels() {
@@ -591,7 +591,7 @@
   async function openThread(hash) {
     openOverlay('thread', '<div class="loading">loading thread...</div>')
     try {
-      const r = await fetch(`/api/thread?hash=${encodeURIComponent(hash)}`); const d = await r.json()
+      const r = await fetch(`/api/view?kind=thread&hash=${encodeURIComponent(hash)}`); const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'thread failed')
       let html = ''
       for (const a of d.ancestors) html += castCard(a)
@@ -603,7 +603,7 @@
   async function openProfile(user) {
     openOverlay('@' + user, '<div class="loading">loading profile...</div>')
     try {
-      const r = await fetch(`/api/profile?user=${encodeURIComponent(user)}`); const d = await r.json()
+      const r = await fetch(`/api/view?kind=profile&user=${encodeURIComponent(user)}`); const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'profile failed')
       const u = d.user
       const rel = [u.youFollow ? 'you follow' : '', u.followsYou ? 'follows you' : ''].filter(Boolean).join(' - ')
