@@ -1,6 +1,7 @@
 // GET /api/profile?user=<fid|username> - a user's profile + recent casts. Read-only.
 
 import { getUser, getUserCasts } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -15,6 +16,7 @@ function compactCast(cast) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   try {
     const target = (req.query.user || '').trim()
     if (!target) { res.status(400).json({ error: 'missing user' }); return }

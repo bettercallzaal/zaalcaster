@@ -26,6 +26,9 @@ Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Ne
 - bin/timeline.js, notifs.js, search.js, post.js, reply.js (reply takes hash OR farcaster.xyz link)
 - Farcaster link format: https://farcaster.xyz/<username>/<0x + first 8 hash chars>
 
+## Web auth (2026-07-05)
+- auth.js + api/auth.js = a simple PASSWORD GATE so the deployed site stands alone (Vercel Deployment Protection optional). Set APP_PASSWORD in Vercel env -> the app shows a password screen and EVERY api route requires a valid cookie (blockedByAuth -> 401). Cookie = sha256(APP_PASSWORD), HttpOnly+Secure+SameSite. UNSET APP_PASSWORD = gate OFF (local CLI + Vercel-login-only deploys unchanged). Verified: gate off serves; gate on 401s without/with-forged cookie, accepts right pw + good cookie; timingSafeEqual compares. If APP_PASSWORD is set, Zaal can turn OFF Vercel Auth and just use the password (easier on mobile). Quote/bookmark/mute also shipped (localStorage bookmarks + muted words; quote via embeds cast_id).
+
 ## Known state (2026-07-04, afternoon)
 - Reads WORK. POSTING UNBLOCKED: ZAAL_SIGNER_UUID approved for fid 19640 (minted via the zolbot account as app FID by the assistant terminal; no ETH was needed). No cast has been posted yet - first post still needs Zaal's yes on exact text.
 - mint-signer supports APP_SIGNER_PRIVATE_KEY/APP_SIGNER_MNEMONIC process-env overrides (how zolbot minted). The ZAO OS app wallet path (fund + --register-app-fid) remains as fallback documentation; ZAO OS's own /api/auth/signer route still has the custody-mismatch bug (APP_FID=19640 vs generated wallet).

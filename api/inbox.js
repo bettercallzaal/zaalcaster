@@ -5,6 +5,7 @@
 // (NEYNAR_API_KEY, ZAAL_FID); no secrets in the repo or the response.
 
 import { getUnansweredInbound, getUsersByFids } from '../lib.js'
+import { blockedByAuth } from '../auth.js'
 
 // Rank inbound by how much it deserves Zaal's attention: intent (mentions +
 // quotes over generic replies), the sender's neynar score, and mutual-follow.
@@ -27,6 +28,7 @@ async function attachPriority(items) {
 }
 
 export default async function handler(req, res) {
+  if (blockedByAuth(req, res)) return
   try {
     const limit = Math.min(Number(req.query.limit) || 15, 50)
     const includeAll = req.query.all === '1' || req.query.all === 'true'
