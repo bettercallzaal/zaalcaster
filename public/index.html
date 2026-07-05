@@ -101,6 +101,12 @@
   .prof .ps { font-size: 13px; color: var(--dim); }
   .prof .badge { font-size: 11px; color: var(--good); }
   .focuscast { border-color: var(--accent); }
+  body.deck main { max-width: 100%; }
+  .deck { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory; }
+  .deckcol { flex: 0 0 340px; max-width: 92vw; scroll-snap-align: start; }
+  .deckcol .dh { position: sticky; top: 0; background: var(--bg); padding: 6px 2px 8px; font-weight: 700; font-size: 14px; z-index: 2; border-bottom: 1px solid var(--border); }
+  .deckcol .dc { max-height: calc(100vh - 180px); overflow-y: auto; padding-top: 8px; }
+  @media (min-width: 760px) { .deckcol { flex: 1 1 0; max-width: none; } }
   footer { text-align: center; color: #4a4a58; font-size: 11px; padding: 6px 0 30px; }
 </style>
 </head>
@@ -111,6 +117,7 @@
     <div class="meta" id="meta"></div>
   </div>
   <div class="right">
+    <button class="ibtn" id="deckBtn" title="column deck view">deck</button>
     <button class="ibtn" id="refresh" title="refresh (r)">refresh</button>
     <a href="/dj.html" style="text-decoration:none"><button class="ibtn" type="button" title="space dj">dj</button></a>
   </div>
@@ -442,9 +449,34 @@
       + (casts || '<div class="empty">no casts yet.</div>')
   }
 
+  // ================= DECK (columns) =================
+  let deckMode = false
+  function renderDeck() {
+    const feedCol = !st.feed.loaded ? '<div class="loading">loading...</div>'
+      : dropMuted(st.feed.casts).map(castCard).join('') || '<div class="empty">no casts.</div>'
+    const inboxCol = !st.inbox.loaded ? '<div class="loading">loading...</div>'
+      : (st.inbox.items.length ? st.inbox.items.map(inboxItem).join('') : '<div class="empty">inbox zero.</div>')
+    const chanCol = !st.channels.loaded ? '<div class="loading">loading...</div>'
+      : dropMuted(st.channels.casts).map(castCard).join('') || '<div class="empty">no casts.</div>'
+    return `<div class="deck">
+      <div class="deckcol"><div class="dh">Feed</div><div class="dc">${feedCol}</div></div>
+      <div class="deckcol"><div class="dh">Inbox</div><div class="dc">${inboxCol}</div></div>
+      <div class="deckcol"><div class="dh">/${esc(st.channels.id)}</div><div class="dc">${chanCol}</div></div>
+    </div>`
+  }
+  function toggleDeck() {
+    deckMode = !deckMode
+    document.body.classList.toggle('deck', deckMode)
+    document.getElementById('deckBtn').classList.toggle('on', deckMode)
+    if (deckMode) { if (!st.feed.loaded) loadFeed(); if (!st.inbox.loaded) loadInbox(); if (!st.channels.loaded) loadChannels() }
+    render()
+  }
+  document.getElementById('deckBtn').addEventListener('click', toggleDeck)
+
   // ================= RENDER + EVENTS =================
   function render() {
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab))
+    if (deckMode) { meta.textContent = 'deck'; main.innerHTML = renderDeck(); return }
     if (tab === 'feed') { meta.textContent = st.feed.loaded ? `${st.feed.casts.length} casts` : ''; main.innerHTML = renderFeed() }
     else if (tab === 'inbox') { meta.textContent = st.inbox.loaded ? `${st.inbox.items.length} unanswered` : ''; main.innerHTML = renderInbox() }
     else if (tab === 'channels') { meta.textContent = ''; main.innerHTML = renderChannels() }
@@ -454,6 +486,7 @@
   }
 
   function switchTab(t) {
+    if (deckMode) { deckMode = false; document.body.classList.remove('deck'); document.getElementById('deckBtn').classList.remove('on') }
     tab = t; render()
     if (t === 'feed' && !st.feed.loaded) loadFeed()
     if (t === 'inbox' && !st.inbox.loaded) loadInbox()
