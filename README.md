@@ -198,6 +198,64 @@ Missing or invalid env? The CLI will tell you.
 
 Zaalcaster uses only Node 20+ built-ins. No npm packages needed.
 
+## Fork it - make your own `<username>caster`
+
+zaalcaster is one person's Farcaster client. Fork it into your own.
+
+### Naming rule (required)
+
+Your fork must be named your **Farcaster username + `caster`**, all lowercase.
+
+- `ohnahji` -> `ohnahjicaster`
+- `dwr` -> `dwrcaster`
+- `alice.eth` -> `alicecaster` (drop the `.eth`)
+
+That is the name of the repo, the Vercel project, the page title, and the wordmark.
+
+### 1. Fork + rename
+
+1. Fork this repo on GitHub, rename it to `<username>caster`.
+2. `git clone` your fork, `cd` in.
+
+### 2. Make it yours (find-and-replace)
+
+Swap the Zaal-specific bits for your own:
+
+- **Wordmark + title** - in `public/index.html`, change the `<title>` and the `zaal<span>caster</span>` header to `<username>caster`. Same for the `zaalcaster` name in `package.json`.
+- **Your identity** - the code reads your FID and signer from env vars named `ZAAL_FID` / `ZAAL_SIGNER_UUID` (kept for simplicity). Set them to *your* values (below); you can rename them throughout if you prefer.
+- **Your voice** - `voice.js` drafts replies "as @zaal". Change `@zaal` and the voice rules to yours.
+- **Your context** - `context.js` grounds drafts in ZAO/WaveWarZ facts. Replace with facts about you/your project (or empty it).
+- **Your channels** - `HOME_CHANNELS` in `public/index.html` (and `bin/channels.js`) default to `zao / wavewarz / zabal`. Set your channels.
+- **Your Daily defaults** - the `DAILY_DEFAULT` block in `public/index.html` seeds mini apps, communities, and tasks. Edit to yours (these are also editable live in the app).
+
+### 3. Credentials (never commit these)
+
+Get a free Neynar API key at [dev.neynar.com](https://dev.neynar.com). Then either put them in the local creds file (for the CLI):
+
+```bash
+mkdir -p ~/.zao/private
+cat > ~/.zao/private/farcaster-zaal.env << 'EOF'
+NEYNAR_API_KEY=your_key
+ZAAL_FID=your_fid
+ZAAL_SIGNER_UUID=your_signer_uuid
+EOF
+chmod 600 ~/.zao/private/farcaster-zaal.env
+```
+
+or set them as environment variables (for Vercel). Reads work with just `NEYNAR_API_KEY` + `ZAAL_FID`; posting needs `ZAAL_SIGNER_UUID` (see `bin/mint-signer.js` for minting a Neynar managed signer).
+
+### 4. Deploy (optional)
+
+Push to Vercel. Set the env vars in the Vercel project:
+
+- Required: `NEYNAR_API_KEY`, `ZAAL_FID`
+- Posting: `ZAAL_SIGNER_UUID`
+- Drafts + digest: `OPENROUTER_API_KEY`
+- Lock the site: `APP_PASSWORD` (a simple password gate - see `auth.js`) and/or Vercel Deployment Protection. **The deployed site can post as you, so never leave it public.**
+- Sync + scheduled posts (optional): a Vercel KV store + `CRON_SECRET`.
+
+That's it - `<username>caster` is yours.
+
 ## License
 
 MIT. Use freely. Farcaster is a public network.
