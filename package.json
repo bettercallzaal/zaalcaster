@@ -18,10 +18,12 @@
     "zaalcaster-channel": "./bin/channels.js",
     "zaalcaster-like": "./bin/like.js",
     "zaalcaster-cockpit": "./bin/cockpit.js",
-    "zaalcaster-spam": "./bin/spam.js"
+    "zaalcaster-spam": "./bin/spam.js",
+    "zaalcaster-spaces": "./bin/spaces.js"
   },
   "scripts": {
     "cockpit": "node bin/cockpit.js",
+    "spaces": "node bin/spaces.js",
     "spam": "node bin/spam.js",
     "like": "node bin/like.js",
     "user": "node bin/user.js",
