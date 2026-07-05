@@ -63,6 +63,23 @@
   .draft.skip .label, .draft.skip .text { color: #7a7a84; }
   .item .actions { margin-top: 8px; }
   .item .actions button { font-size: 12px; padding: 4px 10px; }
+  .reply { margin-top: 10px; }
+  .reply textarea {
+    width: 100%; min-height: 54px; resize: vertical; font: inherit; font-size: 14px;
+    background: #0f0f16; color: #e8e8ea; border: 1px solid #2e2e38; border-radius: 9px;
+    padding: 8px 10px; box-sizing: border-box;
+  }
+  .reply textarea:focus { outline: none; border-color: #855DCD; }
+  .reply textarea[readonly] { background: #12101a; border-color: #34294d; color: #ddd6ff; }
+  .reply .btns { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .reply button { font: inherit; font-size: 13px; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+    background: #1d1d25; color: #e8e8ea; border: 1px solid #33334d; }
+  .reply button.primary { background: #6d4aff; border-color: #6d4aff; color: #fff; font-weight: 600; }
+  .reply button:hover { border-color: #855DCD; }
+  .reply .cc { font-size: 12px; color: #7a7a8a; }
+  .reply .confirm-note { font-size: 12px; color: #ffcf9a; }
+  .sent { margin-top: 10px; font-size: 13px; color: #7ee0a0; }
+  .sent a { color: #7ee0a0; }
   .empty, .err { text-align: center; color: #8a8a94; padding: 48px 16px; }
   .err { color: #ff8a8a; }
   a.open { font-size: 13px; color: #8a8a94; text-decoration: none; }
@@ -84,7 +101,7 @@
   </div>
 </header>
 <main id="list"></main>
-<footer>drafts are suggestions - nothing is ever sent without your confirmation (coming next build)</footer>
+<footer>nothing is sent until you click "send reply" then "yes, send" - the confirm is your yes</footer>
 
 <script>
   const list = document.getElementById('list')
@@ -116,6 +133,32 @@
     return `<div class="draft"><div class="label">draft in your voice</div><div class="text">${esc(item.draft)}</div></div>`
   }
 
+  function renderReply(item) {
+    if (!ANSWERABLE.has(item.type)) return ''
+    if (item.sent) {
+      return `<div class="sent">sent - <a href="${esc(item.sentLink)}" target="_blank" rel="noopener">${esc(item.sentLink)}</a></div>`
+    }
+    const val = item.replyText != null ? item.replyText : (item.draft && item.draft !== 'SKIP' ? item.draft : '')
+    const h = esc(item.hash)
+    if (item.armed) {
+      return `<div class="reply">
+        <textarea readonly data-hash="${h}">${esc(val)}</textarea>
+        <div class="btns">
+          <span class="confirm-note">send exactly this as @zaal?</span>
+          <button class="primary" data-act="confirm" data-hash="${h}">${item.sending ? 'sending...' : 'yes, send'}</button>
+          <button data-act="cancel" data-hash="${h}">cancel</button>
+        </div>
+      </div>`
+    }
+    return `<div class="reply">
+      <textarea data-hash="${h}" placeholder="write a reply, or draft one above...">${esc(val)}</textarea>
+      <div class="btns">
+        <button data-act="arm" data-hash="${h}">send reply</button>
+        <span class="cc" data-cc="${h}">${val.length}</span>
+      </div>
+    </div>`
+  }
+
   function renderItem(item) {
     return `<div class="item" data-hash="${esc(item.hash)}">
       <div class="who">
@@ -126,8 +169,52 @@
       ${renderThread(item)}
       <div class="them">${esc(item.text) || '<i>(no text)</i>'}</div>
       ${renderDraft(item)}
+      ${renderReply(item)}
     </div>`
   }
+
+  function findItem(hash) { return items.find((i) => i.hash === hash) }
+
+  // Typing must not re-render (would drop focus) - update state silently.
+  list.addEventListener('input', (e) => {
+    const ta = e.target.closest('textarea[data-hash]')
+    if (!ta || ta.hasAttribute('readonly')) return
+    const item = findItem(ta.dataset.hash)
+    if (item) { item.replyText = ta.value; const cc = list.querySelector(`[data-cc="${item.hash}"]`); if (cc) cc.textContent = ta.value.length }
+  })
+
+  list.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act]')
+    if (!btn) return
+    const item = findItem(btn.dataset.hash)
+    if (!item) return
+    const act = btn.dataset.act
+    if (act === 'arm') {
+      const ta = list.querySelector(`textarea[data-hash="${item.hash}"]`)
+      item.replyText = ta ? ta.value : (item.replyText || '')
+      if (!item.replyText.trim()) return
+      item.armed = true; render()
+    } else if (act === 'cancel') {
+      item.armed = false; render()
+    } else if (act === 'confirm') {
+      if (item.sending) return
+      item.sending = true; render()
+      try {
+        const res = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentHash: item.hash, parentFid: item.fid, text: item.replyText }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.ok) throw new Error(data.error || 'send failed')
+        item.sent = true; item.sentLink = data.link; item.armed = false; item.sending = false
+        render()
+      } catch (err) {
+        item.sending = false; item.armed = false; render()
+        meta.textContent = 'send error: ' + err.message
+      }
+    }
+  })
 
   function render() {
     list.innerHTML = items.map(renderItem).join('')
