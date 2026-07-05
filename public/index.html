@@ -122,6 +122,7 @@
   <button data-tab="channels">Chan <span class="k">3</span></button>
   <button data-tab="search">Search <span class="k">4</span></button>
   <button data-tab="compose">Post <span class="k">5</span></button>
+  <button data-tab="grow">Grow <span class="k">6</span></button>
 </div>
 
 <main id="main"></main>
@@ -150,6 +151,7 @@
     inbox: { items: [], loaded: false, showAll: false, priority: false },
     channels: { id: 'zao', casts: [], loaded: false },
     search: { q: '', users: [], casts: [], loaded: true, searching: false },
+    grow: { loaded: false, data: null },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -388,6 +390,35 @@
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post</button><span class="cc" id="composeCc">${compose.text.length}</span></div></div>`
   }
 
+  // ================= GROW =================
+  async function loadGrow() {
+    st.grow.loaded = false; render()
+    try {
+      const r = await fetch('/api/stats'); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'stats failed')
+      st.grow.data = d; st.grow.loaded = true
+    } catch (e) { st.grow.err = e.message; st.grow.loaded = true }
+    render()
+  }
+  function renderGrow() {
+    if (!st.grow.loaded) return '<div class="loading">loading your stats...</div>'
+    if (st.grow.err) return `<div class="err">${esc(st.grow.err)}</div>`
+    const d = st.grow.data
+    const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div></div>`
+    const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
+      <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
+      <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>
+        <span style="color:#855DCD">score ${c.score}</span>
+        <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a></div></div></div>`).join('')
+    const eng = (d.topEngagers || []).map((e) => `<span class="chip" data-act="profile" data-user="${esc(e.username)}">@${esc(e.username)} - ${e.n}</span>`).join(' ')
+    return hdr
+      + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">who engages you most</b></div>'
+      + `<div class="subbar">${eng || '<span class="ub">no recent engagers</span>'}</div>`
+      + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">your top casts (by engagement)</b></div>'
+      + (casts || '<div class="empty">no casts yet.</div>')
+  }
+
   // ================= RENDER + EVENTS =================
   function render() {
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab))
@@ -396,6 +427,7 @@
     else if (tab === 'channels') { meta.textContent = ''; main.innerHTML = renderChannels() }
     else if (tab === 'search') { meta.textContent = ''; main.innerHTML = renderSearch() }
     else if (tab === 'compose') { meta.textContent = ''; main.innerHTML = renderCompose() }
+    else if (tab === 'grow') { meta.textContent = ''; main.innerHTML = renderGrow() }
   }
 
   function switchTab(t) {
@@ -403,6 +435,7 @@
     if (t === 'feed' && !st.feed.loaded) loadFeed()
     if (t === 'inbox' && !st.inbox.loaded) loadInbox()
     if (t === 'channels' && !st.channels.loaded) loadChannels()
+    if (t === 'grow' && !st.grow.loaded) loadGrow()
     if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
   }
 
@@ -460,12 +493,13 @@
   document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) switchTab(b.dataset.tab) })
   document.getElementById('refresh').addEventListener('click', () => {
     if (tab === 'feed') loadFeed(); else if (tab === 'inbox') loadInbox(); else if (tab === 'channels') loadChannels()
+    else if (tab === 'grow') loadGrow()
   })
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
     if (e.key === '1') switchTab('feed'); else if (e.key === '2') switchTab('inbox')
     else if (e.key === '3') switchTab('channels'); else if (e.key === '4') switchTab('search')
-    else if (e.key === '5') switchTab('compose')
+    else if (e.key === '5') switchTab('compose'); else if (e.key === '6') switchTab('grow')
     else if (e.key === 'r') document.getElementById('refresh').click()
   })
 
