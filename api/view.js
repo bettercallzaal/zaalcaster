@@ -4,7 +4,7 @@
 //   ?kind=profile&user=<fid|username>   profile + recent casts
 // Read-only.
 
-import { getConversation, getUser, getUserCasts } from '../lib.js'
+import { getConversation, getUser, getUserCasts, getRelevantFollowers } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compactCast(cast) {
@@ -32,6 +32,7 @@ async function profile(target, res) {
   const user = await getUser(target)
   if (!user) { res.status(404).json({ error: 'user not found' }); return }
   const castsRes = await getUserCasts({ fid: user.fid, limit: 20 }).catch(() => ({ casts: [] }))
+  const rel = await getRelevantFollowers(user.fid).catch(() => ({ names: [], count: 0 }))
   const vc = user.viewer_context || {}
   res.status(200).json({
     user: {
@@ -39,6 +40,7 @@ async function profile(target, res) {
       fid: user.fid, bio: user.profile?.bio?.text || '', followers: user.follower_count || 0,
       following: user.following_count || 0, score: user.experimental?.neynar_user_score ?? null,
       youFollow: !!vc.following, followsYou: !!vc.followed_by,
+      mutuals: rel.names.slice(0, 3), mutualCount: rel.count,
       link: `https://farcaster.xyz/${user.username}`,
     },
     casts: (castsRes.casts || []).map(compactCast),

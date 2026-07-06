@@ -206,6 +206,18 @@ export async function getUsersByFids(fids) {
   return response.users || []
 }
 
+// Mutual-follower social proof: people Zaal follows who ALSO follow the target.
+// "followed by alice, bob + 3 more you follow". Returns { names, count }.
+export async function getRelevantFollowers(targetFid) {
+  const env = loadEnv()
+  const params = new URLSearchParams({ target_fid: String(targetFid), viewer_fid: env.FID })
+  const response = await fetchNeynar(`/farcaster/followers/relevant?${params}`)
+  const hydrated = response.top_relevant_followers_hydrated || []
+  const names = hydrated.map((h) => (h.user || h).username).filter(Boolean)
+  const all = response.all_relevant_followers_dehydrated || hydrated
+  return { names, count: all.length || names.length }
+}
+
 // Look up a user by fid (number) or username (with or without @).
 // viewer_fid is Zaal so the result includes follow relationship both ways.
 export async function getUser(fidOrUsername) {
