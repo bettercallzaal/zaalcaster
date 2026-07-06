@@ -18,6 +18,9 @@ export const config = {
   // Channels shown on the Channels tab + Post picker.
   homeChannels: ['zao', 'wavewarz', 'zabal'],
 
+  // One-tap quick replies (tap a chip to fill the reply box, then confirm).
+  quickReplies: ['GM', 'Lfg', 'love this', 'so cool', 'congrats', 'based', 'ZM'],
+
   // How the AI drafts replies in your voice (one rule per line).
   voiceRules: [
     '- short, plain, direct. one or two sentences max. lowercase is fine.',

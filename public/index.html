@@ -184,6 +184,9 @@
   const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
   let HOME_CHANNELS = ['zao', 'wavewarz', 'zabal'] // overridden from config on boot
   let ME = 'zaal' // your username, set from config on boot
+  let QUICK = ['GM', 'Lfg', 'love this', 'so cool', 'congrats', 'based', 'ZM'] // quick replies, from config
+  // a row of one-tap quick-reply chips that fill the reply box for a given cast
+  const quickRow = (hash) => `<div class="subbar" style="padding:2px 0 6px;gap:6px">${QUICK.map((q) => `<span class="chip" data-act="quick" data-hash="${esc(hash)}" data-q="${esc(q)}">${esc(q)}</span>`).join('')}</div>`
 
   let tab = 'feed'
   const st = {
@@ -261,7 +264,8 @@
   // inline reply composer used by feed/channel cards
   function replyBox(hash, fid, draft) {
     return `<div class="reply">
-      <textarea data-rhash="${esc(hash)}" data-rfid="${fid || ''}" placeholder="reply as @zaal...">${esc(draft || '')}</textarea>
+      ${quickRow(hash)}
+      <textarea data-rhash="${esc(hash)}" data-rfid="${fid || ''}" placeholder="reply as @${esc(ME)}...">${esc(draft || '')}</textarea>
       <div class="btns"><button class="ibtn" data-act="replyarm" data-hash="${esc(hash)}">send reply</button>
         <button class="ibtn" data-act="replycancel" data-hash="${esc(hash)}">cancel</button></div>
     </div>`
@@ -376,10 +380,10 @@
     else if (ANSWERABLE.has(item.type)) {
       const val = item.replyText != null ? item.replyText : (item.draft && item.draft !== 'SKIP' ? item.draft : '')
       reply = item.armed
-        ? `<div class="reply"><textarea readonly>${esc(val)}</textarea><div class="btns"><span class="note">send exactly this as @zaal?</span>
+        ? `<div class="reply"><textarea readonly>${esc(val)}</textarea><div class="btns"><span class="note">send exactly this as @${esc(ME)}?</span>
              <button class="ibtn primary" data-act="iconfirm" data-hash="${esc(item.hash)}">${item.sending ? 'sending...' : 'yes, send'}</button>
              <button class="ibtn" data-act="icancel" data-hash="${esc(item.hash)}">cancel</button></div></div>`
-        : `<div class="reply"><textarea data-ihash="${esc(item.hash)}" placeholder="reply, or draft above...">${esc(val)}</textarea>
+        : `<div class="reply">${quickRow(item.hash)}<textarea data-ihash="${esc(item.hash)}" placeholder="reply, or draft above...">${esc(val)}</textarea>
              <div class="btns"><button class="ibtn" data-act="iarm" data-hash="${esc(item.hash)}">send reply</button></div></div>`
     }
     return `<div class="card" data-hash="${esc(item.hash)}">
@@ -771,6 +775,12 @@
       switchTab('compose'); return
     }
 
+    // quick-reply chip: fill the reply box for this cast
+    if (act === 'quick') {
+      const ta = main.querySelector(`textarea[data-ihash="${CSS.escape(hash)}"], textarea[data-rhash="${CSS.escape(hash)}"]`)
+      if (ta) { ta.value = btn.dataset.q; ta.focus(); const it = findInbox(hash); if (it) it.replyText = ta.value }
+      return
+    }
     // feed/channel reactions + inline reply
     if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
     if (act === 'replytoggle') {
@@ -927,6 +937,7 @@
   function applyConfig(cfg) {
     if (!cfg) return
     if (cfg.username) ME = cfg.username
+    if (Array.isArray(cfg.quickReplies) && cfg.quickReplies.length) QUICK = cfg.quickReplies
     if (cfg.appName) {
       document.title = cfg.appName
       const m = cfg.appName.match(/^(.*?)(caster)$/i)
