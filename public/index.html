@@ -691,7 +691,7 @@
       <div class="stat"><div class="sv">${game.xp || 0}</div><div class="sl">total xp</div></div>
     </div>
     <div class="xpbar"><div class="xpfill" style="width:${xpInLevel(game.xp)}%"></div></div>
-    <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}</div>`
+    <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}${(game.streak || 0) >= 1 ? ` <span class="chip" data-act="share" data-kind="streak">share streak</span>` : ''}</div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</div></div>
       ${statbar}
       <div class="launchgrid">${nav}</div>
@@ -699,7 +699,7 @@
       ${tasks}
       <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">badges (${game.badges.length}/${BADGES.length})</b></div>
-      <div class="badges">${BADGES.map((b) => { const on = game.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><div class="bn">${esc(b.name)}</div><div class="bd">${on ? 'unlocked' : esc(b.desc)}</div></div>` }).join('')}</div>
+      <div class="badges">${BADGES.map((b) => { const on = game.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><div class="bn">${esc(b.name)}</div><div class="bd">${on ? `unlocked <span class="chip" data-act="share" data-kind="badge" data-val="${esc(b.name)}" style="padding:1px 7px;font-size:11px">share</span>` : esc(b.desc)}</div></div>` }).join('')}</div>
       ${sched}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
       <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
@@ -917,6 +917,21 @@
     if (act === 'dgrouprm') { daily.groups.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dgroupadd') { const l = document.getElementById('dGroupLabel').value.trim(), u = document.getElementById('dGroupUrl').value.trim(); if (l && u) { daily.groups.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
 
+    if (act === 'share') {
+      const repo = 'github.com/bettercallzaal/zaalcaster'
+      let text = ''
+      if (btn.dataset.kind === 'streak') {
+        const d = game.streak || 0
+        text = `day ${d} streak on farcaster, staying consistent. gamified my habit in my own client, zaalcaster - fork your own: ${repo}`
+      } else {
+        text = `unlocked "${btn.dataset.val}" in zaalcaster - gamifying my farcaster habit. fork your own: ${repo}`
+      }
+      compose.text = text; compose.armed = false; compose.sentLink = null
+      switchTab('compose')
+      setTimeout(() => { const ta = document.getElementById('composeText'); if (ta) { ta.focus() } }, 60)
+      toast('draft ready - review + post')
+      return
+    }
     if (act === 'newlist') {
       const name = (window.prompt('name this list (e.g. builders, close friends)') || '').trim(); if (!name) return
       const id = 'l' + Date.now().toString(36)
