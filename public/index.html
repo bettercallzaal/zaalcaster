@@ -55,6 +55,7 @@
   .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 6px; text-align: center; }
   .stat .sv { font-weight: 700; font-size: 20px; color: var(--accent); }
   .stat .sl { color: #8a8a99; font-size: 11px; margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+  .boost { font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #855DCD, #6d4aff); padding: 1px 5px; border-radius: 6px; vertical-align: middle; }
   .xpbar { height: 8px; background: #1c1c28; border-radius: 6px; overflow: hidden; }
   .xpfill { height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); transition: width .3s; }
   .xphint { color: #8a8a99; font-size: 12px; margin: 4px 0 2px; text-align: right; }
@@ -609,6 +610,13 @@
   const yesterdayStr = () => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) }
   const levelFor = (xp) => Math.floor((xp || 0) / 100) + 1
   const xpInLevel = (xp) => (xp || 0) % 100
+  // streak boosters (borrowed from Empire Builder) - longer streak = XP multiplier
+  const boosterFor = (streak) => streak >= 30 ? 3 : streak >= 14 ? 2.5 : streak >= 7 ? 2 : streak >= 3 ? 1.5 : 1
+  function nextBoostHint(streak) {
+    const tiers = [[3, 1.5], [7, 2], [14, 2.5], [30, 3]]
+    for (const [days, mult] of tiers) if (streak < days) return ` - ${days - streak}d to ${mult}x xp`
+    return ' - max 3x boost'
+  }
   const saveGame = () => { lsSet('zc_game', game); persist() }
   function toast(msg) {
     const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg
@@ -649,15 +657,19 @@
     const done = new Set(game.awarded[day] || [])
     if (done.has(i)) return                 // already counted today
     done.add(i); game.awarded[day] = [...done]
-    game.xp = (game.xp || 0) + XP_PER_QUEST
     if (game.lastDay !== day) {              // first quest of the day moves the streak
       game.streak = (game.lastDay === yesterdayStr()) ? (game.streak || 0) + 1 : 1
       game.lastDay = day
       if (game.streak > (game.best || 0)) game.best = game.streak
     }
+    // streak booster: a longer streak multiplies the XP each quest is worth
+    const mult = boosterFor(game.streak || 0)
+    const gain = Math.round(XP_PER_QUEST * mult)
+    game.xp = (game.xp || 0) + gain
     const perfect = (daily.tasks || []).length > 0 && (daily.tasks || []).every((t) => t.done)
     const fresh = unlockBadges(perfect)
     saveGame()
+    if (mult > 1) toast(`+${gain} xp (${mult}x streak boost)`)
     fresh.forEach((b, k) => setTimeout(() => toast(`Badge unlocked: ${b.name}`), 200 + k * 900))
   }
 
@@ -686,12 +698,12 @@
       <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('')
     const statbar = `<div class="statbar">
       <div class="stat"><div class="sv">Lv ${levelFor(game.xp)}</div><div class="sl">level</div></div>
-      <div class="stat"><div class="sv">${game.streak || 0}</div><div class="sl">day streak</div></div>
+      <div class="stat"><div class="sv">${game.streak || 0}${boosterFor(game.streak || 0) > 1 ? ` <span class="boost">${boosterFor(game.streak || 0)}x</span>` : ''}</div><div class="sl">day streak</div></div>
       <div class="stat"><div class="sv">${game.best || 0}</div><div class="sl">best</div></div>
       <div class="stat"><div class="sv">${game.xp || 0}</div><div class="sl">total xp</div></div>
     </div>
     <div class="xpbar"><div class="xpfill" style="width:${xpInLevel(game.xp)}%"></div></div>
-    <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}${(game.streak || 0) >= 1 ? ` <span class="chip" data-act="share" data-kind="streak">share streak</span>` : ''}</div>`
+    <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}${nextBoostHint(game.streak || 0)}${(game.streak || 0) >= 1 ? ` <span class="chip" data-act="share" data-kind="streak">share streak</span>` : ''}</div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</div></div>
       ${statbar}
       <div class="launchgrid">${nav}</div>
