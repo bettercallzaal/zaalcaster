@@ -58,7 +58,24 @@ function loadVoiceExamples(max = 5) {
   }
 }
 
-function voicePrompt() {
+// Outcome-based learning: Zaal's own highest-engagement casts = "these worked".
+// Cached in KV for a week so we don't recompute per draft; falls back to a live
+// pull. Best-effort - returns [] if store/API unavailable.
+async function loadWinningCasts() {
+  try {
+    const { storeEnabled, kvGet, kvSet } = await import('./store.js')
+    if (storeEnabled()) {
+      const cached = await kvGet('zc:wincasts')
+      if (cached?.at && Array.isArray(cached.casts) && (Date.now() - Date.parse(cached.at) < 7 * 864e5)) return cached.casts
+    }
+    const { getTopCasts } = await import('./lib.js')
+    const casts = (await getTopCasts(8)).map((c) => c.text).filter(Boolean).slice(0, 8)
+    if (storeEnabled() && casts.length) await kvSet('zc:wincasts', { at: new Date().toISOString(), casts })
+    return casts
+  } catch { return [] }
+}
+
+function voicePrompt(winning = []) {
   const u = config.username
   const examples = loadVoiceExamples()
   const exampleBlock = examples.length
@@ -66,12 +83,17 @@ function voicePrompt() {
         .map((e) => `- them: "${e.them}"\n  ${u}: "${e.wrote}"`)
         .join('\n')}`
     : ''
+  const winBlock = winning.length
+    ? `\n\nCasts of ${u}'s that landed well with his audience (match this energy/topics, do not copy):\n${winning
+        .map((t) => `- "${t}"`)
+        .join('\n')}`
+    : ''
 
   return `You draft Farcaster replies for ${u} (@${u}). Voice rules:
 ${config.voiceRules}
 
 Ground replies in these facts when relevant (do not force them, do not list them, just be accurate):
-${config.context}${exampleBlock}`
+${config.context}${exampleBlock}${winBlock}`
 }
 
 // Render the ancestor chain for the prompt: last 4 casts, 220 chars each,
@@ -88,12 +110,12 @@ function threadBlock(item) {
   return `conversation so far (oldest first):\n${lines}\n`
 }
 
-export function buildBatchPrompt(items) {
+export function buildBatchPrompt(items, winning = []) {
   const itemsBlock = items
     .map((item, i) => `ITEM ${i + 1} (@${item.user}, ${item.type}):\n${threadBlock(item)}their message: "${item.text}"`)
     .join('\n\n')
 
-  return `${voicePrompt()}
+  return `${voicePrompt(winning)}
 
 For each item below output exactly one line in the form:
 ITEM <n>: <draft reply text or SKIP>
@@ -118,6 +140,7 @@ function parseDraftLines(output, items) {
 export async function generateDrafts(items) {
   if (!items.length) return null
   const openrouterKey = loadOpenRouterKey()
+  const winning = await loadWinningCasts() // "these worked" examples (cached)
 
   if (openrouterKey) {
     try {
@@ -129,7 +152,7 @@ export async function generateDrafts(items) {
         },
         body: JSON.stringify({
           model: 'anthropic/claude-fable-5',
-          messages: [{ role: 'user', content: buildBatchPrompt(items) }],
+          messages: [{ role: 'user', content: buildBatchPrompt(items, winning) }],
           max_tokens: 120 * items.length,
           temperature: 0.7,
         }),
@@ -145,7 +168,7 @@ export async function generateDrafts(items) {
     }
   }
 
-  const claude = spawnSync('claude', ['-p', buildBatchPrompt(items)], {
+  const claude = spawnSync('claude', ['-p', buildBatchPrompt(items, winning)], {
     encoding: 'utf8',
     timeout: 120000,
   })

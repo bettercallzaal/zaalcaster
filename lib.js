@@ -300,6 +300,20 @@ export async function getConversationSummary(hashOrUrl) {
   return response?.summary?.text || null
 }
 
+// Zaal's own highest-engagement casts - the "these worked" signal for voice
+// learning (replies/recasts weigh more than likes - they spread you).
+export async function getTopCasts(limit = 8) {
+  const res = await getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] }))
+  return (res.casts || [])
+    .map((c) => ({
+      text: (c.text || '').replace(/\s+/g, ' ').trim(),
+      score: (c.reactions?.likes_count || 0) + 2 * (c.reactions?.recasts_count || 0) + 1.5 * (c.replies?.count || 0),
+    }))
+    .filter((c) => c.text.length > 12)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+}
+
 // A user's most-engaged (popular) casts - the highlight reel for a profile.
 export async function getUserPopular(fid) {
   const response = await fetchNeynar(`/farcaster/feed/user/popular?fid=${fid}`)
