@@ -9,21 +9,35 @@ function score(c) {
   return (c.reactions?.likes_count || 0) + 2 * (c.reactions?.recasts_count || 0) + 1.5 * (c.replies?.count || 0)
 }
 
-// pull actor usernames out of a notification, whatever its shape
+// pull actor users out of a notification, whatever its shape
 function actors(n) {
   const out = []
-  if (n.cast?.author?.username) out.push(n.cast.author.username)
-  for (const r of n.reactions || []) if (r.user?.username) out.push(r.user.username)
-  for (const f of n.follows || []) if (f.user?.username) out.push(f.user.username)
+  if (n.cast?.author?.username) out.push(n.cast.author)
+  for (const r of n.reactions || []) if (r.user?.username) out.push(r.user)
+  for (const f of n.follows || []) if (f.user?.username) out.push(f.user)
   return out
+}
+
+// pull several pages of notifications so "who engages you" is deep, not just
+// the last 25. Caps at 4 pages (100 notifs) to stay fast.
+async function recentNotifications(pages = 4) {
+  let cursor = null
+  const all = []
+  for (let p = 0; p < pages; p++) {
+    const res = await getNotifications({ limit: 25, cursor }).catch(() => ({ notifications: [] }))
+    all.push(...(res.notifications || []))
+    cursor = res.next?.cursor
+    if (!cursor) break
+  }
+  return all
 }
 
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   try {
-    const [castsRes, notifsRes, me, suggestions] = await Promise.all([
+    const [castsRes, notifs, me, suggestions] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
-      getNotifications({ limit: 25 }).catch(() => ({ notifications: [] })),
+      recentNotifications(4),
       getUser(process.env.FID || '19640').catch(() => null),
       getFollowSuggestions({ limit: 12 }).catch(() => []),
     ])
@@ -39,9 +53,13 @@ export default async function handler(req, res) {
       .slice(0, 10)
 
     const counts = new Map()
-    for (const n of notifsRes.notifications || []) for (const u of actors(n)) counts.set(u, (counts.get(u) || 0) + 1)
-    const topEngagers = [...counts.entries()].filter(([u]) => u && u !== 'zaal')
-      .sort((a, b) => b[1] - a[1]).slice(0, 10).map(([username, n]) => ({ username, n }))
+    for (const n of notifs) for (const u of actors(n)) {
+      if (!u.username || u.username === 'zaal') continue
+      const cur = counts.get(u.username) || { username: u.username, fid: u.fid || null, pfp: u.pfp_url || null, n: 0 }
+      cur.n++; counts.set(u.username, cur)
+    }
+    const topEngagers = [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 12)
+      .map((e, i) => ({ ...e, rank: i + 1 }))
 
     const suggest = (suggestions || []).map((u) => ({
       username: u.username, display: u.display_name || u.username, pfp: u.pfp_url || null,
