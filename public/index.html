@@ -22,8 +22,9 @@
     --live: #D85A30; --good: #7ee0a0;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { margin: 0; background: var(--bg); color: var(--text);
+  body { margin: 0; background: var(--bg); color: var(--text); min-height: 100dvh; display: flex; flex-direction: column;
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { flex: 1 0 auto; }
   header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
     gap: 10px; padding: 12px 16px; background: rgba(12,12,18,.86); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
   header h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .3px; }
@@ -150,6 +151,8 @@
   .reply .cc, .compose .cc { font-size: 12px; color: var(--dim); }
   .reply .note, .compose .note { font-size: 12px; color: #ffcf9a; }
   .sent { margin-top: 10px; font-size: 13px; color: var(--good); }
+  .sentcard { border: 1px solid var(--border); border-radius: 16px; padding: 24px 20px; text-align: center; background: linear-gradient(180deg, #12160f, #0e0e15); max-width: 420px; margin: 24px auto 0; }
+  .sentcard .senttitle { font-size: 20px; font-weight: 800; color: var(--good); margin-bottom: 8px; }
   .sent a { color: var(--good); }
   .empty, .err { text-align: center; color: var(--dim); padding: 44px 16px; }
   .err { color: #ff8a8a; }
@@ -204,6 +207,11 @@
   .deckcol .dc { max-height: calc(100vh - 180px); overflow-y: auto; padding-top: 8px; }
   @media (min-width: 760px) { .deckcol { flex: 1 1 0; max-width: none; } }
   footer { text-align: center; color: #4a4a58; font-size: 11px; padding: 6px 0 30px; }
+  #fab { position: fixed; right: 16px; bottom: 22px; z-index: 40; background: var(--accent2); color: #fff; border: none; border-radius: 22px; padding: 10px 16px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(109,74,255,.4); }
+  @media (max-width: 720px) { #fab { bottom: calc(76px + env(safe-area-inset-bottom, 0)); right: 12px; padding: 9px 14px; } }
+  #fbmodal { position: fixed; inset: 0; z-index: 10001; background: rgba(8,8,14,.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  #fbmodal .fbcard { background: linear-gradient(180deg, #17122b, #0e0e15); border: 1px solid var(--accent); border-radius: 18px; padding: 20px; max-width: 420px; width: 100%; }
+  #fbmodal textarea { width: 100%; min-height: 90px; margin-top: 10px; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font: inherit; font-size: 15px; resize: vertical; }
 </style>
 </head>
 <body>
@@ -250,6 +258,7 @@
   </div>
 </div>
 <footer>your farcaster - reads are free, nothing is sent without your confirm</footer>
+<button id="fab" title="leave feedback">feedback</button>
 
 <script>
   const main = document.getElementById('main')
@@ -287,20 +296,21 @@
   let savedSearches = lsGet('zc_searches', [])         // [{q, channel}]
   let statsHistory = lsGet('zc_statshist', {})         // day -> {followers, score}
   let savedSnaps = lsGet('zc_snaps', [])               // [{name, doc}] custom snap templates
+  let feedback = lsGet('zc_feedback', [])              // [{text, tab, at}] in-app notes for review
   let syncEnabled = false                             // server store on? (set at boot)
 
   // one persist path: write localStorage (offline cache) + push to the server
   // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
   let pushT = null
   function persist() {
-    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory); lsSet('zc_snaps', savedSnaps)
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory); lsSet('zc_snaps', savedSnaps); lsSet('zc_feedback', feedback)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
     if (typeof game !== 'undefined') lsSet('zc_game', game)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, savedSnaps, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, savedSnaps, feedback, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -733,8 +743,11 @@
   }
   function renderCompose() {
     if (compose.sentLink) {
-      return `<div class="compose"><div class="sent" style="font-size:15px">posted - <a href="${esc(compose.sentLink)}" target="_blank" rel="noopener">${esc(compose.sentLink)}</a></div>
-        <div class="btns" style="margin-top:12px"><button class="ibtn" data-act="composenew">new cast</button></div></div>`
+      return `<div class="compose"><div class="sentcard">
+        <div class="senttitle">posted</div>
+        <a class="open" href="${esc(compose.sentLink)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(compose.sentLink)}</a>
+        <div class="btns" style="margin-top:16px;justify-content:center"><button class="ibtn primary" data-act="composenew">new cast</button><a class="ibtn" href="${esc(compose.sentLink)}" target="_blank" rel="noopener" style="text-decoration:none">view on farcaster</a></div>
+      </div></div>`
     }
     const banner = postingBanner()
     const chSel = `<select id="composeChannel">
@@ -991,7 +1004,7 @@
     </div>
     <div class="xpbar"><div class="xpfill" style="width:${xpInLevel(game.xp)}%"></div></div>
     <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}${nextBoostHint(game.streak || 0)}${(game.streak || 0) >= 1 ? ` <span class="chip" data-act="share" data-kind="streak">share streak</span>` : ''}</div>`
-    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today <span class="chip" data-act="editdaily" style="float:right">${editDaily ? 'done' : 'edit'}</span></div></div>
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       ${statbar}
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your brands</b></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
@@ -1473,6 +1486,7 @@
         if (Array.isArray(s.savedSearches)) { savedSearches = s.savedSearches; lsSet('zc_searches', savedSearches) }
         if (s.statsHistory && typeof s.statsHistory === 'object') { statsHistory = s.statsHistory; lsSet('zc_statshist', statsHistory) }
         if (Array.isArray(s.savedSnaps)) { savedSnaps = s.savedSnaps; lsSet('zc_snaps', savedSnaps) }
+        if (Array.isArray(s.feedback)) { feedback = s.feedback; lsSet('zc_feedback', feedback) }
         if (s.daily && typeof s.daily === 'object') {
           daily = s.daily
           daily.tasks = daily.tasks || []; daily.apps = daily.apps || []
@@ -1597,6 +1611,27 @@
     document.getElementById('wskip').addEventListener('click', () => { localStorage.setItem('zc_welcomed', '1'); el.remove() })
   }
   window.addEventListener('fc-ready', maybeWelcome)
+
+  // In-app feedback: jot a note from any tab; it syncs and I read it from the
+  // terminal (node bin/feedback.js). Captures the current tab + time.
+  function openFeedback() {
+    const el = document.createElement('div'); el.id = 'fbmodal'
+    el.innerHTML = `<div class="fbcard">
+      <div style="font-weight:700;font-size:16px">feedback / notes</div>
+      <div class="ub">on the "${esc(tab)}" tab - bugs, ideas, anything. these get read back on the dev side.</div>
+      <textarea id="fbtext" placeholder="what's up..."></textarea>
+      <div class="btns" style="margin-top:12px"><button class="ibtn primary" id="fbsend">log it</button><button class="ibtn" id="fbclose">close</button>${feedback.length ? `<span class="ub" style="align-self:center">${feedback.length} logged</span>` : ''}</div>
+    </div>`
+    document.body.appendChild(el)
+    const ta = document.getElementById('fbtext'); if (ta) ta.focus()
+    el.addEventListener('click', (e) => { if (e.target === el) el.remove() })
+    document.getElementById('fbclose').addEventListener('click', () => el.remove())
+    document.getElementById('fbsend').addEventListener('click', () => {
+      const t = (document.getElementById('fbtext').value || '').trim(); if (!t) { el.remove(); return }
+      feedback.unshift({ text: t, tab, at: new Date().toISOString() }); feedback = feedback.slice(0, 200); persist(); el.remove(); toast('feedback logged')
+    })
+  }
+  const fabEl = document.getElementById('fab'); if (fabEl) fabEl.addEventListener('click', openFeedback)
 
   // boot: check whether a password is required before loading anything
   ;(async () => {
