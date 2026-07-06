@@ -27,6 +27,7 @@ export default async function handler(req, res) {
         appName: config.appName,
         username: config.username,
         homeChannels: config.homeChannels,
+        quickReplies: config.quickReplies || [],
         daily: config.daily,
       },
     })
