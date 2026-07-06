@@ -180,6 +180,29 @@ async function callModel(prompt, maxTokens) {
   return null
 }
 
+// Due-diligence read on a Farcaster user: who they are + alignment with the
+// user's world (config.context) + how to engage. Returns a short brief or null.
+export async function researchUser({ username, display, bio, casts, followers, score, youFollow, followsYou } = {}) {
+  const block = (casts || []).slice(0, 20)
+    .map((c) => `"${(c.text || '').replace(/\s+/g, ' ').slice(0, 200)}"`).filter((s) => s.length > 3).join('\n')
+  const rel = [youFollow ? 'you follow them' : '', followsYou ? 'they follow you' : ''].filter(Boolean).join(', ')
+  const prompt = `You are helping ${config.username} (@${config.username}) size up @${username} on Farcaster - who they are and whether they align with his world.
+
+${config.username}'s world and values:
+${config.context}
+
+The person: @${username}${display ? ` (${display})` : ''}${followers != null ? `, ${followers} followers` : ''}${score != null ? `, neynar score ${score}` : ''}${rel ? `, ${rel}` : ''}.
+Bio: ${bio || '(none)'}
+Recent casts:
+${block || '(none)'}
+
+Write a tight due-diligence read for ${config.username}. Plain text, no emojis, no em dashes, lowercase ok, under 90 words:
+- who they are + what they focus on (1-2 lines)
+- alignment with his world (artists / onchain / ZAO / WaveWarZ / building): rate high, medium, or low, and why in one line
+- one concrete way to engage them if aligned, or "probably skip" if not`
+  return callModel(prompt, 400)
+}
+
 export async function digestFeed(casts) {
   if (!casts.length) return null
   const block = casts.slice(0, 40)

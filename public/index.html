@@ -940,6 +940,19 @@
       document.getElementById('obody').innerHTML = head + `<div class="subbar"><b style="color:#8a8a99;font-size:13px">/${esc(b.channel)} feed</b></div>` + casts
     } catch (e) { document.getElementById('obody').innerHTML = head + `<div class="err">${esc(e.message)}</div>` }
   }
+  let curProfile = null
+  async function runResearch() {
+    if (!curProfile) return
+    const out = document.getElementById('researchOut'); if (!out) return
+    out.innerHTML = '<div class="loading">reading their casts + checking alignment...</div>'
+    try {
+      const r = await fetch('/api/digest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(curProfile) })
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'research failed')
+      out.innerHTML = d.available && d.brief
+        ? `<div class="digest" style="margin-top:8px"><div class="lab">research + alignment</div><div class="t">${esc(d.brief)}</div></div>`
+        : '<div class="ub" style="margin-top:8px">research needs OPENROUTER_API_KEY set on the server</div>'
+    } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
   async function openProfile(user) {
     openOverlay('@' + user, '<div class="loading">loading profile...</div>')
     try {
@@ -956,7 +969,9 @@
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
         ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
         ${lists.length ? `<div class="ps" style="margin-top:6px">lists: ${lists.map((l) => `<span class="chip ${(l.fids || []).includes(u.fid) ? 'on' : ''}" data-act="addtolist" data-list="${esc(l.id)}" data-fid="${u.fid}" data-uname="${esc(u.username)}">${esc(l.name)}</span>`).join(' ')}</div>` : ''}
-        <a class="open" href="${esc(u.link)}" target="_blank" rel="noopener">open on farcaster</a></div></div>`
+        <div class="subbar" style="padding-left:0"><span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a></div>
+        <div id="researchOut"></div></div></div>`
+      curProfile = { username: u.username, display: u.display, bio: u.bio, followers: u.followers, score: u.score, youFollow: u.youFollow, followsYou: u.followsYou, casts: (d.casts || []).map((c) => ({ text: c.text })) }
       document.getElementById('obody').innerHTML = head + d.casts.map(castCard).join('')
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
@@ -969,6 +984,8 @@
     }
     const bc = e.target.closest('[data-act="brandchan"]')
     if (bc) { closeOverlay(); st.channels.id = bc.dataset.chan; switchTab('channels'); loadChannels(); return }
+    const rz = e.target.closest('[data-act="research"]')
+    if (rz) { runResearch(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const btn = e.target.closest('button[data-act]'); if (!btn) return
