@@ -778,7 +778,7 @@
     const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
     const nParts = compose.thread ? splitThread(compose.text).length : 1
     return `<div class="compose">${banner}${quotePreview()}
-      <div class="subbar" style="padding:0 0 6px"><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span><span class="chip" data-act="snapbuild">+ snap</span>${compose.embedUrl && compose.embedUrl.includes('zlank.online') ? '<span class="chip on" data-act="snapclear">snap attached x</span>' : ''}${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
+      <div class="subbar" style="padding:0 0 6px"><span class="chip" data-act="composemic" id="composeMic">mic</span><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span><span class="chip" data-act="snapbuild">+ snap</span>${compose.embedUrl && compose.embedUrl.includes('zlank.online') ? '<span class="chip on" data-act="snapclear">snap attached x</span>' : ''}${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
       <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
       ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"><button class="ibtn" data-act="uploadpick">${compose.uploading ? 'uploading...' : 'upload'}</button></div><input type="file" id="composeFile" accept="image/*" style="display:none">`}
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
@@ -1448,6 +1448,7 @@
       scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
     }
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
+    if (act === 'composemic') { dictate('composeText', btn); return }
     if (act === 'snapbuild') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; openSnapBuilder(); return }
     if (act === 'snapclear') { compose.embedUrl = ''; render(); return }
     if (act === 'uploadpick') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; const f = document.getElementById('composeFile'); if (f) f.click(); return }
@@ -1672,6 +1673,30 @@
     try { fbRec.start(); btn.textContent = 'stop'; btn.classList.add('on'); toast('listening - speak now') } catch { fbRec = null }
   }
   const fabEl = document.getElementById('fab'); if (fabEl) fabEl.addEventListener('click', openFeedback)
+
+  // shared voice-to-text: dictate into a textarea (composer, etc). Returns text,
+  // user reviews + posts - never auto-sends. Chrome/Safari (Web Speech API).
+  let voiceRec = null
+  function dictate(taId, btn) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) { toast('voice input needs Chrome or Safari'); return }
+    if (voiceRec) { try { voiceRec.stop() } catch {}; return }
+    const ta = document.getElementById(taId); if (!ta) return
+    const base = ta.value ? ta.value.trim() + ' ' : ''
+    let finalText = ''
+    voiceRec = new SR(); voiceRec.lang = 'en-US'; voiceRec.interimResults = true; voiceRec.continuous = true
+    voiceRec.onresult = (e) => {
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + ' '; else interim += r[0].transcript }
+      const t = document.getElementById(taId); if (!t) return
+      t.value = base + finalText + interim
+      if (taId === 'composeText') { compose.text = t.value; const cc = document.getElementById('composeCc'); if (cc) cc.textContent = t.value.length }
+    }
+    const reset = () => { voiceRec = null; const b = document.getElementById(btn.id || 'composeMic'); if (b) { b.textContent = 'mic'; b.classList.remove('on') } }
+    voiceRec.onend = reset
+    voiceRec.onerror = () => { reset(); toast('mic error - check permissions') }
+    try { voiceRec.start(); btn.textContent = 'stop'; btn.classList.add('on'); toast('listening - speak your cast') } catch { voiceRec = null }
+  }
 
   // boot: check whether a password is required before loading anything
   ;(async () => {
