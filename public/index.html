@@ -762,9 +762,14 @@
       if (!r.ok) throw new Error(d.error || 'profile failed')
       const u = d.user
       const rel = [u.youFollow ? 'you follow' : '', u.followsYou ? 'follows you' : ''].filter(Boolean).join(' - ')
+      let mutual = ''
+      if (u.mutualCount > 0 && (u.mutuals || []).length) {
+        const extra = u.mutualCount - u.mutuals.length
+        mutual = `followed by ${u.mutuals.map((m) => '@' + m).join(', ')}${extra > 0 ? ` + ${extra} more` : ''} you follow`
+      }
       const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
-        ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
+        ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
         <a class="open" href="${esc(u.link)}" target="_blank" rel="noopener">open on farcaster</a></div></div>`
       document.getElementById('obody').innerHTML = head + d.casts.map(castCard).join('')
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
