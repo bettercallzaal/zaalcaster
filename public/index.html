@@ -251,20 +251,21 @@
   let muted = lsGet('zc_muted', [])                   // array of lowercased words
   let scheduled = lsGet('zc_scheduled', [])           // [{id,text,channelId,quoteHash,quoteFid,at}]
   let lists = lsGet('zc_lists', [])                    // [{id,name,fids:[],members:[{fid,username}]}]
+  let savedSearches = lsGet('zc_searches', [])         // [{q, channel}]
   let syncEnabled = false                             // server store on? (set at boot)
 
   // one persist path: write localStorage (offline cache) + push to the server
   // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
   let pushT = null
   function persist() {
-    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists)
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
     if (typeof game !== 'undefined') lsSet('zc_game', game)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -392,9 +393,12 @@
   }
   function renderSearch() {
     const chips = ['', ...HOME_CHANNELS].map((c) => `<span class="chip ${st.search.channel === c ? 'on' : ''}" data-searchchan="${esc(c)}">${c ? '/' + esc(c) : 'all'}</span>`).join(' ')
+    const isSaved = savedSearches.some((s) => s.q === st.search.q.trim() && (s.channel || '') === st.search.channel)
+    const saveBtn = st.search.q.trim() ? `<span class="chip" data-act="savesearch">${isSaved ? 'saved' : '+ save search'}</span>` : ''
+    const saved = savedSearches.length ? `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">saved:</span> ${savedSearches.map((s, i) => `<span class="chip" data-savedsearch="${i}">${esc(s.q)}${s.channel ? ' /' + esc(s.channel) : ''} <span data-act="rmsearch" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')}</div>` : ''
     const bar = `<div class="searchbar"><input id="searchInput" placeholder="search people + casts..." value="${esc(st.search.q)}">
       <button class="ibtn primary" data-act="dosearch">go</button></div>
-      <div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">in:</span> ${chips}</div>`
+      <div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">in:</span> ${chips} ${saveBtn}</div>${saved}`
     let body = ''
     if (st.search.searching) body = '<div class="loading">searching...</div>'
     else if (st.search.err) body = `<div class="err">${esc(st.search.err)}</div>`
@@ -964,6 +968,7 @@
     const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
     const lb = e.target.closest('[data-list]'); if (lb && !lb.dataset.act) { st.feed.type = 'list'; st.feed.listId = lb.dataset.list; loadFeed(); return }
     const sc = e.target.closest('[data-searchchan]'); if (sc) { st.search.channel = sc.dataset.searchchan; if (st.search.q.trim()) runSearch(); else render(); return }
+    const ss = e.target.closest('[data-savedsearch]'); if (ss && !e.target.closest('[data-act="rmsearch"]')) { const s = savedSearches[+ss.dataset.savedsearch]; if (s) { st.search.q = s.q; st.search.channel = s.channel || ''; runSearch() } return }
     const ou = e.target.closest('[data-openurl]'); if (ou) { window.open(ou.dataset.openurl, '_blank', 'noopener'); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
     // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
@@ -1010,6 +1015,13 @@
       toast('draft ready - review + post')
       return
     }
+    if (act === 'savesearch') {
+      const q = st.search.q.trim(); if (!q) return
+      const exists = savedSearches.some((s) => s.q === q && (s.channel || '') === st.search.channel)
+      if (!exists) { savedSearches.unshift({ q, channel: st.search.channel || '' }); savedSearches = savedSearches.slice(0, 12); persist(); toast('search saved'); render() }
+      return
+    }
+    if (act === 'rmsearch') { savedSearches.splice(+btn.dataset.i, 1); persist(); render(); return }
     if (act === 'weekgoal') {
       const v = parseInt(window.prompt('weekly quest goal?', String(game.weekGoal || 21)) || '', 10)
       if (v && v > 0) { game.weekGoal = v; saveGame(); render() }
@@ -1142,6 +1154,7 @@
         if (Array.isArray(s.muted)) { muted = s.muted; lsSet('zc_muted', muted) }
         if (Array.isArray(s.scheduled)) { scheduled = s.scheduled; lsSet('zc_scheduled', scheduled) }
         if (Array.isArray(s.lists)) { lists = s.lists; lsSet('zc_lists', lists) }
+        if (Array.isArray(s.savedSearches)) { savedSearches = s.savedSearches; lsSet('zc_searches', savedSearches) }
         if (s.daily && typeof s.daily === 'object') {
           daily = s.daily
           if (daily.date !== todayStr()) { daily.date = todayStr(); (daily.tasks || []).forEach((x) => (x.done = false)) }
