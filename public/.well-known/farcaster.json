@@ -1,0 +1,18 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "frame": {
+    "version": "1",
+    "name": "zaalcaster",
+    "iconUrl": "https://z.thezao.xyz/icon.svg",
+    "homeUrl": "https://z.thezao.xyz",
+    "splashImageUrl": "https://z.thezao.xyz/icon.svg",
+    "splashBackgroundColor": "#0c0c12",
+    "subtitle": "personal farcaster client",
+    "description": "A gamified personal Farcaster client - feed, inbox, channels, search, compose, grow.",
+    "primaryCategory": "social"
+  }
+}

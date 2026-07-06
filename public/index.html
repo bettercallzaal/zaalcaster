@@ -11,6 +11,9 @@
 <meta name="apple-mobile-web-app-title" content="zaalcaster" />
 <link rel="apple-touch-icon" href="/icon.svg" />
 <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<!-- Farcaster Mini App embed: makes a shared zaalcaster link render as a launchable mini app in-feed. Edit the domain if you fork. -->
+<meta name="fc:miniapp" content='{"version":"1","imageUrl":"https://z.thezao.xyz/icon.svg","button":{"title":"Open zaalcaster","action":{"type":"launch_miniapp","name":"zaalcaster","url":"https://z.thezao.xyz","splashImageUrl":"https://z.thezao.xyz/icon.svg","splashBackgroundColor":"#0c0c12"}}}' />
+<meta name="fc:frame" content='{"version":"1","imageUrl":"https://z.thezao.xyz/icon.svg","button":{"title":"Open zaalcaster","action":{"type":"launch_frame","name":"zaalcaster","url":"https://z.thezao.xyz","splashImageUrl":"https://z.thezao.xyz/icon.svg","splashBackgroundColor":"#0c0c12"}}}' />
 <style>
   :root {
     color-scheme: dark;
@@ -1382,6 +1385,16 @@
       else startApp()
     } catch { startApp() } // auth endpoint unreachable (e.g. gate off) - proceed
   })()
+</script>
+<!-- Farcaster Mini App SDK: when opened inside a Farcaster client, hide the splash
+     once loaded. Harmless (no-op) in a normal browser. Loaded from CDN. -->
+<script type="module">
+  try {
+    const { sdk } = await import('https://esm.sh/@farcaster/miniapp-sdk')
+    window.__fcsdk = sdk
+    // give the app a tick to paint, then tell the host we are ready
+    setTimeout(() => { try { sdk.actions.ready() } catch {} }, 300)
+  } catch { /* not in a mini-app host, or CDN blocked - web app works as normal */ }
 </script>
 </body>
 </html>
