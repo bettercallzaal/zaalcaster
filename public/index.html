@@ -58,6 +58,14 @@
   .xpbar { height: 8px; background: #1c1c28; border-radius: 6px; overflow: hidden; }
   .xpfill { height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); transition: width .3s; }
   .xphint { color: #8a8a99; font-size: 12px; margin: 4px 0 2px; text-align: right; }
+  .badges { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .badge { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface); opacity: .5; }
+  .badge.on { opacity: 1; border-color: var(--accent); background: linear-gradient(180deg, rgba(133,93,205,.14), transparent); }
+  .badge .bn { font-weight: 600; font-size: 14px; }
+  .badge .bd { color: #8a8a99; font-size: 12px; margin-top: 2px; }
+  .badge.on .bd { color: var(--accent); }
+  .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(12px); background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; opacity: 0; transition: opacity .25s, transform .25s; z-index: 9999; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .card:hover { border-color: #2f2f3d; }
   .card .top { display: flex; gap: 10px; align-items: flex-start; }
   .pfp { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); object-fit: cover; flex: none; }
@@ -573,6 +581,40 @@
   const levelFor = (xp) => Math.floor((xp || 0) / 100) + 1
   const xpInLevel = (xp) => (xp || 0) % 100
   const saveGame = () => { lsSet('zc_game', game); persist() }
+  function toast(msg) {
+    const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg
+    document.body.appendChild(el)
+    requestAnimationFrame(() => el.classList.add('show'))
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300) }, 2200)
+  }
+  const BADGES = [
+    { id: 'first', name: 'First Quest', desc: 'complete a quest' },
+    { id: 'streak3', name: 'On Fire', desc: '3-day streak' },
+    { id: 'streak7', name: 'Week Strong', desc: '7-day streak' },
+    { id: 'streak30', name: 'Unstoppable', desc: '30-day streak' },
+    { id: 'perfect', name: 'Perfect Day', desc: 'all quests in one day' },
+    { id: 'lv5', name: 'Level 5', desc: 'reach level 5' },
+    { id: 'lv10', name: 'Level 10', desc: 'reach level 10' },
+    { id: 'xp1k', name: 'Grinder', desc: '1000 total XP' },
+  ]
+  const badgeMet = (id, perfect) => {
+    const g = game
+    if (id === 'first') return (g.xp || 0) >= XP_PER_QUEST
+    if (id === 'streak3') return (g.best || 0) >= 3
+    if (id === 'streak7') return (g.best || 0) >= 7
+    if (id === 'streak30') return (g.best || 0) >= 30
+    if (id === 'perfect') return !!perfect
+    if (id === 'lv5') return levelFor(g.xp) >= 5
+    if (id === 'lv10') return levelFor(g.xp) >= 10
+    if (id === 'xp1k') return (g.xp || 0) >= 1000
+    return false
+  }
+  // returns newly-unlocked badge objects (for a toast)
+  function unlockBadges(perfect) {
+    const fresh = []
+    for (const b of BADGES) if (!game.badges.includes(b.id) && badgeMet(b.id, perfect)) { game.badges.push(b.id); fresh.push(b) }
+    return fresh
+  }
   function awardQuest(i) {
     const day = todayStr()
     const done = new Set(game.awarded[day] || [])
@@ -584,7 +626,10 @@
       game.lastDay = day
       if (game.streak > (game.best || 0)) game.best = game.streak
     }
+    const perfect = (daily.tasks || []).length > 0 && (daily.tasks || []).every((t) => t.done)
+    const fresh = unlockBadges(perfect)
     saveGame()
+    fresh.forEach((b, k) => setTimeout(() => toast(`Badge unlocked: ${b.name}`), 200 + k * 900))
   }
 
   function renderDaily() {
@@ -624,6 +669,8 @@
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
       <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
+      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">badges (${game.badges.length}/${BADGES.length})</b></div>
+      <div class="badges">${BADGES.map((b) => { const on = game.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><div class="bn">${esc(b.name)}</div><div class="bd">${on ? 'unlocked' : esc(b.desc)}</div></div>` }).join('')}</div>
       ${sched}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
       <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
