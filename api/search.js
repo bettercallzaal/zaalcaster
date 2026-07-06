@@ -20,10 +20,11 @@ export default async function handler(req, res) {
   try {
     const q = (req.query.q || '').trim()
     if (!q) { res.status(400).json({ error: 'empty query' }); return }
+    const channel = (req.query.channel || '').replace(/[^a-zA-Z0-9_-]/g, '') || null
 
     const [users, casts] = await Promise.all([
       searchUsers(q, { limit: 8 }).catch(() => ({ result: { users: [] } })),
-      searchCasts(q, { limit: 20 }).catch(() => ({ result: { casts: [] } })),
+      searchCasts(q, { limit: 20, channelId: channel }).catch(() => ({ result: { casts: [] } })),
     ])
     const userList = (users.result?.users || users.users || []).map((u) => ({
       username: u.username, display: u.display_name || u.username, pfp: u.pfp_url || null, fid: u.fid,
@@ -32,7 +33,7 @@ export default async function handler(req, res) {
     const castList = (casts.result?.casts || casts.casts || []).map(compactCast)
 
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200).json({ q, users: userList, casts: castList })
+    res.status(200).json({ q, channel, users: userList, casts: castList })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'search failed' })
   }

@@ -227,7 +227,7 @@
     feed: { type: 'following', casts: [], loaded: false, digest: null, digesting: false },
     inbox: { items: [], loaded: false, showAll: false, priority: false },
     channels: { id: 'zao', casts: [], loaded: false, trending: [] },
-    search: { q: '', users: [], casts: [], loaded: true, searching: false },
+    search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null },
   }
 
@@ -374,15 +374,18 @@
     const q = st.search.q.trim(); if (!q) return
     st.search.searching = true; render()
     try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`); const d = await r.json()
+      const cq = st.search.channel ? '&channel=' + encodeURIComponent(st.search.channel) : ''
+      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}${cq}`); const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'search failed')
       st.search.users = d.users; st.search.casts = d.casts; st.search.err = null
     } catch (e) { st.search.err = e.message }
     st.search.searching = false; render()
   }
   function renderSearch() {
+    const chips = ['', ...HOME_CHANNELS].map((c) => `<span class="chip ${st.search.channel === c ? 'on' : ''}" data-searchchan="${esc(c)}">${c ? '/' + esc(c) : 'all'}</span>`).join(' ')
     const bar = `<div class="searchbar"><input id="searchInput" placeholder="search people + casts..." value="${esc(st.search.q)}">
-      <button class="ibtn primary" data-act="dosearch">go</button></div>`
+      <button class="ibtn primary" data-act="dosearch">go</button></div>
+      <div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">in:</span> ${chips}</div>`
     let body = ''
     if (st.search.searching) body = '<div class="loading">searching...</div>'
     else if (st.search.err) body = `<div class="err">${esc(st.search.err)}</div>`
@@ -902,6 +905,7 @@
   main.addEventListener('click', async (e) => {
     const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
     const lb = e.target.closest('[data-list]'); if (lb && !lb.dataset.act) { st.feed.type = 'list'; st.feed.listId = lb.dataset.list; loadFeed(); return }
+    const sc = e.target.closest('[data-searchchan]'); if (sc) { st.search.channel = sc.dataset.searchchan; if (st.search.q.trim()) runSearch(); else render(); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
     // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
     const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
