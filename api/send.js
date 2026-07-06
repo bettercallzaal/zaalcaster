@@ -56,6 +56,7 @@ export default async function handler(req, res) {
     const parentHash = typeof body.parentHash === 'string' && body.parentHash ? body.parentHash : null
     const parentFid = body.parentFid ?? null
     const channelId = typeof body.channelId === 'string' && body.channelId ? body.channelId : null
+    const embedUrl = typeof body.embedUrl === 'string' && /^https?:\/\//.test(body.embedUrl) ? body.embedUrl : null
     const quoteHash = typeof body.quoteHash === 'string' && body.quoteHash ? body.quoteHash : null
     const quoteFid = body.quoteFid ?? null
 
@@ -63,7 +64,7 @@ export default async function handler(req, res) {
     if (text.length > 1024) { res.status(400).json({ error: 'text too long' }); return }
 
     // parentHash -> reply; quoteHash -> quote cast; else top-level (Compose)
-    const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid })
+    const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid, embedUrl })
     const cast = response.cast
     res.status(200).json({
       ok: true,

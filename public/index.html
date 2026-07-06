@@ -543,7 +543,7 @@
   }
 
   // ================= COMPOSE =================
-  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null, thread: false, parts: [] }
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null, thread: false, parts: [], embedUrl: '' }
   const splitThread = (t) => String(t || '').split(/\n-{3,}\n/).map((s) => s.trim()).filter(Boolean)
   function quotePreview() {
     if (!compose.quote) return ''
@@ -573,7 +573,8 @@
         ? compose.parts.map((p, i) => `<div class="urow" style="cursor:default"><span class="lbrank">${i + 1}</span><div style="flex:1">${esc(p)}</div></div>`).join('')
         : `<textarea readonly>${esc(compose.text)}</textarea>`
       const what = (compose.thread && compose.parts.length > 1) ? `thread of ${compose.parts.length} casts` : (compose.quote ? 'quote-cast' : 'post')
-      return `<div class="compose">${banner}${quotePreview()}${preview}
+      const embedPrev = (!compose.thread && compose.embedUrl) ? `<div class="embed">${/\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(compose.embedUrl) ? `<img class="cimg" src="${esc(compose.embedUrl)}" alt="">` : `<a href="${esc(compose.embedUrl)}" target="_blank" rel="noopener">${esc(compose.embedUrl)}</a>`}</div>` : ''
+      return `<div class="compose">${banner}${quotePreview()}${preview}${embedPrev}
         <div class="btns"><span class="note">${what} as @${esc(ME)}${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
           <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
           <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
@@ -588,6 +589,7 @@
     return `<div class="compose">${banner}${quotePreview()}
       <div class="subbar" style="padding:0 0 6px"><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span>${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
       <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
+      ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"></div>`}
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
       <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
         <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
@@ -1237,7 +1239,7 @@
     }
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
     if (act === 'togglethread') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; compose.thread = !compose.thread; render(); return }
-    if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; if (!compose.text) return; if (compose.thread) compose.parts = splitThread(compose.text); compose.armed = true; render(); return }
+    if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value.trim(); if (!compose.text) return; if (compose.thread) compose.parts = splitThread(compose.text); compose.armed = true; render(); return }
     if (act === 'composecancel') { compose.armed = false; render(); return }
     if (act === 'composeconfirm') {
       if (compose.sending) return; compose.sending = true; render()
@@ -1245,13 +1247,14 @@
         const isThread = compose.thread && compose.parts.length > 1
         const body = isThread ? { casts: compose.parts, channelId: compose.channel || null } : { text: compose.text, channelId: compose.channel || null }
         if (!isThread && compose.quote) { body.quoteHash = compose.quote.hash; body.quoteFid = compose.quote.fid }
+        if (!isThread && compose.embedUrl) body.embedUrl = compose.embedUrl
         const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
-        compose.sentLink = d.link; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []
+        compose.sentLink = d.link; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []; compose.embedUrl = ''
       } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
       render(); return
     }
-    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.armed = false; compose.quote = null; render(); return }
+    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.armed = false; compose.quote = null; compose.embedUrl = ''; compose.thread = false; compose.parts = []; render(); return }
   })
 
   // ---- filters overlay: muted keywords ----
