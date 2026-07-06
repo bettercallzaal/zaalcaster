@@ -561,8 +561,11 @@
     if (!st.grow.loaded) return '<div class="loading">loading your stats...</div>'
     if (st.grow.err) return `<div class="err">${esc(st.grow.err)}</div>`
     const d = st.grow.data
+    const mineKeys = ['zabal', 'zao', 'wavewarz']
+    const myEmpire = (st.grow.empires || []).find((e) => mineKeys.includes((e.symbol || '').toLowerCase()) || mineKeys.includes((e.name || '').toLowerCase()) || (e.website || '').includes('zabal') || (e.warpcast || '').includes('/' + ME))
+    const empLine = myEmpire ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(myEmpire.name)} empire - rank <b>${myEmpire.rank ?? '?'}</b>${myEmpire.treasury ? ` - ${Math.round(myEmpire.treasury)} treasury` : ''}</div>` : ''
     const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
-      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div></div>`
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${empLine}</div>`
     const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
       <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
       <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>
