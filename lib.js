@@ -291,6 +291,25 @@ export async function getUsersByFids(fids) {
   return response.users || []
 }
 
+// Farcaster frames / mini-apps to discover. compactFrame normalizes the shape.
+function compactFrame(f) {
+  const name = f.manifest?.frame?.name || f.metadata?.html?.ogTitle || f.author?.username || 'frame'
+  return {
+    name,
+    image: f.image || f.manifest?.frame?.imageUrl || f.metadata?.html?.ogImage?.[0]?.url || null,
+    url: f.frames_url || f.manifest?.frame?.homeUrl || null,
+    author: f.author?.username || null,
+  }
+}
+export async function getFrameCatalog(limit = 24) {
+  const response = await fetchNeynar(`/farcaster/frame/catalog?limit=${limit}`)
+  return (response.frames || []).map(compactFrame).filter((f) => f.url)
+}
+export async function searchFrames(query, limit = 20) {
+  const response = await fetchNeynar(`/farcaster/frame/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+  return (response.frames || []).map(compactFrame).filter((f) => f.url)
+}
+
 // Neynar's AI summary of a whole conversation/thread - one call, no LLM of ours.
 export async function getConversationSummary(hashOrUrl) {
   let hash = hashOrUrl

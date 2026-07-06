@@ -129,6 +129,14 @@
   .musicembed { border: 1px solid #1db954; border-radius: 12px; padding: 11px 14px; background: linear-gradient(90deg, rgba(29,185,84,.14), transparent); cursor: pointer; font-weight: 600; font-size: 14px; }
   .musicembed:hover { border-color: #1ed760; }
   .mtag { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: #1db954; margin-right: 6px; }
+  .framegrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (max-width: 420px) { .framegrid { grid-template-columns: 1fr; } }
+  .framecard { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer; background: var(--surface); transition: border-color .12s; }
+  .framecard:hover { border-color: var(--accent); }
+  .framecard img { width: 100%; aspect-ratio: 1.5; object-fit: cover; display: block; background: #1c1c28; }
+  .framecard .framenoimg { width: 100%; aspect-ratio: 1.5; background: linear-gradient(135deg, #24242f, #14101f); }
+  .framecard .framemeta { padding: 9px 11px; }
+  .framecard .framename { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .embed a { color: var(--accent); text-decoration: none; word-break: break-all; }
   .card .stats { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--dim); }
   .card .stats button { background: none; border: none; color: var(--dim); padding: 0; display: inline-flex; gap: 5px; align-items: center; }
@@ -282,7 +290,7 @@
 
   let tab = 'feed'
   const st = {
-    feed: { type: 'following', casts: [], loaded: false, digest: null, digesting: false },
+    feed: { type: 'following', casts: [], frames: [], loaded: false, digest: null, digesting: false },
     inbox: { items: [], loaded: false, showAll: false, priority: false, view: 'reply', notifs: [], notifChannel: '' },
     channels: { id: 'zao', casts: [], loaded: false, trending: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
@@ -430,6 +438,7 @@
       <span class="chip ${st.feed.type === 'foryou' ? 'on' : ''}" data-feed="foryou">for you</span>
       <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
       <span class="chip ${st.feed.type === 'music' ? 'on' : ''}" data-feed="music">music</span>
+      <span class="chip ${st.feed.type === 'frames' ? 'on' : ''}" data-feed="frames">frames</span>
       <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
       ${lists.map((l) => `<span class="chip ${st.feed.type === 'list' && st.feed.listId === l.id ? 'on' : ''}" data-list="${esc(l.id)}">${esc(l.name)} ${(l.fids || []).length}</span>`).join('')}
       <span class="chip" data-act="newlist">+ list</span>
@@ -443,12 +452,28 @@
       const lst = lists.find((l) => l.id === st.feed.listId)
       if (lst && !(lst.fids || []).length) return sub + `<div class="empty">"${esc(lst.name)}" is empty. Tap a profile and "add to list", or <span class="chip" data-act="seedfriends" data-list="${esc(lst.id)}">seed close friends</span></div>`
     }
+    if (st.feed.type === 'frames') {
+      if (!st.feed.loaded) return sub + '<div class="loading">loading frames...</div>'
+      const frames = st.feed.frames || []
+      if (!frames.length) return sub + '<div class="empty">no frames right now.</div>'
+      return sub + '<div class="framegrid">' + frames.map((f) => `<div class="framecard" data-openurl="${esc(f.url)}">
+        ${f.image ? `<img src="${esc(f.image)}" alt="" loading="lazy">` : '<div class="framenoimg"></div>'}
+        <div class="framemeta"><div class="framename">${esc(f.name)}</div>${f.author ? `<div class="ub">by @${esc(f.author)}</div>` : ''}</div></div>`).join('') + '</div>'
+    }
     const dig = st.feed.digest ? `<div class="digest"><div class="lab">what you missed</div><div class="t">${esc(st.feed.digest)}</div></div>` : ''
     if (!st.feed.loaded) return sub + dig + '<div class="loading">loading feed...</div>'
     if (st.feed.err) return sub + `<div class="err">${esc(st.feed.err)}</div>`
     const casts = dropMuted(st.feed.casts)
     if (!casts.length) return sub + dig + '<div class="empty">no casts.</div>'
     return sub + dig + casts.map(castCard).join('') + moreBtn(st.feed.cursor, 'morefeed')
+  }
+  async function loadFrames() {
+    st.feed.loaded = false; st.feed.err = null; render()
+    try {
+      const d = await fetch('/api/feed?frames=1').then((r) => r.json())
+      st.feed.frames = d.frames || []; st.feed.loaded = true
+    } catch (e) { st.feed.err = e.message; st.feed.loaded = true }
+    render()
   }
 
   // ================= SEARCH =================
@@ -1338,7 +1363,7 @@
   })
 
   main.addEventListener('click', async (e) => {
-    const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
+    const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else if (fb.dataset.feed === 'frames') loadFrames(); else loadFeed(); return }
     const lb = e.target.closest('[data-list]'); if (lb && !lb.dataset.act) { st.feed.type = 'list'; st.feed.listId = lb.dataset.list; loadFeed(); return }
     const sc = e.target.closest('[data-searchchan]'); if (sc) { st.search.channel = sc.dataset.searchchan; if (st.search.q.trim()) runSearch(); else render(); return }
     const ss = e.target.closest('[data-savedsearch]'); if (ss && !e.target.closest('[data-act="rmsearch"]')) { const s = savedSearches[+ss.dataset.savedsearch]; if (s) { st.search.q = s.q; st.search.channel = s.channel || ''; runSearch() } return }
