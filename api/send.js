@@ -8,7 +8,7 @@
 // the UI must show exact text + an explicit confirm before calling this - the
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
-import { postCast, friendlyPostError, getPostingHealth } from '../lib.js'
+import { postCast, friendlyPostError, getPostingHealth, loadEnv } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -32,6 +32,26 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   try {
     const body = await readJsonBody(req)
+
+    // thread mode: post an array of casts, each replying to the previous
+    if (Array.isArray(body.casts)) {
+      const parts = body.casts.map((t) => String(t || '').trim()).filter(Boolean).slice(0, 25)
+      if (!parts.length) { res.status(400).json({ error: 'empty thread' }); return }
+      if (parts.some((p) => p.length > 1024)) { res.status(400).json({ error: 'a cast is too long' }); return }
+      const myFid = loadEnv().FID
+      const channelId = typeof body.channelId === 'string' && body.channelId ? body.channelId : null
+      let parentHash = null, firstLink = null, posted = 0
+      for (let i = 0; i < parts.length; i++) {
+        const opts = i === 0 ? { channelId } : { parentHash, parentFid: myFid }
+        const resp = await postCast(parts[i], opts)
+        const cast = resp.cast
+        parentHash = cast.hash; posted++
+        if (i === 0) firstLink = `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`
+      }
+      res.status(200).json({ ok: true, link: firstLink, count: posted })
+      return
+    }
+
     const text = typeof body.text === 'string' ? body.text.trim() : ''
     const parentHash = typeof body.parentHash === 'string' && body.parentHash ? body.parentHash : null
     const parentFid = body.parentFid ?? null
