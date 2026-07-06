@@ -79,6 +79,10 @@
   .badge.on .bd { color: var(--accent); }
   .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(12px); background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; opacity: 0; transition: opacity .25s, transform .25s; z-index: 9999; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #welcome { position: fixed; inset: 0; z-index: 10000; background: rgba(8,8,14,.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  #welcome .wcard { background: linear-gradient(180deg, #17122b, #0e0e15); border: 1px solid var(--accent); border-radius: 18px; padding: 22px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  #welcome .wtitle { font-size: 22px; font-weight: 800; }
+  #welcome .wsub { color: #b9b9c6; font-size: 14px; margin-top: 6px; }
   .lbrow { display: flex; align-items: center; gap: 8px; padding: 7px 4px; cursor: pointer; border-bottom: 1px solid var(--border); }
   .lbrow:hover { background: rgba(133,93,205,.06); }
   .lbrank { width: 22px; text-align: center; font-weight: 700; color: #6f6f7a; font-size: 13px; }
@@ -233,6 +237,8 @@
   let ME = 'zaal' // your username, set from config on boot
   let QUICK = ['GM', 'Lfg', 'love this', 'so cool', 'congrats', 'based', 'ZM'] // quick replies, from config
   let BRANDS = [] // your brands, set from config on boot
+  let OWNER_FID = null // the app owner's fid (from config) - guests get the welcome
+  let APPNAME = 'zaalcaster' // set from config on boot
   // a row of one-tap quick-reply chips that fill the reply box for a given cast
   const quickRow = (hash) => `<div class="subbar" style="padding:2px 0 6px;gap:6px">${QUICK.map((q) => `<span class="chip" data-act="quick" data-hash="${esc(hash)}" data-q="${esc(q)}">${esc(q)}</span>`).join('')}</div>`
 
@@ -1382,7 +1388,9 @@
     if (cfg.username) ME = cfg.username
     if (Array.isArray(cfg.quickReplies) && cfg.quickReplies.length) QUICK = cfg.quickReplies
     if (Array.isArray(cfg.brands)) BRANDS = cfg.brands
+    if (cfg.fid) OWNER_FID = String(cfg.fid)
     if (cfg.appName) {
+      APPNAME = cfg.appName
       document.title = cfg.appName
       const m = cfg.appName.match(/^(.*?)(caster)$/i)
       document.getElementById('wordmark').innerHTML = m ? `${esc(m[1])}<span>${esc(m[2])}</span>` : esc(cfg.appName)
@@ -1395,12 +1403,43 @@
     if (cfg.daily && !localStorage.getItem('zc_daily')) { daily = { date: todayStr(), ...cfg.daily }; lsSet('zc_daily', daily) }
   }
 
+  // Mini App welcome: when a NON-owner opens zaalcaster inside Farcaster, greet
+  // them and nudge their first post to ask @zaal about it (composed as THEM via
+  // the SDK - native composer, they hit send). A word-of-mouth growth loop.
+  let welcomeShown = false
+  function maybeWelcome() {
+    if (welcomeShown) return
+    if (!OWNER_FID) return                            // config not loaded yet - retry later
+    const u = window.__fcuser
+    if (!u || !u.fid) return                         // not in a mini-app host
+    if (OWNER_FID && String(u.fid) === OWNER_FID) return // the owner - no nudge
+    if (localStorage.getItem('zc_welcomed')) return  // already greeted this device
+    welcomeShown = true
+    const owner = ME || 'zaal'
+    const el = document.createElement('div'); el.id = 'welcome'
+    el.innerHTML = `<div class="wcard">
+      <div class="wtitle">gm${u.username ? ' @' + esc(u.username) : ''}</div>
+      <div class="wsub">you found <b>${esc(APPNAME || 'zaalcaster')}</b> - @${esc(owner)}'s gamified farcaster client.</div>
+      <div class="wsub" style="margin-top:6px">say hi - make your first post asking what it is. it posts as you.</div>
+      <button class="ibtn primary" id="wpost" style="margin-top:14px;width:100%">gm @${esc(owner)} what is ${esc(APPNAME || 'zaalcaster')}?</button>
+      <div style="margin-top:10px"><a class="chip" href="https://github.com/bettercallzaal/zaalcaster" target="_blank" rel="noopener" style="text-decoration:none">make your own</a> <span class="chip" id="wskip">skip</span></div>
+    </div>`
+    document.body.appendChild(el)
+    document.getElementById('wpost').addEventListener('click', async () => {
+      try { await window.__fcsdk.actions.composeCast({ text: `gm @${owner} what is ${APPNAME || 'zaalcaster'}?` }) } catch {}
+      localStorage.setItem('zc_welcomed', '1'); el.remove()
+    })
+    document.getElementById('wskip').addEventListener('click', () => { localStorage.setItem('zc_welcomed', '1'); el.remove() })
+  }
+  window.addEventListener('fc-ready', maybeWelcome)
+
   // boot: check whether a password is required before loading anything
   ;(async () => {
     try {
       const r = await fetch('/api/auth')
       const d = await r.json()
       applyConfig(d.config)
+      maybeWelcome() // owner+viewer known now; no-op if SDK context not ready (fc-ready will retry)
       if (d.enabled && !d.authed) showGate()
       else startApp()
     } catch { startApp() } // auth endpoint unreachable (e.g. gate off) - proceed
@@ -1412,8 +1451,10 @@
   try {
     const { sdk } = await import('https://esm.sh/@farcaster/miniapp-sdk')
     window.__fcsdk = sdk
+    try { const ctx = await sdk.context; window.__fcuser = ctx && ctx.user ? ctx.user : null } catch {}
     // give the app a tick to paint, then tell the host we are ready
     setTimeout(() => { try { sdk.actions.ready() } catch {} }, 300)
+    window.dispatchEvent(new CustomEvent('fc-ready'))
   } catch { /* not in a mini-app host, or CDN blocked - web app works as normal */ }
 </script>
 </body>

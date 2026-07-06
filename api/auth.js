@@ -26,6 +26,7 @@ export default async function handler(req, res) {
       config: {
         appName: config.appName,
         username: config.username,
+        fid: config.fid,
         homeChannels: config.homeChannels,
         quickReplies: config.quickReplies || [],
         brands: config.brands || [],
