@@ -51,6 +51,13 @@
   .launch .ll { font-weight: 600; font-size: 15px; }
   .launch .ls { color: #8a8a99; font-size: 12px; margin-top: 2px; }
   @media (max-width: 380px) { .launchgrid { grid-template-columns: repeat(2, 1fr); } }
+  .statbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 8px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 6px; text-align: center; }
+  .stat .sv { font-weight: 700; font-size: 20px; color: var(--accent); }
+  .stat .sl { color: #8a8a99; font-size: 11px; margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+  .xpbar { height: 8px; background: #1c1c28; border-radius: 6px; overflow: hidden; }
+  .xpfill { height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); transition: width .3s; }
+  .xphint { color: #8a8a99; font-size: 12px; margin: 4px 0 2px; text-align: right; }
   .card:hover { border-color: #2f2f3d; }
   .card .top { display: flex; gap: 10px; align-items: flex-start; }
   .pfp { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); object-fit: cover; flex: none; }
@@ -224,11 +231,12 @@
   function persist() {
     lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
+    if (typeof game !== 'undefined') lsSet('zc_game', game)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -553,6 +561,32 @@
   if (daily.date !== todayStr()) { daily.date = todayStr(); daily.tasks.forEach((x) => (x.done = false)); lsSet('zc_daily', daily) }
   const saveDaily = () => persist()
 
+  // ================= GAME (streaks, XP, levels) =================
+  const XP_PER_QUEST = 10
+  let game = lsGet('zc_game', null)
+  if (!game || typeof game !== 'object') game = { xp: 0, streak: 0, best: 0, lastDay: null, awarded: {}, badges: [] }
+  if (!game.awarded || typeof game.awarded !== 'object') game.awarded = {}
+  if (!Array.isArray(game.badges)) game.badges = []
+  // prune the award ledger to today only (per-day, so quests re-award tomorrow)
+  for (const k of Object.keys(game.awarded)) if (k !== todayStr()) delete game.awarded[k]
+  const yesterdayStr = () => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) }
+  const levelFor = (xp) => Math.floor((xp || 0) / 100) + 1
+  const xpInLevel = (xp) => (xp || 0) % 100
+  const saveGame = () => { lsSet('zc_game', game); persist() }
+  function awardQuest(i) {
+    const day = todayStr()
+    const done = new Set(game.awarded[day] || [])
+    if (done.has(i)) return                 // already counted today
+    done.add(i); game.awarded[day] = [...done]
+    game.xp = (game.xp || 0) + XP_PER_QUEST
+    if (game.lastDay !== day) {              // first quest of the day moves the streak
+      game.streak = (game.lastDay === yesterdayStr()) ? (game.streak || 0) + 1 : 1
+      game.lastDay = day
+      if (game.streak > (game.best || 0)) game.best = game.streak
+    }
+    saveGame()
+  }
+
   function renderDaily() {
     const done = daily.tasks.filter((t) => t.done).length
     const tasks = daily.tasks.map((t, i) => `<div class="urow" style="cursor:default">
@@ -576,7 +610,16 @@
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
       <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('')
-    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</div></div>
+    const statbar = `<div class="statbar">
+      <div class="stat"><div class="sv">Lv ${levelFor(game.xp)}</div><div class="sl">level</div></div>
+      <div class="stat"><div class="sv">${game.streak || 0}</div><div class="sl">day streak</div></div>
+      <div class="stat"><div class="sv">${game.best || 0}</div><div class="sl">best</div></div>
+      <div class="stat"><div class="sv">${game.xp || 0}</div><div class="sl">total xp</div></div>
+    </div>
+    <div class="xpbar"><div class="xpfill" style="width:${xpInLevel(game.xp)}%"></div></div>
+    <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}</div>`
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</div></div>
+      ${statbar}
       <div class="launchgrid">${nav}</div>
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
@@ -770,7 +813,7 @@
     if (act === 'profile') { openProfile(btn.dataset.user); return }
     if (act === 'thread') { openThread(hash); return }
     // daily dashboard
-    if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
+    if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; if (daily.tasks[i].done) awardQuest(i); saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
     if (act === 'dapprm') { daily.apps.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
@@ -894,6 +937,13 @@
           daily = s.daily
           if (daily.date !== todayStr()) { daily.date = todayStr(); (daily.tasks || []).forEach((x) => (x.done = false)) }
           lsSet('zc_daily', daily)
+        }
+        if (s.game && typeof s.game === 'object') {
+          game = s.game
+          if (!game.awarded || typeof game.awarded !== 'object') game.awarded = {}
+          if (!Array.isArray(game.badges)) game.badges = []
+          for (const k of Object.keys(game.awarded)) if (k !== todayStr()) delete game.awarded[k]
+          lsSet('zc_game', game)
         }
       }
     } catch { /* store unreachable - stay on localStorage */ }
