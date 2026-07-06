@@ -210,8 +210,12 @@
   #fab { position: fixed; right: 16px; bottom: 22px; z-index: 40; background: var(--accent2); color: #fff; border: none; border-radius: 22px; padding: 10px 16px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(109,74,255,.4); }
   @media (max-width: 720px) { #fab { bottom: calc(76px + env(safe-area-inset-bottom, 0)); right: 12px; padding: 9px 14px; } }
   #fbmodal { position: fixed; inset: 0; z-index: 10001; background: rgba(8,8,14,.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
-  #fbmodal .fbcard { background: linear-gradient(180deg, #17122b, #0e0e15); border: 1px solid var(--accent); border-radius: 18px; padding: 20px; max-width: 420px; width: 100%; }
-  #fbmodal textarea { width: 100%; min-height: 90px; margin-top: 10px; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font: inherit; font-size: 15px; resize: vertical; }
+  #fbmodal .fbcard { background: linear-gradient(180deg, #17122b, #0e0e15); border: 1px solid var(--accent); border-radius: 18px; padding: 20px; max-width: 440px; width: 100%; max-height: 86vh; overflow-y: auto; }
+  #fbmodal textarea { width: 100%; min-height: 84px; margin-top: 10px; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font: inherit; font-size: 15px; resize: vertical; }
+  #fbmodal .ibtn.on { background: #c0392b; border-color: #c0392b; color: #fff; }
+  .fblist { display: flex; flex-direction: column; }
+  .fbitem { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .fbitem:last-child { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -1614,22 +1618,47 @@
 
   // In-app feedback: jot a note from any tab; it syncs and I read it from the
   // terminal (node bin/feedback.js). Captures the current tab + time.
+  let fbRec = null
   function openFeedback() {
     const el = document.createElement('div'); el.id = 'fbmodal'
+    document.body.appendChild(el)
+    fbRender(el)
+    el.addEventListener('click', (e) => { if (e.target === el) { if (fbRec) { try { fbRec.stop() } catch {} } el.remove() } })
+  }
+  function fbRender(el) {
+    const list = feedback.length
+      ? feedback.slice(0, 20).map((f, i) => `<div class="fbitem"><div style="flex:1;min-width:0"><div class="ub">[${esc(f.tab || '?')}] ${f.at ? new Date(f.at).toLocaleString() : ''}</div><div>${esc(f.text)}</div></div><span data-fbrm="${i}" style="cursor:pointer;color:#ff8a6a;padding:0 4px">x</span></div>`).join('')
+      : '<div class="ub">no notes yet - type or speak one above</div>'
     el.innerHTML = `<div class="fbcard">
       <div style="font-weight:700;font-size:16px">feedback / notes</div>
-      <div class="ub">on the "${esc(tab)}" tab - bugs, ideas, anything. these get read back on the dev side.</div>
-      <textarea id="fbtext" placeholder="what's up..."></textarea>
-      <div class="btns" style="margin-top:12px"><button class="ibtn primary" id="fbsend">log it</button><button class="ibtn" id="fbclose">close</button>${feedback.length ? `<span class="ub" style="align-self:center">${feedback.length} logged</span>` : ''}</div>
+      <div class="ub">on the "${esc(tab)}" tab. type it, or tap mic and speak. i read these on the dev side.</div>
+      <textarea id="fbtext" placeholder="bug, idea, anything..."></textarea>
+      <div class="btns" style="margin-top:10px"><button class="ibtn primary" data-fbact="send">log it</button><button class="ibtn" data-fbact="mic" id="fbmic">${fbRec ? 'stop' : 'mic'}</button><button class="ibtn" data-fbact="close">close</button></div>
+      <div class="subbar" style="margin-top:14px;padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">logged (${feedback.length})</b>${feedback.length ? '<span class="chip" data-fbact="clearall">clear all</span>' : ''}</div>
+      <div class="fblist">${list}</div>
     </div>`
-    document.body.appendChild(el)
-    const ta = document.getElementById('fbtext'); if (ta) ta.focus()
-    el.addEventListener('click', (e) => { if (e.target === el) el.remove() })
-    document.getElementById('fbclose').addEventListener('click', () => el.remove())
-    document.getElementById('fbsend').addEventListener('click', () => {
-      const t = (document.getElementById('fbtext').value || '').trim(); if (!t) { el.remove(); return }
-      feedback.unshift({ text: t, tab, at: new Date().toISOString() }); feedback = feedback.slice(0, 200); persist(); el.remove(); toast('feedback logged')
-    })
+    const ta = document.getElementById('fbtext'); if (ta && !fbRec) ta.focus()
+    el.querySelector('.fbcard').onclick = (e) => {
+      const rm = e.target.closest('[data-fbrm]'); if (rm) { feedback.splice(+rm.dataset.fbrm, 1); persist(); fbRender(el); return }
+      const b = e.target.closest('[data-fbact]'); if (!b) return
+      const act = b.dataset.fbact
+      if (act === 'close') { if (fbRec) { try { fbRec.stop() } catch {} } el.remove(); return }
+      if (act === 'send') { const t = (document.getElementById('fbtext').value || '').trim(); if (!t) return; feedback.unshift({ text: t, tab, at: new Date().toISOString() }); feedback = feedback.slice(0, 200); persist(); toast('logged'); fbRender(el); return }
+      if (act === 'clearall') { if (window.confirm('clear all your logged feedback?')) { feedback = []; persist(); fbRender(el) } return }
+      if (act === 'mic') { fbMic(b); return }
+    }
+  }
+  function fbMic(btn) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) { toast('voice input needs Chrome/Safari'); return }
+    if (fbRec) { try { fbRec.stop() } catch {}; return }
+    const ta = document.getElementById('fbtext'); const base = ta && ta.value ? ta.value.trim() + ' ' : ''
+    let finalText = ''
+    fbRec = new SR(); fbRec.lang = 'en-US'; fbRec.interimResults = true; fbRec.continuous = true
+    fbRec.onresult = (e) => { let interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + ' '; else interim += r[0].transcript } const t = document.getElementById('fbtext'); if (t) t.value = base + finalText + interim }
+    fbRec.onend = () => { fbRec = null; const b = document.getElementById('fbmic'); if (b) { b.textContent = 'mic'; b.classList.remove('on') } }
+    fbRec.onerror = () => { fbRec = null; const b = document.getElementById('fbmic'); if (b) { b.textContent = 'mic'; b.classList.remove('on') }; toast('mic error - check permissions') }
+    try { fbRec.start(); btn.textContent = 'stop'; btn.classList.add('on'); toast('listening - speak now') } catch { fbRec = null }
   }
   const fabEl = document.getElementById('fab'); if (fabEl) fabEl.addEventListener('click', openFeedback)
 
