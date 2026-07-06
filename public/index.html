@@ -389,6 +389,8 @@
     if (!append) { st.feed.loaded = false; st.feed.cursor = null; render() }
     try {
       let url = `/api/feed?type=${st.feed.type}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
+      // ZAO filter: a combined feed of the home ZAO channels vs "everyone" (following/for-you)
+      if (st.feed.type === 'zao') url = `/api/feed?type=channel&id=${encodeURIComponent(HOME_CHANNELS.join(','))}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
       if (st.feed.type === 'list') {
         const lst = lists.find((l) => l.id === st.feed.listId)
         const fids = (lst?.fids || []).join(',')
@@ -413,7 +415,8 @@
   }
   function renderFeed() {
     const sub = `<div class="subbar">
-      <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">following</span>
+      <span class="chip ${st.feed.type === 'zao' ? 'on' : ''}" data-feed="zao" style="border-color:var(--accent)">ZAO</span>
+      <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">everyone</span>
       <span class="chip ${st.feed.type === 'foryou' ? 'on' : ''}" data-feed="foryou">for you</span>
       <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
       <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
@@ -1011,7 +1014,7 @@
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       ${statbar}
       <div class="launchgrid">${nav}</div>
-      ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your brands</b></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
+      ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
       ${editDaily ? '<div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>' : ''}
@@ -1138,6 +1141,13 @@
       for (const rep of d.replies) { html += castCard(rep); for (const s of (rep.sub || [])) html += `<div style="margin-left:14px">${castCard(s)}</div>` }
       document.getElementById('obody').innerHTML = html || '<div class="empty">no thread.</div>'
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  function openAllProjects() {
+    const cards = BRANDS.map((b) => `<div class="card">
+      <div class="pn" style="font-size:17px;font-weight:700">${esc(b.name)}</div>
+      ${b.tagline ? `<div class="ps">${esc(b.tagline)}</div>` : ''}
+      <div class="subbar" style="padding-left:0;margin-top:6px">${(b.links || []).map((l) => `<a class="chip" href="${esc(l.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(l.label)}</a>`).join(' ')}${b.channel ? `<span class="chip" data-act="brandchan" data-chan="${esc(b.channel)}">/${esc(b.channel)} feed</span>` : ''}</div></div>`).join('')
+    openOverlay('projects', cards || '<div class="empty">add projects in config.brands</div>')
   }
   async function openBrand(i) {
     const b = BRANDS[i]; if (!b) return
@@ -1311,6 +1321,7 @@
     // daily dashboard
     if (act === 'editdaily') { editDaily = !editDaily; render(); return }
     if (act === 'brand') { openBrand(+btn.dataset.i); return }
+    if (act === 'allprojects') { openAllProjects(); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; if (daily.tasks[i].done) awardQuest(i); saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
