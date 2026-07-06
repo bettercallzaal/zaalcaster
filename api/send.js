@@ -40,6 +40,7 @@ export default async function handler(req, res) {
       if (!clientId) { res.status(200).json({ ok: false, reason: 'no image host - set IMGUR_CLIENT_ID in Vercel' }); return }
       const b64 = body.upload.split(',')[1] || ''
       if (!b64) { res.status(400).json({ error: 'empty image' }); return }
+      if (b64.length > 12 * 1024 * 1024) { res.status(400).json({ error: 'image too large' }); return }
       const up = await fetch('https://api.imgur.com/3/image', {
         method: 'POST',
         headers: { Authorization: `Client-ID ${clientId}`, 'Content-Type': 'application/json' },
@@ -72,12 +73,13 @@ export default async function handler(req, res) {
     }
 
     const text = typeof body.text === 'string' ? body.text.trim() : ''
+    const intOrNull = (v) => (typeof v === 'number' && Number.isInteger(v)) ? v : (/^\d+$/.test(String(v)) ? parseInt(v, 10) : null)
     const parentHash = typeof body.parentHash === 'string' && body.parentHash ? body.parentHash : null
-    const parentFid = body.parentFid ?? null
+    const parentFid = intOrNull(body.parentFid)
     const channelId = typeof body.channelId === 'string' && body.channelId ? body.channelId : null
     const embedUrl = typeof body.embedUrl === 'string' && /^https?:\/\//.test(body.embedUrl) ? body.embedUrl : null
     const quoteHash = typeof body.quoteHash === 'string' && body.quoteHash ? body.quoteHash : null
-    const quoteFid = body.quoteFid ?? null
+    const quoteFid = intOrNull(body.quoteFid)
 
     if (!text) { res.status(400).json({ error: 'empty text' }); return }
     if (text.length > 1024) { res.status(400).json({ error: 'text too long' }); return }

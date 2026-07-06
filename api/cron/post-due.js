@@ -8,6 +8,7 @@
 // If CRON_SECRET is unset, the endpoint refuses to run (fail closed) so it
 // can never post publicly by accident.
 
+import crypto from 'node:crypto'
 import { storeEnabled, kvGet, kvSet } from '../../store.js'
 import { postCast } from '../../lib.js'
 
@@ -17,7 +18,9 @@ function authorized(req) {
   const secret = process.env.CRON_SECRET
   if (!secret) return false // fail closed - no secret, no posting
   const hdr = req.headers?.authorization || ''
-  return hdr === `Bearer ${secret}`
+  // constant-time compare so the secret can't be brute-forced via timing
+  const a = Buffer.from(hdr), b = Buffer.from(`Bearer ${secret}`)
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
 export default async function handler(req, res) {
