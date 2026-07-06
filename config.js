@@ -56,6 +56,7 @@ export const config = {
       { label: 'Degen', url: 'https://www.degen.tips' },
       { label: 'Rounds', url: 'https://rounds.wtf' },
       { label: 'Claude Code', url: 'https://claude.ai/code' },
+      { label: 'Empire snap', url: 'https://empiresnap.vercel.app/' },
     ],
     communities: ['zao', 'wavewarz', 'zabal', 'gmfarcaster', 'farcaster', 'founders'],
     groups: [

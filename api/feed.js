@@ -41,6 +41,26 @@ export default async function handler(req, res) {
       return
     }
 
+    // Empire Builder read-only leaderboard (keyless public API, proxied here to
+    // dodge browser CORS). Never writes / touches a wallet.
+    if (req.query.empire === '1') {
+      const type = ['top', 'native', 'recent'].includes(req.query.etype) ? req.query.etype : 'top'
+      const r = await fetch(`https://empirebuilder.world/api/empires?type=${type}&page=1&limit=15`, {
+        headers: { accept: 'application/json' },
+      })
+      const d = await r.json().catch(() => ({}))
+      const empires = (d.empires || []).map((e) => ({
+        id: e.id, name: e.name || e.token_name || e.token_symbol || '?', symbol: e.token_symbol || '',
+        rank: e.rank != null ? Math.round(e.rank * 100) / 100 : null,
+        treasury: e.treasury || 0, distributed: e.total_distributed || 0,
+        logo: e.logo_uri || e.farcaster_pfp || null, native: e.native === 'yes',
+        warpcast: e.warpcast_url || null, website: e.website_url || null,
+      }))
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ empires })
+      return
+    }
+
     // seed a "close friends" list from Neynar best-friends (mutual affinity)
     if (req.query.bestfriends === '1') {
       const friends = await getBestFriends({ limit: 20 })
