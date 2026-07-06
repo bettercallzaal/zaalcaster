@@ -49,3 +49,22 @@ export async function kvSet(key, value) {
   await cmd(['SET', key, JSON.stringify(value)])
   return true
 }
+
+// Append to a capped list (newest-first) - used for the action ledger. Atomic
+// via LPUSH + LTRIM. Best-effort: never throws, so logging can't break a post.
+export async function kvPush(key, item, cap = 500) {
+  if (!storeEnabled()) return false
+  try {
+    await cmd(['LPUSH', key, JSON.stringify(item)])
+    await cmd(['LTRIM', key, '0', String(cap - 1)])
+    return true
+  } catch { return false }
+}
+
+export async function kvList(key, limit = 100) {
+  if (!storeEnabled()) return []
+  try {
+    const arr = await cmd(['LRANGE', key, '0', String(limit - 1)])
+    return (arr || []).map((s) => { try { return JSON.parse(s) } catch { return s } })
+  } catch { return [] }
+}
