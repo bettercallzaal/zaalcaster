@@ -57,6 +57,8 @@
   .stat .sl { color: #8a8a99; font-size: 11px; margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
   .boost { font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #855DCD, #6d4aff); padding: 1px 5px; border-radius: 6px; vertical-align: middle; }
   .weekgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 8px; }
+  .pwr { font-size: 10px; font-weight: 700; color: #6d4aff; border: 1px solid #6d4aff; border-radius: 5px; padding: 0 4px; vertical-align: middle; }
+  .qs { font-size: 10px; font-weight: 600; color: #3fbf7f; vertical-align: middle; }
   .xpbar { height: 8px; background: #1c1c28; border-radius: 6px; overflow: hidden; }
   .xpfill { height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); transition: width .3s; }
   .xphint { color: #8a8a99; font-size: 12px; margin: 4px 0 2px; text-align: right; }
@@ -280,7 +282,7 @@
         <span data-act="profile" data-user="${esc(c.author)}" style="cursor:pointer">${pfp(c)}</span>
         <div class="who">
           <div class="name"><span class="uname" data-act="profile" data-user="${esc(c.author)}">${esc(c.display)}</span>
-            <span class="sub">@${esc(c.author)} - ${when(c.timestamp)}${c.channel ? ` - <span class="ch">/${esc(c.channel)}</span>` : ''}</span></div>
+            <span class="sub">@${esc(c.author)}${c.power ? ' <span class="pwr" title="power badge">pwr</span>' : ''}${c.score != null && c.score >= 0.9 ? ` <span class="qs" title="high neynar quality score">${c.score}</span>` : ''} - ${when(c.timestamp)}${c.channel ? ` - <span class="ch">/${esc(c.channel)}</span>` : ''}</span></div>
           <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text)}</div>
           ${embeds}
           <div class="stats">

@@ -12,6 +12,7 @@ function compactCast(cast) {
   return {
     hash: cast.hash, author: a.username || '?', display: a.display_name || a.username || '?',
     pfp: a.pfp_url || null, fid: a.fid || null, text: cast.text || '', timestamp: cast.timestamp || null,
+    power: !!a.power_badge, score: (a.experimental?.neynar_user_score ?? a.score) != null ? Math.round((a.experimental?.neynar_user_score ?? a.score) * 100) / 100 : null,
     channel: cast.channel?.id || null, likes: cast.reactions?.likes_count || 0,
     recasts: cast.reactions?.recasts_count || 0, replies: cast.replies?.count || 0,
     embeds: (cast.embeds || []).map((e) => e.url).filter(Boolean),

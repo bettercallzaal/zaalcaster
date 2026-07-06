@@ -11,12 +11,15 @@ import { blockedByAuth } from '../auth.js'
 
 function compact(cast) {
   const a = cast.author || {}
+  const rawScore = a.experimental?.neynar_user_score ?? a.score ?? null
   return {
     hash: cast.hash,
     author: a.username || '?',
     display: a.display_name || a.username || '?',
     pfp: a.pfp_url || null,
     fid: a.fid || null,
+    power: !!a.power_badge,
+    score: rawScore != null ? Math.round(rawScore * 100) / 100 : null,
     text: cast.text || '',
     timestamp: cast.timestamp || null,
     channel: cast.channel?.id || null,
