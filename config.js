@@ -23,6 +23,8 @@ export const config = {
     { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },
     { name: 'WaveWarZ', channel: 'wavewarz', tagline: 'live-traded music battles - back music, not memes', links: [{ label: 'wavewarz.com', url: 'https://www.wavewarz.com' }] },
     { name: 'ZABAL', channel: 'zabal', tagline: 'ZABAL Gamez build-a-thon + art', links: [{ label: 'zabal.art', url: 'https://zabal.art' }, { label: 'zabalgamez.com', url: 'https://zabalgamez.com' }] },
+    { name: 'ZLANK', channel: 'zabal', tagline: 'no-code Farcaster snap builder', links: [{ label: 'zlank.online', url: 'https://zlank.online' }] },
+    { name: 'zaalcaster', channel: 'zao', tagline: 'this app - gamified personal Farcaster client', links: [{ label: 'z.thezao.xyz', url: 'https://z.thezao.xyz' }, { label: 'github', url: 'https://github.com/bettercallzaal/zaalcaster' }] },
   ],
 
   // One-tap quick replies (tap a chip to fill the reply box, then confirm).
