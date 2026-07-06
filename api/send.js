@@ -9,6 +9,7 @@
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
 import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast } from '../lib.js'
+import { postToX, xEnabled } from '../xpost.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const h = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200).json(h)
+    res.status(200).json({ ...h, xEnabled: xEnabled() })
     return
   }
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
@@ -96,10 +97,17 @@ export default async function handler(req, res) {
     // parentHash -> reply; quoteHash -> quote cast; else top-level (Compose)
     const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid, embedUrl })
     const cast = response.cast
+
+    // optional cross-post to X - only when the user toggled it on (their confirm
+    // is the yes). Never blocks the cast: X failure still returns the cast.
+    let x = null
+    if (body.alsoX && !parentHash) x = await postToX(text).catch((e) => ({ ok: false, reason: e?.message || 'x failed' }))
+
     res.status(200).json({
       ok: true,
       hash: cast.hash,
       link: `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`,
+      x,
     })
   } catch (err) {
     // lib throws a clear message when ZAAL_SIGNER_UUID is missing
