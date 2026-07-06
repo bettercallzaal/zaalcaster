@@ -15,7 +15,7 @@ function compactCast(cast) {
     power: !!a.power_badge, score: (a.experimental?.neynar_user_score ?? a.score) != null ? Math.round((a.experimental?.neynar_user_score ?? a.score) * 100) / 100 : null,
     channel: cast.channel?.id || null, likes: cast.reactions?.likes_count || 0,
     recasts: cast.reactions?.recasts_count || 0, replies: cast.replies?.count || 0,
-    embeds: (cast.embeds || []).map((e) => e.url).filter(Boolean),
+    embeds: (cast.embeds || []).map((e) => { const url = e.url; if (!url) return null; const ct = e.metadata?.content_type || ''; return { url, img: ct.startsWith('image/') || !!e.metadata?.image || /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url) } }).filter(Boolean),
     link: `https://farcaster.xyz/${a.username || '?'}/${(cast.hash || '').slice(0, 10)}`,
   }
 }
