@@ -49,9 +49,20 @@ function compact(cast) {
     likes: cast.reactions?.likes_count || 0,
     recasts: cast.reactions?.recasts_count || 0,
     replies: cast.replies?.count || 0,
-    embeds: (cast.embeds || []).map((e) => e.url).filter(Boolean),
+    embeds: embedList(cast),
     link: `https://farcaster.xyz/${a.username || '?'}/${(cast.hash || '').slice(0, 10)}`,
   }
+}
+
+// normalize cast embeds to { url, img } so the client can render images inline
+function embedList(cast) {
+  return (cast.embeds || []).map((e) => {
+    const url = e.url
+    if (!url) return null
+    const ct = e.metadata?.content_type || ''
+    const img = ct.startsWith('image/') || !!e.metadata?.image || /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url)
+    return { url, img }
+  }).filter(Boolean)
 }
 
 export default async function handler(req, res) {

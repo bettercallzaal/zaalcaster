@@ -95,6 +95,7 @@
   .card .who .sub .ch { color: var(--accent); }
   .card .body { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
   .card .embed { margin-top: 7px; font-size: 13px; }
+  .cimg { max-width: 100%; max-height: 420px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; display: block; }
   .card .embed a { color: var(--accent); text-decoration: none; word-break: break-all; }
   .card .stats { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--dim); }
   .card .stats button { background: none; border: none; color: var(--dim); padding: 0; display: inline-flex; gap: 5px; align-items: center; }
@@ -284,7 +285,14 @@
 
   // ---- shared cast card (feed + channels) ----
   function castCard(c) {
-    const embeds = (c.embeds || []).map((e) => `<div class="embed"><a href="${esc(e)}" target="_blank" rel="noopener">${esc(e)}</a></div>`).join('')
+    const embeds = (c.embeds || []).map((e) => {
+      const url = typeof e === 'string' ? e : (e && e.url)
+      if (!url) return ''
+      const img = typeof e === 'object' && e.img
+      return img
+        ? `<div class="embed"><img class="cimg" src="${esc(url)}" alt="" loading="lazy" data-openurl="${esc(url)}"></div>`
+        : `<div class="embed"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a></div>`
+    }).join('')
     return `<div class="card" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">
       <div class="top">
         <span data-act="profile" data-user="${esc(c.author)}" style="cursor:pointer">${pfp(c)}</span>
