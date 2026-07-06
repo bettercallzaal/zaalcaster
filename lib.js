@@ -210,6 +210,20 @@ export async function getNotifications(options = {}) {
   return response
 }
 
+// Notifications scoped to specific channels (e.g. just your /zao mentions).
+export async function getChannelNotifications(channelIds, options = {}) {
+  const { limit = 20, cursor = null } = options
+  const env = loadEnv()
+  const params = new URLSearchParams({
+    fid: env.FID,
+    channel_ids: Array.isArray(channelIds) ? channelIds.join(',') : channelIds,
+    limit: String(Math.min(limit, 25)),
+  })
+  if (cursor) params.append('cursor', cursor)
+  const response = await fetchNeynar(`/farcaster/notifications/channel?${params}`)
+  return response
+}
+
 export async function searchCasts(query, options = {}) {
   const { limit = 20, channelId = null, authorFid = null } = options
 
