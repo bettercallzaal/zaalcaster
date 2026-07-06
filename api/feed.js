@@ -6,7 +6,7 @@
 //   ?limit=25 ?cursor=...
 // Read-only, compact safe cast shape.
 
-import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications } from '../lib.js'
+import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 // flatten a Neynar notification (any shape) into a compact row for the UI
@@ -61,6 +61,14 @@ export default async function handler(req, res) {
       const channels = await getTrendingChannels({ limit: 10 })
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ trending: channels })
+      return
+    }
+
+    // Today's own activity - drives auto-quests (gm posted? cast? replied?)
+    if (req.query.myactivity === '1') {
+      const a = await getMyActivityToday()
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ activity: a })
       return
     }
 

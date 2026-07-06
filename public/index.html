@@ -866,7 +866,30 @@
     if (t === 'inbox' && !st.inbox.loaded) loadInbox()
     if (t === 'channels' && !st.channels.loaded) loadChannels()
     if (t === 'grow' && !st.grow.loaded) loadGrow()
+    if (t === 'daily') checkAutoQuests()
     if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
+  }
+  // auto-quests: tick quests Zaal actually completed today (gm posted, cast, replied)
+  let autoQuestDay = null
+  async function checkAutoQuests() {
+    if (autoQuestDay === todayStr()) return
+    autoQuestDay = todayStr()
+    try {
+      const d = await fetch('/api/feed?myactivity=1').then((r) => r.json())
+      if (!d.activity) return
+      const a = d.activity
+      let changed = false
+      daily.tasks.forEach((t, i) => {
+        if (t.done) return
+        const tx = (t.t || '').toLowerCase()
+        let hit = false
+        if (/\bgm\b/.test(tx) && a.gm) hit = true
+        else if (/\bpost\b|\bcast\b/.test(tx) && a.posts >= 1) hit = true
+        else if (/repl|inbox|engage/.test(tx)) { const m = tx.match(/(\d+)/); const need = m ? +m[1] : 1; if (a.replies >= need) hit = true }
+        if (hit) { t.done = true; awardQuest(i); changed = true }
+      })
+      if (changed) { saveDaily(); render(); toast('quests auto-completed from your activity') }
+    } catch { /* activity unreachable - manual ticking still works */ }
   }
 
   // ---- overlay: thread + profile detail ----
