@@ -722,15 +722,17 @@
     fresh.forEach((b, k) => setTimeout(() => toast(`Badge unlocked: ${b.name}`), 200 + k * 900))
   }
 
+  let editDaily = false
   function renderDaily() {
+    const rm = (act, i) => editDaily ? ` <span data-act="${act}" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span>` : ''
     const done = daily.tasks.filter((t) => t.done).length
     const tasks = daily.tasks.map((t, i) => `<div class="urow" style="cursor:default">
       <span data-act="dtoggle" data-i="${i}" style="cursor:pointer;font-size:18px;width:22px">${t.done ? '☑' : '☐'}</span>
       <div style="flex:1;${t.done ? 'color:#6f6f7a;text-decoration:line-through' : ''}">${esc(t.t)}</div>
-      <span data-act="dtaskrm" data-i="${i}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('')
-    const apps = daily.apps.map((a, i) => `<span class="chip"><a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(a.label)}</a> <span data-act="dapprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
-    const comms = daily.communities.map((c, i) => `<span class="chip" data-act="dcomm" data-c="${esc(c)}">/${esc(c)} <span data-act="dcommrm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
-    const groups = daily.groups.map((g, i) => `<span class="chip"><a href="${esc(g.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(g.label)}</a> <span data-act="dgrouprm" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')
+      ${editDaily ? `<span data-act="dtaskrm" data-i="${i}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span>` : ''}</div>`).join('')
+    const apps = daily.apps.map((a, i) => `<span class="chip"><a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(a.label)}</a>${rm('dapprm', i)}</span>`).join(' ')
+    const comms = daily.communities.map((c, i) => `<span class="chip" data-act="dcomm" data-c="${esc(c)}">/${esc(c)}${rm('dcommrm', i)}</span>`).join(' ')
+    const groups = daily.groups.map((g, i) => `<span class="chip"><a href="${esc(g.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(g.label)}</a>${rm('dgrouprm', i)}</span>`).join(' ')
     const pending = (scheduled || []).filter((s) => !s.sent).sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
     const sched = pending.length ? `<div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">scheduled posts (${pending.length})</b></div>`
       + pending.map((s) => `<div class="urow" style="cursor:default"><div style="flex:1"><div>${esc((s.text || '').slice(0, 70))}</div>
@@ -753,12 +755,12 @@
     </div>
     <div class="xpbar"><div class="xpfill" style="width:${xpInLevel(game.xp)}%"></div></div>
     <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}${nextBoostHint(game.streak || 0)}${(game.streak || 0) >= 1 ? ` <span class="chip" data-act="share" data-kind="streak">share streak</span>` : ''}</div>`
-    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</div></div>
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today <span class="chip" data-act="editdaily" style="float:right">${editDaily ? 'done' : 'edit'}</span></div></div>
       ${statbar}
       <div class="launchgrid">${nav}</div>
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
-      <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
+      ${editDaily ? '<div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>' : ''}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">badges (${game.badges.length}/${BADGES.length})</b></div>
       <div class="badges">${BADGES.map((b) => { const on = game.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><div class="bn">${esc(b.name)}</div><div class="bd">${on ? `unlocked <span class="chip" data-act="share" data-kind="badge" data-val="${esc(b.name)}" style="padding:1px 7px;font-size:11px">share</span>` : esc(b.desc)}</div></div>` }).join('')}</div>
       ${(() => {
@@ -780,13 +782,13 @@
       ${sched}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
       <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
-      <div class="searchbar"><input id="dAppLabel" placeholder="app name" style="flex:1"><input id="dAppUrl" placeholder="https://..." style="flex:2"><button class="ibtn" data-act="dappadd">add</button></div>
+      ${editDaily ? '<div class="searchbar"><input id="dAppLabel" placeholder="app name" style="flex:1"><input id="dAppUrl" placeholder="https://..." style="flex:2"><button class="ibtn" data-act="dappadd">add</button></div>' : ''}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">communities to check</b></div>
       <div class="subbar">${comms || '<span class="ub">none</span>'}</div>
-      <div class="searchbar"><input id="dCommInput" placeholder="channel id (e.g. gmfarcaster)"><button class="ibtn" data-act="dcommadd">add</button></div>
+      ${editDaily ? '<div class="searchbar"><input id="dCommInput" placeholder="channel id (e.g. gmfarcaster)"><button class="ibtn" data-act="dcommadd">add</button></div>' : ''}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">group chats</b></div>
       <div class="subbar">${groups || '<span class="ub">none</span>'}</div>
-      <div class="searchbar"><input id="dGroupLabel" placeholder="group name" style="flex:1"><input id="dGroupUrl" placeholder="farcaster.xyz/~/group/..." style="flex:2"><button class="ibtn" data-act="dgroupadd">add</button></div>`
+      ${editDaily ? '<div class="searchbar"><input id="dGroupLabel" placeholder="group name" style="flex:1"><input id="dGroupUrl" placeholder="farcaster.xyz/~/group/..." style="flex:2"><button class="ibtn" data-act="dgroupadd">add</button></div>' : ''}`
   }
 
   // ================= DECK (columns) =================
@@ -985,6 +987,7 @@
     if (act === 'profile') { openProfile(btn.dataset.user); return }
     if (act === 'thread') { openThread(hash); return }
     // daily dashboard
+    if (act === 'editdaily') { editDaily = !editDaily; render(); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; if (daily.tasks[i].done) awardQuest(i); saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
