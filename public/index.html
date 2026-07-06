@@ -329,6 +329,7 @@
   function renderFeed() {
     const sub = `<div class="subbar">
       <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">following</span>
+      <span class="chip ${st.feed.type === 'foryou' ? 'on' : ''}" data-feed="foryou">for you</span>
       <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
       <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
       <button class="ibtn" data-act="digest">${st.feed.digesting ? 'summarizing...' : 'what I missed'}</button>

@@ -6,7 +6,7 @@
 //   ?limit=25 ?cursor=...
 // Read-only, compact safe cast shape.
 
-import { getFollowingFeed, getTrendingFeed, getChannelFeed, getTrendingChannels } from '../lib.js'
+import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compact(cast) {
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
 
     const limit = Math.min(Number(req.query.limit) || 25, 50)
     const cursor = req.query.cursor || null
-    const type = ['trending', 'channel'].includes(req.query.type) ? req.query.type : 'following'
+    const type = ['trending', 'channel', 'foryou'].includes(req.query.type) ? req.query.type : 'following'
 
     let data
     if (type === 'channel') {
@@ -48,6 +48,8 @@ export default async function handler(req, res) {
       data = await getChannelFeed(id, { limit, cursor })
     } else if (type === 'trending') {
       data = await getTrendingFeed({ limit, cursor })
+    } else if (type === 'foryou') {
+      data = await getForYouFeed({ limit, cursor })
     } else {
       data = await getFollowingFeed({ limit, cursor })
     }

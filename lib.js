@@ -95,6 +95,24 @@ export async function getFollowingFeed(options = {}) {
   return response
 }
 
+// Neynar's algorithmic "for you" feed - ranked casts it thinks Zaal will like,
+// beyond just who he follows. A discovery + growth surface.
+export async function getForYouFeed(options = {}) {
+  const { limit = 20, cursor = null } = options
+  const env = loadEnv()
+
+  const params = new URLSearchParams({
+    fid: env.FID,
+    viewer_fid: env.FID,
+    limit: String(limit),
+  })
+
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/farcaster/feed/for_you?${params}`)
+  return response
+}
+
 export async function getChannelFeed(channelId, options = {}) {
   const { limit = 20, cursor = null } = options
 
