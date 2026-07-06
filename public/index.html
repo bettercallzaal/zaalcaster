@@ -254,20 +254,21 @@
   let scheduled = lsGet('zc_scheduled', [])           // [{id,text,channelId,quoteHash,quoteFid,at}]
   let lists = lsGet('zc_lists', [])                    // [{id,name,fids:[],members:[{fid,username}]}]
   let savedSearches = lsGet('zc_searches', [])         // [{q, channel}]
+  let statsHistory = lsGet('zc_statshist', {})         // day -> {followers, score}
   let syncEnabled = false                             // server store on? (set at boot)
 
   // one persist path: write localStorage (offline cache) + push to the server
   // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
   let pushT = null
   function persist() {
-    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches)
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
     if (typeof game !== 'undefined') lsSet('zc_game', game)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -590,6 +591,7 @@
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'stats failed')
       st.grow.data = d; st.grow.loaded = true
+      if (d.followers != null) { statsHistory[todayStr()] = { followers: d.followers, score: d.score ?? null }; const keep = (() => { const x = new Date(); x.setUTCDate(x.getUTCDate() - 30); return x.toISOString().slice(0, 10) })(); for (const k of Object.keys(statsHistory)) if (k < keep) delete statsHistory[k]; persist() }
       try { const ed = er && (await er.json()); st.grow.empires = (ed && ed.empires) || [] } catch { st.grow.empires = [] }
     } catch (e) { st.grow.err = e.message; st.grow.loaded = true }
     render()
@@ -601,8 +603,18 @@
     const mineKeys = ['zabal', 'zao', 'wavewarz']
     const myEmpire = (st.grow.empires || []).find((e) => mineKeys.includes((e.symbol || '').toLowerCase()) || mineKeys.includes((e.name || '').toLowerCase()) || (e.website || '').includes('zabal') || (e.warpcast || '').includes('/' + ME))
     const empLine = myEmpire ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(myEmpire.name)} empire - rank <b>${myEmpire.rank ?? '?'}</b>${myEmpire.treasury ? ` - ${Math.round(myEmpire.treasury)} treasury` : ''}</div>` : ''
+    // follower history sparkline (builds up from the first day you open Grow)
+    const hkeys = Object.keys(statsHistory).sort()
+    let histLine = ''
+    if (hkeys.length >= 2) {
+      const vals = hkeys.map((k) => statsHistory[k].followers).filter((v) => v != null)
+      const min = Math.min(...vals), max = Math.max(...vals), range = Math.max(1, max - min)
+      const bars = hkeys.slice(-14).map((k) => { const v = statsHistory[k].followers; const h = v == null ? 4 : Math.round(((v - min) / range) * 22) + 4; return `<div class="sparkbar" style="height:${h}px" title="${k}: ${v} followers"></div>` }).join('')
+      const first = statsHistory[hkeys[0]].followers, delta = (d.followers ?? first) - first
+      histLine = `<div style="display:flex;align-items:flex-end;gap:3px;margin-top:8px;height:28px">${bars}</div><div class="ub">followers over ${hkeys.length}d${delta ? ` - ${delta > 0 ? '+' : ''}${delta}` : ''}</div>`
+    }
     const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
-      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${empLine}</div>`
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${empLine}${histLine}</div>`
     const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
       <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
       <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>
@@ -1258,6 +1270,7 @@
         if (Array.isArray(s.scheduled)) { scheduled = s.scheduled; lsSet('zc_scheduled', scheduled) }
         if (Array.isArray(s.lists)) { lists = s.lists; lsSet('zc_lists', lists) }
         if (Array.isArray(s.savedSearches)) { savedSearches = s.savedSearches; lsSet('zc_searches', savedSearches) }
+        if (s.statsHistory && typeof s.statsHistory === 'object') { statsHistory = s.statsHistory; lsSet('zc_statshist', statsHistory) }
         if (s.daily && typeof s.daily === 'object') {
           daily = s.daily
           if (daily.date !== todayStr()) { daily.date = todayStr(); (daily.tasks || []).forEach((x) => (x.done = false)) }
