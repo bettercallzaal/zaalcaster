@@ -20,7 +20,7 @@
 // Without a TTY (piped/CI) it degrades to a read-only listing and never posts.
 
 import readline from 'node:readline'
-import { getUnansweredInbound, postCast } from '../lib.js'
+import { getUnansweredInbound, postCast, addSnooze } from '../lib.js'
 import { generateDrafts, saveVoiceExample } from '../voice.js'
 
 const line = '-'.repeat(60)
@@ -29,6 +29,7 @@ const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
 function statusTag(item) {
   if (item.status === 'sent') return ' [SENT]'
   if (item.status === 'skipped') return ' [SKIPPED]'
+  if (item.status === 'later') return ' [LATER - back in 24h]'
   return ''
 }
 
@@ -57,7 +58,7 @@ function renderItem(items, i, dry, notifsMode) {
     console.log('draft: (none - drafting unavailable)')
   }
   console.log(line)
-  console.log('[<] prev  [>] next  [a] send draft  [e] edit+send  [s] skip  [q] quit')
+  console.log('[<] prev  [>] next  [a] send draft  [e] edit+send  [s] skip  [l] later (24h)  [q] quit')
 }
 
 // Reads one key; arrow keys arrive as 3-byte escape sequences.
@@ -162,7 +163,12 @@ async function main() {
     } else if (key === 'prev' || key === 'p') {
       if (i > 0) i--
     } else if (key === 's') {
-      if (!item.status) item.status = 'skipped'
+      // skip = never show again (persisted, so it doesn't come back next session)
+      if (!item.status) { item.status = 'skipped'; if (!dry) await addSnooze(item.hash).catch(() => {}) }
+      if (i < items.length - 1) i++
+    } else if (key === 'l') {
+      // later = hide for 24h, then it resurfaces
+      item.status = 'later'; if (!dry) await addSnooze(item.hash, 24).catch(() => {})
       if (i < items.length - 1) i++
     } else if (key === 'a') {
       if (!ANSWERABLE.has(item.type)) continue
