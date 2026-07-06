@@ -355,6 +355,21 @@ export async function postCast(text, options = {}) {
   return response
 }
 
+// What Zaal actually did today - used to auto-tick quests. Read-only, from his
+// own recent casts. { gm, posts, replies, total }.
+export async function getMyActivityToday() {
+  const res = await getUserCasts({ limit: 40, includeReplies: true }).catch(() => ({ casts: [] }))
+  const today = new Date().toISOString().slice(0, 10)
+  let gm = false, posts = 0, replies = 0
+  for (const c of res.casts || []) {
+    if (!(c.timestamp || '').startsWith(today)) continue
+    const isReply = !!(c.parent_hash || c.parent_author?.fid)
+    if (isReply) replies++; else posts++
+    if (/(^|\s)g\s?m($|\s|,|!|\.)/i.test(c.text || '')) gm = true
+  }
+  return { gm, posts, replies, total: posts + replies }
+}
+
 // reaction_type: 'like' or 'recast'. Zaal running the command is the approval.
 export async function postReaction(reactionType, targetHash, targetAuthorFid = null) {
   const env = loadEnv()
