@@ -66,6 +66,15 @@
   .badge.on .bd { color: var(--accent); }
   .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(12px); background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; opacity: 0; transition: opacity .25s, transform .25s; z-index: 9999; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .lbrow { display: flex; align-items: center; gap: 8px; padding: 7px 4px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .lbrow:hover { background: rgba(133,93,205,.06); }
+  .lbrank { width: 22px; text-align: center; font-weight: 700; color: #6f6f7a; font-size: 13px; }
+  .lbrank.top { color: var(--accent); }
+  .lbpfp { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: #24242f; flex: none; }
+  .lbname { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .lbbar { width: 84px; height: 6px; background: #1c1c28; border-radius: 4px; overflow: hidden; flex: none; }
+  .lbfill { display: block; height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); }
+  .lbn { width: 26px; text-align: right; font-weight: 600; font-size: 13px; color: var(--accent); }
   .card:hover { border-color: #2f2f3d; }
   .card .top { display: flex; gap: 10px; align-items: flex-start; }
   .pfp { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); object-fit: cover; flex: none; }
@@ -540,13 +549,19 @@
       <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>
         <span style="color:#855DCD">score ${c.score}</span>
         <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a></div></div></div>`).join('')
-    const eng = (d.topEngagers || []).map((e) => `<span class="chip" data-act="profile" data-user="${esc(e.username)}">@${esc(e.username)} - ${e.n}</span>`).join(' ')
+    const maxN = Math.max(1, ...(d.topEngagers || []).map((e) => e.n))
+    const eng = (d.topEngagers || []).map((e) => `<div class="lbrow" data-act="profile" data-user="${esc(e.username)}">
+      <span class="lbrank ${e.rank <= 3 ? 'top' : ''}">${e.rank}</span>
+      ${e.pfp ? `<img class="lbpfp" src="${esc(e.pfp)}" alt="">` : '<span class="lbpfp"></span>'}
+      <span class="lbname">@${esc(e.username)}</span>
+      <span class="lbbar"><span class="lbfill" style="width:${Math.round((e.n / maxN) * 100)}%"></span></span>
+      <span class="lbn">${e.n}</span></div>`).join('')
     const suggest = (d.suggest || []).map((u) => `<div class="urow" data-act="profile" data-user="${esc(u.username)}">
       ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
       <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
     return hdr
-      + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">who engages you most (reply back - it compounds)</b></div>'
-      + `<div class="subbar">${eng || '<span class="ub">no recent engagers</span>'}</div>`
+      + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">your top fans - who engages you most (reply back, it compounds)</b></div>'
+      + (eng || '<div class="subbar"><span class="ub">no recent engagers</span></div>')
       + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">people to engage next</b></div>'
       + (suggest || '<div class="subbar"><span class="ub">no suggestions right now</span></div>')
       + '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">your top casts (by engagement)</b></div>'
