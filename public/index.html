@@ -228,6 +228,7 @@
   let HOME_CHANNELS = ['zao', 'wavewarz', 'zabal'] // overridden from config on boot
   let ME = 'zaal' // your username, set from config on boot
   let QUICK = ['GM', 'Lfg', 'love this', 'so cool', 'congrats', 'based', 'ZM'] // quick replies, from config
+  let BRANDS = [] // your brands, set from config on boot
   // a row of one-tap quick-reply chips that fill the reply box for a given cast
   const quickRow = (hash) => `<div class="subbar" style="padding:2px 0 6px;gap:6px">${QUICK.map((q) => `<span class="chip" data-act="quick" data-hash="${esc(hash)}" data-q="${esc(q)}">${esc(q)}</span>`).join('')}</div>`
 
@@ -789,6 +790,7 @@
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px">GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today <span class="chip" data-act="editdaily" style="float:right">${editDaily ? 'done' : 'edit'}</span></div></div>
       ${statbar}
       <div class="launchgrid">${nav}</div>
+      ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your brands</b></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
       ${editDaily ? '<div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>' : ''}
@@ -916,6 +918,20 @@
       document.getElementById('obody').innerHTML = html || '<div class="empty">no thread.</div>'
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
+  async function openBrand(i) {
+    const b = BRANDS[i]; if (!b) return
+    openOverlay(b.name, '<div class="loading">loading...</div>')
+    const links = (b.links || []).map((l) => `<a class="chip" href="${esc(l.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(l.label)}</a>`).join(' ')
+    const head = `<div class="prof" style="display:block"><div class="pn" style="font-size:20px">${esc(b.name)}</div>
+      ${b.tagline ? `<div class="ps">${esc(b.tagline)}</div>` : ''}
+      <div class="subbar" style="padding-left:0">${links}${b.channel ? ` <span class="chip" data-act="brandchan" data-chan="${esc(b.channel)}">open /${esc(b.channel)}</span>` : ''}</div></div>`
+    try {
+      const r = await fetch(`/api/feed?type=channel&id=${encodeURIComponent(b.channel)}&limit=20`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'feed failed')
+      const casts = (d.casts || []).map(castCard).join('') || '<div class="empty">no recent casts.</div>'
+      document.getElementById('obody').innerHTML = head + `<div class="subbar"><b style="color:#8a8a99;font-size:13px">/${esc(b.channel)} feed</b></div>` + casts
+    } catch (e) { document.getElementById('obody').innerHTML = head + `<div class="err">${esc(e.message)}</div>` }
+  }
   async function openProfile(user) {
     openOverlay('@' + user, '<div class="loading">loading profile...</div>')
     try {
@@ -943,6 +959,8 @@
       if (tap.dataset.act === 'profile') return openProfile(tap.dataset.user)
       if (tap.dataset.act === 'thread') return openThread(tap.dataset.hash)
     }
+    const bc = e.target.closest('[data-act="brandchan"]')
+    if (bc) { closeOverlay(); st.channels.id = bc.dataset.chan; switchTab('channels'); loadChannels(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const btn = e.target.closest('button[data-act]'); if (!btn) return
@@ -1043,6 +1061,7 @@
     if (act === 'thread') { openThread(hash); return }
     // daily dashboard
     if (act === 'editdaily') { editDaily = !editDaily; render(); return }
+    if (act === 'brand') { openBrand(+btn.dataset.i); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; if (daily.tasks[i].done) awardQuest(i); saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
@@ -1291,6 +1310,7 @@
     if (!cfg) return
     if (cfg.username) ME = cfg.username
     if (Array.isArray(cfg.quickReplies) && cfg.quickReplies.length) QUICK = cfg.quickReplies
+    if (Array.isArray(cfg.brands)) BRANDS = cfg.brands
     if (cfg.appName) {
       document.title = cfg.appName
       const m = cfg.appName.match(/^(.*?)(caster)$/i)

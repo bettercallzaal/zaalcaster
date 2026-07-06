@@ -18,6 +18,13 @@ export const config = {
   // Channels shown on the Channels tab + Post picker.
   homeChannels: ['zao', 'wavewarz', 'zabal'],
 
+  // Your brands - each gets a page (channel feed + links) in the Brands hub.
+  brands: [
+    { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },
+    { name: 'WaveWarZ', channel: 'wavewarz', tagline: 'live-traded music battles - back music, not memes', links: [{ label: 'wavewarz.com', url: 'https://www.wavewarz.com' }] },
+    { name: 'ZABAL', channel: 'zabal', tagline: 'ZABAL Gamez build-a-thon + art', links: [{ label: 'zabal.art', url: 'https://zabal.art' }, { label: 'zabalgamez.com', url: 'https://zabalgamez.com' }] },
+  ],
+
   // One-tap quick replies (tap a chip to fill the reply box, then confirm).
   quickReplies: ['GM', 'Lfg', 'love this', 'so cool', 'congrats', 'based', 'ZM'],
 
