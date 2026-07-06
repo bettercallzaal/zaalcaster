@@ -56,6 +56,7 @@
   .stat .sv { font-weight: 700; font-size: 20px; color: var(--accent); }
   .stat .sl { color: #8a8a99; font-size: 11px; margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
   .boost { font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #855DCD, #6d4aff); padding: 1px 5px; border-radius: 6px; vertical-align: middle; }
+  .weekgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 8px; }
   .xpbar { height: 8px; background: #1c1c28; border-radius: 6px; overflow: hidden; }
   .xpfill { height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); transition: width .3s; }
   .xphint { color: #8a8a99; font-size: 12px; margin: 4px 0 2px; text-align: right; }
@@ -608,8 +609,13 @@
   if (!game || typeof game !== 'object') game = { xp: 0, streak: 0, best: 0, lastDay: null, awarded: {}, badges: [] }
   if (!game.awarded || typeof game.awarded !== 'object') game.awarded = {}
   if (!Array.isArray(game.badges)) game.badges = []
+  if (!game.history || typeof game.history !== 'object') game.history = {} // day -> {quests, xp}
+  if (!game.weekGoal) game.weekGoal = 21 // quests per week target (3/day)
   // prune the award ledger to today only (per-day, so quests re-award tomorrow)
   for (const k of Object.keys(game.awarded)) if (k !== todayStr()) delete game.awarded[k]
+  // prune the activity history to the last 14 days
+  const keepFrom = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 14); return d.toISOString().slice(0, 10) })()
+  for (const k of Object.keys(game.history)) if (k < keepFrom) delete game.history[k]
   const yesterdayStr = () => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) }
   const levelFor = (xp) => Math.floor((xp || 0) / 100) + 1
   const xpInLevel = (xp) => (xp || 0) % 100
@@ -619,6 +625,17 @@
     const tiers = [[3, 1.5], [7, 2], [14, 2.5], [30, 3]]
     for (const [days, mult] of tiers) if (streak < days) return ` - ${days - streak}d to ${mult}x xp`
     return ' - max 3x boost'
+  }
+  // roll up the last `days` days of the activity ledger (default 7 = this week)
+  function weeklyStats(days = 7) {
+    let quests = 0, xp = 0, active = 0
+    for (let i = 0; i < days; i++) {
+      const d = new Date(); d.setUTCDate(d.getUTCDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      const h = game.history[key]
+      if (h) { quests += h.quests || 0; xp += h.xp || 0; if (h.quests > 0) active++ }
+    }
+    return { quests, xp, active }
   }
   const saveGame = () => { lsSet('zc_game', game); persist() }
   function toast(msg) {
@@ -669,6 +686,8 @@
     const mult = boosterFor(game.streak || 0)
     const gain = Math.round(XP_PER_QUEST * mult)
     game.xp = (game.xp || 0) + gain
+    const h = game.history[day] || { quests: 0, xp: 0 }   // per-day ledger for weekly recap
+    h.quests += 1; h.xp += gain; game.history[day] = h
     const perfect = (daily.tasks || []).length > 0 && (daily.tasks || []).every((t) => t.done)
     const fresh = unlockBadges(perfect)
     saveGame()
@@ -715,6 +734,17 @@
       <div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">badges (${game.badges.length}/${BADGES.length})</b></div>
       <div class="badges">${BADGES.map((b) => { const on = game.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><div class="bn">${esc(b.name)}</div><div class="bd">${on ? `unlocked <span class="chip" data-act="share" data-kind="badge" data-val="${esc(b.name)}" style="padding:1px 7px;font-size:11px">share</span>` : esc(b.desc)}</div></div>` }).join('')}</div>
+      ${(() => {
+        const w = weeklyStats(7); const goal = game.weekGoal || 21; const pct = Math.min(100, Math.round((w.quests / goal) * 100))
+        return `<div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">this week</b> <span class="chip" data-act="weekgoal">goal ${goal}</span> <span class="chip" data-act="share" data-kind="week">share recap</span></div>
+        <div class="weekgrid">
+          <div class="stat"><div class="sv">${w.quests}</div><div class="sl">quests</div></div>
+          <div class="stat"><div class="sv">${w.xp}</div><div class="sl">xp</div></div>
+          <div class="stat"><div class="sv">${w.active}/7</div><div class="sl">active days</div></div>
+        </div>
+        <div class="xpbar"><div class="xpfill" style="width:${pct}%"></div></div>
+        <div class="xphint">${w.quests}/${goal} quests this week (${pct}%)</div>`
+      })()}
       ${sched}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
       <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
@@ -939,6 +969,9 @@
       if (btn.dataset.kind === 'streak') {
         const d = game.streak || 0
         text = `day ${d} streak on farcaster, staying consistent. gamified my habit in my own client, zaalcaster - fork your own: ${repo}`
+      } else if (btn.dataset.kind === 'week') {
+        const w = weeklyStats(7)
+        text = `this week on farcaster: ${w.quests} quests, ${w.xp} xp, active ${w.active}/7 days. running my own gamified client, zaalcaster - fork your own: ${repo}`
       } else {
         text = `unlocked "${btn.dataset.val}" in zaalcaster - gamifying my farcaster habit. fork your own: ${repo}`
       }
@@ -946,6 +979,11 @@
       switchTab('compose')
       setTimeout(() => { const ta = document.getElementById('composeText'); if (ta) { ta.focus() } }, 60)
       toast('draft ready - review + post')
+      return
+    }
+    if (act === 'weekgoal') {
+      const v = parseInt(window.prompt('weekly quest goal?', String(game.weekGoal || 21)) || '', 10)
+      if (v && v > 0) { game.weekGoal = v; saveGame(); render() }
       return
     }
     if (act === 'newlist') {
@@ -1084,6 +1122,8 @@
           game = s.game
           if (!game.awarded || typeof game.awarded !== 'object') game.awarded = {}
           if (!Array.isArray(game.badges)) game.badges = []
+          if (!game.history || typeof game.history !== 'object') game.history = {}
+          if (!game.weekGoal) game.weekGoal = 21
           for (const k of Object.keys(game.awarded)) if (k !== todayStr()) delete game.awarded[k]
           lsSet('zc_game', game)
         }
