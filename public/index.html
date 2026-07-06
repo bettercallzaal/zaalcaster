@@ -12,8 +12,8 @@
 <link rel="apple-touch-icon" href="/icon.svg" />
 <link rel="icon" href="/icon.svg" type="image/svg+xml" />
 <!-- Farcaster Mini App embed: makes a shared zaalcaster link render as a launchable mini app in-feed. Edit the domain if you fork. -->
-<meta name="fc:miniapp" content='{"version":"1","imageUrl":"https://z.thezao.xyz/icon.svg","button":{"title":"Open zaalcaster","action":{"type":"launch_miniapp","name":"zaalcaster","url":"https://z.thezao.xyz","splashImageUrl":"https://z.thezao.xyz/icon.svg","splashBackgroundColor":"#0c0c12"}}}' />
-<meta name="fc:frame" content='{"version":"1","imageUrl":"https://z.thezao.xyz/icon.svg","button":{"title":"Open zaalcaster","action":{"type":"launch_frame","name":"zaalcaster","url":"https://z.thezao.xyz","splashImageUrl":"https://z.thezao.xyz/icon.svg","splashBackgroundColor":"#0c0c12"}}}' />
+<meta name="fc:miniapp" content='{"version":"1","imageUrl":"https://z.thezao.xyz/og.svg","button":{"title":"Open zaalcaster","action":{"type":"launch_miniapp","name":"zaalcaster","url":"https://z.thezao.xyz","splashImageUrl":"https://z.thezao.xyz/icon.svg","splashBackgroundColor":"#0c0c12"}}}' />
+<meta name="fc:frame" content='{"version":"1","imageUrl":"https://z.thezao.xyz/og.svg","button":{"title":"Open zaalcaster","action":{"type":"launch_frame","name":"zaalcaster","url":"https://z.thezao.xyz","splashImageUrl":"https://z.thezao.xyz/icon.svg","splashBackgroundColor":"#0c0c12"}}}' />
 <style>
   :root {
     color-scheme: dark;
@@ -543,7 +543,20 @@
   }
 
   // ================= COMPOSE =================
-  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null, thread: false, parts: [], embedUrl: '' }
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false }
+  async function uploadImage(file) {
+    if (!file) return
+    if (file.size > 9 * 1024 * 1024) { toast('image too big (max ~9MB)'); return }
+    compose.uploading = true; render()
+    try {
+      const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file) })
+      const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ upload: dataUrl }) })
+      const d = await r.json()
+      if (d.ok && d.url) { compose.embedUrl = d.url; toast('image attached') }
+      else toast(d.reason || 'upload failed')
+    } catch (e) { toast('upload error: ' + e.message) }
+    compose.uploading = false; render()
+  }
   const splitThread = (t) => String(t || '').split(/\n-{3,}\n/).map((s) => s.trim()).filter(Boolean)
   function quotePreview() {
     if (!compose.quote) return ''
@@ -589,7 +602,7 @@
     return `<div class="compose">${banner}${quotePreview()}
       <div class="subbar" style="padding:0 0 6px"><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span>${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
       <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
-      ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"></div>`}
+      ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"><button class="ibtn" data-act="uploadpick">${compose.uploading ? 'uploading...' : 'upload'}</button></div><input type="file" id="composeFile" accept="image/*" style="display:none">`}
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
       <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
         <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
@@ -1086,7 +1099,10 @@
     else if (t.id === 'searchInput') { st.search.q = t.value }
   })
   main.addEventListener('keydown', (e) => { if (e.target.id === 'searchInput' && e.key === 'Enter') runSearch() })
-  main.addEventListener('change', (e) => { if (e.target.id === 'composeChannel') compose.channel = e.target.value })
+  main.addEventListener('change', (e) => {
+    if (e.target.id === 'composeChannel') compose.channel = e.target.value
+    if (e.target.id === 'composeFile' && e.target.files && e.target.files[0]) uploadImage(e.target.files[0])
+  })
 
   main.addEventListener('click', async (e) => {
     const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
@@ -1238,6 +1254,7 @@
       scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
     }
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
+    if (act === 'uploadpick') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; const f = document.getElementById('composeFile'); if (f) f.click(); return }
     if (act === 'togglethread') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; compose.thread = !compose.thread; render(); return }
     if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value.trim(); if (!compose.text) return; if (compose.thread) compose.parts = splitThread(compose.text); compose.armed = true; render(); return }
     if (act === 'composecancel') { compose.armed = false; render(); return }

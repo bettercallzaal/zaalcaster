@@ -33,6 +33,25 @@ export default async function handler(req, res) {
   try {
     const body = await readJsonBody(req)
 
+    // image upload: browser sends a base64 data URL, we push it to Imgur and
+    // hand back a public URL to attach as an embed. Needs IMGUR_CLIENT_ID.
+    if (typeof body.upload === 'string' && body.upload.startsWith('data:')) {
+      const clientId = process.env.IMGUR_CLIENT_ID
+      if (!clientId) { res.status(200).json({ ok: false, reason: 'no image host - set IMGUR_CLIENT_ID in Vercel' }); return }
+      const b64 = body.upload.split(',')[1] || ''
+      if (!b64) { res.status(400).json({ error: 'empty image' }); return }
+      const up = await fetch('https://api.imgur.com/3/image', {
+        method: 'POST',
+        headers: { Authorization: `Client-ID ${clientId}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: b64, type: 'base64' }),
+      })
+      const ud = await up.json().catch(() => ({}))
+      const url = ud?.data?.link
+      if (!url) { res.status(200).json({ ok: false, reason: 'upload failed' }); return }
+      res.status(200).json({ ok: true, url })
+      return
+    }
+
     // thread mode: post an array of casts, each replying to the previous
     if (Array.isArray(body.casts)) {
       const parts = body.casts.map((t) => String(t || '').trim()).filter(Boolean).slice(0, 25)
