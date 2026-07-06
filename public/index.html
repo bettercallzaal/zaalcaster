@@ -59,6 +59,7 @@
   .weekgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 8px; }
   .pwr { font-size: 10px; font-weight: 700; color: #6d4aff; border: 1px solid #6d4aff; border-radius: 5px; padding: 0 4px; vertical-align: middle; }
   .qs { font-size: 10px; font-weight: 600; color: #3fbf7f; vertical-align: middle; }
+  .lbrow.ownrow { background: linear-gradient(90deg, rgba(133,93,205,.16), transparent); border-radius: 8px; }
   .xpbar { height: 8px; background: #1c1c28; border-radius: 6px; overflow: hidden; }
   .xpfill { height: 100%; background: linear-gradient(90deg, #855DCD, #6d4aff); transition: width .3s; }
   .xphint { color: #8a8a99; font-size: 12px; margin: 4px 0 2px; text-align: right; }
@@ -231,7 +232,7 @@
     inbox: { items: [], loaded: false, showAll: false, priority: false },
     channels: { id: 'zao', casts: [], loaded: false, trending: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
-    grow: { loaded: false, data: null },
+    grow: { loaded: false, data: null, empires: [] },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -539,9 +540,11 @@
   async function loadGrow() {
     st.grow.loaded = false; render()
     try {
-      const r = await fetch('/api/stats'); const d = await r.json()
+      const [r, er] = await Promise.all([fetch('/api/stats'), fetch('/api/feed?empire=1').catch(() => null)])
+      const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'stats failed')
       st.grow.data = d; st.grow.loaded = true
+      try { const ed = er && (await er.json()); st.grow.empires = (ed && ed.empires) || [] } catch { st.grow.empires = [] }
     } catch (e) { st.grow.err = e.message; st.grow.loaded = true }
     render()
   }
@@ -566,11 +569,24 @@
     const suggest = (d.suggest || []).map((u) => `<div class="urow" data-act="profile" data-user="${esc(u.username)}">
       ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
       <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
+    const mine = ['zabal', 'zao', 'wavewarz']
+    const empires = (st.grow.empires || []).map((e, i) => {
+      const own = mine.includes((e.symbol || '').toLowerCase()) || mine.includes((e.name || '').toLowerCase())
+      const link = e.warpcast || e.website
+      return `<div class="lbrow ${own ? 'ownrow' : ''}"${link ? ` data-openurl="${esc(link)}"` : ''}>
+        <span class="lbrank ${i < 3 ? 'top' : ''}">${i + 1}</span>
+        ${e.logo ? `<img class="lbpfp" src="${esc(e.logo)}" alt="">` : '<span class="lbpfp"></span>'}
+        <span class="lbname">${esc(e.name)}${e.native ? ' <span class="qs">native</span>' : ''}</span>
+        <span class="ub" style="font-size:12px">${e.treasury ? Math.round(e.treasury) + ' treasury' : ''}</span>
+        <span class="lbn">${e.rank != null ? e.rank : '-'}</span></div>`
+    }).join('')
+    const empireSec = empires ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">Empire Builder - top empires (read-only)</b></div>' + empires : ''
     return hdr
       + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">your top fans - who engages you most (reply back, it compounds)</b></div>'
       + (eng || '<div class="subbar"><span class="ub">no recent engagers</span></div>')
       + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">people to engage next</b></div>'
       + (suggest || '<div class="subbar"><span class="ub">no suggestions right now</span></div>')
+      + empireSec
       + '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">your top casts (by engagement)</b></div>'
       + (casts || '<div class="empty">no casts yet.</div>')
   }
@@ -938,6 +954,7 @@
     const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
     const lb = e.target.closest('[data-list]'); if (lb && !lb.dataset.act) { st.feed.type = 'list'; st.feed.listId = lb.dataset.list; loadFeed(); return }
     const sc = e.target.closest('[data-searchchan]'); if (sc) { st.search.channel = sc.dataset.searchchan; if (st.search.q.trim()) runSearch(); else render(); return }
+    const ou = e.target.closest('[data-openurl]'); if (ou) { window.open(ou.dataset.openurl, '_blank', 'noopener'); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
     // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
     const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
