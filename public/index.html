@@ -540,7 +540,8 @@
   }
 
   // ================= COMPOSE =================
-  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null }
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, quote: null, thread: false, parts: [] }
+  const splitThread = (t) => String(t || '').split(/\n-{3,}\n/).map((s) => s.trim()).filter(Boolean)
   function quotePreview() {
     if (!compose.quote) return ''
     const q = compose.quote
@@ -565,8 +566,12 @@
     const chSel = `<select id="composeChannel">
       <option value="">no channel</option>${HOME_CHANNELS.map((c) => `<option value="${c}" ${compose.channel === c ? 'selected' : ''}>/${c}</option>`).join('')}</select>`
     if (compose.armed) {
-      return `<div class="compose">${banner}${quotePreview()}<textarea readonly>${esc(compose.text)}</textarea>
-        <div class="btns"><span class="note">${compose.quote ? 'quote-cast' : 'post'} this as @${esc(ME)}${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
+      const preview = (compose.thread && compose.parts.length > 1)
+        ? compose.parts.map((p, i) => `<div class="urow" style="cursor:default"><span class="lbrank">${i + 1}</span><div style="flex:1">${esc(p)}</div></div>`).join('')
+        : `<textarea readonly>${esc(compose.text)}</textarea>`
+      const what = (compose.thread && compose.parts.length > 1) ? `thread of ${compose.parts.length} casts` : (compose.quote ? 'quote-cast' : 'post')
+      return `<div class="compose">${banner}${quotePreview()}${preview}
+        <div class="btns"><span class="note">${what} as @${esc(ME)}${compose.channel ? ' to /' + esc(compose.channel) : ''}?</span>
           <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
           <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
     }
@@ -576,7 +581,10 @@
         <div class="ub">${new Date(s.at).toLocaleString()}${s.channelId ? ' - /' + esc(s.channelId) : ''}</div></div>
         <span data-act="schedrm" data-id="${esc(s.id)}" class="ub" style="cursor:pointer;color:#ff8a6a">x</span></div>`).join('') : ''
     const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
-    return `<div class="compose">${banner}${quotePreview()}<textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
+    const nParts = compose.thread ? splitThread(compose.text).length : 1
+    return `<div class="compose">${banner}${quotePreview()}
+      <div class="subbar" style="padding:0 0 6px"><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span>${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
+      <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
       <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
         <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
@@ -1225,16 +1233,18 @@
       scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
     }
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
-    if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; if (!compose.text) return; compose.armed = true; render(); return }
+    if (act === 'togglethread') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; compose.thread = !compose.thread; render(); return }
+    if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; if (!compose.text) return; if (compose.thread) compose.parts = splitThread(compose.text); compose.armed = true; render(); return }
     if (act === 'composecancel') { compose.armed = false; render(); return }
     if (act === 'composeconfirm') {
       if (compose.sending) return; compose.sending = true; render()
       try {
-        const body = { text: compose.text, channelId: compose.channel || null }
-        if (compose.quote) { body.quoteHash = compose.quote.hash; body.quoteFid = compose.quote.fid }
+        const isThread = compose.thread && compose.parts.length > 1
+        const body = isThread ? { casts: compose.parts, channelId: compose.channel || null } : { text: compose.text, channelId: compose.channel || null }
+        if (!isThread && compose.quote) { body.quoteHash = compose.quote.hash; body.quoteFid = compose.quote.fid }
         const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
-        compose.sentLink = d.link; compose.sending = false; compose.armed = false; compose.quote = null
+        compose.sentLink = d.link; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []
       } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
       render(); return
     }
