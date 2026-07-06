@@ -6,7 +6,7 @@
 //   ?limit=25 ?cursor=...
 // Read-only, compact safe cast shape.
 
-import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels } from '../lib.js'
+import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compact(cast) {
@@ -38,9 +38,17 @@ export default async function handler(req, res) {
       return
     }
 
+    // seed a "close friends" list from Neynar best-friends (mutual affinity)
+    if (req.query.bestfriends === '1') {
+      const friends = await getBestFriends({ limit: 20 })
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ friends })
+      return
+    }
+
     const limit = Math.min(Number(req.query.limit) || 25, 50)
     const cursor = req.query.cursor || null
-    const type = ['trending', 'channel', 'foryou'].includes(req.query.type) ? req.query.type : 'following'
+    const type = ['trending', 'channel', 'foryou', 'list'].includes(req.query.type) ? req.query.type : 'following'
 
     let data
     if (type === 'channel') {
@@ -50,6 +58,9 @@ export default async function handler(req, res) {
       data = await getTrendingFeed({ limit, cursor })
     } else if (type === 'foryou') {
       data = await getForYouFeed({ limit, cursor })
+    } else if (type === 'list') {
+      const fids = String(req.query.fids || '').split(',').filter((f) => /^\d+$/.test(f.trim()))
+      data = await getFeedByFids(fids, { limit, cursor })
     } else {
       data = await getFollowingFeed({ limit, cursor })
     }
