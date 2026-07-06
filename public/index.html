@@ -357,6 +357,7 @@
             <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">reply</button>
             <button data-act="quote" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">quote</button>
             <button class="act bm ${isBookmarked(c.hash) ? 'on' : ''}" data-act="bookmark" data-hash="${esc(c.hash)}">${isBookmarked(c.hash) ? 'saved' : 'save'}</button>
+            ${c.author === ME ? `<button data-act="delcast" data-hash="${esc(c.hash)}" style="color:#ff8a6a">delete</button>` : ''}
             <a class="open" href="${esc(c.link)}" target="_blank" rel="noopener">open</a>
           </div>
           <div class="replyslot" data-slot="${esc(c.hash)}"></div>
@@ -1130,17 +1131,36 @@
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay() })
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay() })
 
+  async function delCast(hash) {
+    if (!window.confirm('delete this cast? this cannot be undone.')) return
+    try {
+      const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', hash }) })
+      const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'delete failed')
+      st.feed.casts = st.feed.casts.filter((c) => c.hash !== hash)
+      st.channels.casts = (st.channels.casts || []).filter((c) => c.hash !== hash)
+      st.search.casts = (st.search.casts || []).filter((c) => c.hash !== hash)
+      toast('cast deleted'); render()
+    } catch (e) { toast('delete error: ' + e.message) }
+  }
   async function openThread(hash) {
     openOverlay('thread', '<div class="loading">loading thread...</div>')
     try {
       const r = await fetch(`/api/view?kind=thread&hash=${encodeURIComponent(hash)}`); const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'thread failed')
-      let html = ''
+      let html = `<div class="subbar" style="padding-top:0"><span class="chip" data-act="summarize" data-hash="${esc(hash)}">summarize thread</span></div><div id="threadSummary"></div>`
       for (const a of d.ancestors) html += castCard(a)
       if (d.cast) html += `<div class="focuscast">${castCard(d.cast)}</div>`
       for (const rep of d.replies) { html += castCard(rep); for (const s of (rep.sub || [])) html += `<div style="margin-left:14px">${castCard(s)}</div>` }
       document.getElementById('obody').innerHTML = html || '<div class="empty">no thread.</div>'
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  async function summarizeThread(hash) {
+    const out = document.getElementById('threadSummary'); if (!out) return
+    out.innerHTML = '<div class="loading">summarizing...</div>'
+    try {
+      const d = await fetch(`/api/view?kind=summary&hash=${encodeURIComponent(hash)}`).then((r) => r.json())
+      out.innerHTML = d.summary ? `<div class="digest"><div class="lab">thread summary</div><div class="t">${esc(d.summary)}</div></div>` : '<div class="ub">no summary available</div>'
+    } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
   function openAllProjects() {
     const cards = BRANDS.map((b) => `<div class="card">
@@ -1190,12 +1210,15 @@
       }
       const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
+        ${(u.verified || []).length ? `<div class="ps" style="color:#3fbf7f">verified: ${u.verified.map((v) => esc(v)).join(', ')}</div>` : ''}
         ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
         ${lists.length ? `<div class="ps" style="margin-top:6px">lists: ${lists.map((l) => `<span class="chip ${(l.fids || []).includes(u.fid) ? 'on' : ''}" data-act="addtolist" data-list="${esc(l.id)}" data-fid="${u.fid}" data-uname="${esc(u.username)}">${esc(l.name)}</span>`).join(' ')}</div>` : ''}
         <div class="subbar" style="padding-left:0"><span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a></div>
         <div id="researchOut"></div></div></div>`
       curProfile = { username: u.username, display: u.display, bio: u.bio, followers: u.followers, score: u.score, youFollow: u.youFollow, followsYou: u.followsYou, casts: (d.casts || []).map((c) => ({ text: c.text })) }
-      document.getElementById('obody').innerHTML = head + d.casts.map(castCard).join('')
+      const popular = (d.popular || []).length ? '<div class="subbar"><b style="color:#8a8a99;font-size:13px">top casts</b></div>' + d.popular.map(castCard).join('') : ''
+      const recent = '<div class="subbar"><b style="color:#8a8a99;font-size:13px">recent</b></div>' + d.casts.map(castCard).join('')
+      document.getElementById('obody').innerHTML = head + popular + recent
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
   // clicks inside the overlay: navigate deeper + react (reply happens in main views)
@@ -1209,6 +1232,8 @@
     if (bc) { closeOverlay(); st.channels.id = bc.dataset.chan; switchTab('channels'); loadChannels(); return }
     const rz = e.target.closest('[data-act="research"]')
     if (rz) { runResearch(); return }
+    const sz = e.target.closest('[data-act="summarize"]')
+    if (sz) { summarizeThread(sz.dataset.hash); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const stplrm = e.target.closest('[data-act="snaptplrm"]')
@@ -1220,6 +1245,7 @@
     if (act === 'profile') return openProfile(btn.dataset.user)
     if (act === 'thread') return openThread(btn.dataset.hash)
     if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
+    if (act === 'delcast') { delCast(btn.dataset.hash); return }
     if (act === 'snapattach') { compose.embedUrl = snapUrl(buildSnapDoc()); closeOverlay(); switchTab('compose'); toast('snap attached to your cast'); return }
     if (act === 'snapopen') { window.open(snapUrl(buildSnapDoc()), '_blank', 'noopener'); return }
     if (act === 'snapsave') { const doc = buildSnapDoc(); const name = (window.prompt('name this template', doc.title || 'my snap') || '').trim(); if (name) { savedSnaps.push({ name, doc }); persist(); snapSel = snapList().length - 1; document.getElementById('obody').innerHTML = snapBuilderHtml(); toast('template saved') } return }
@@ -1390,6 +1416,7 @@
     if (act === 'inboxview') { st.inbox.view = btn.dataset.view; loadInbox(); return }
     if (act === 'filters') { openFilters(); return }
     if (act === 'bookmark') { const c = findCast(hash); if (c) { toggleBookmark(c); render() } return }
+    if (act === 'delcast') { delCast(hash); return }
     if (act === 'quote') {
       const c = findCast(hash); if (!c) return
       compose.quote = { hash: c.hash, fid: c.fid, author: c.author, text: c.text }

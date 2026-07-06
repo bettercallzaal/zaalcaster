@@ -255,6 +255,41 @@ export async function getUsersByFids(fids) {
   return response.users || []
 }
 
+// Neynar's AI summary of a whole conversation/thread - one call, no LLM of ours.
+export async function getConversationSummary(hashOrUrl) {
+  let hash = hashOrUrl
+  if (/^https?:\/\//.test(String(hashOrUrl))) { const c = await resolveCast(hashOrUrl).catch(() => null); if (c?.hash) hash = c.hash }
+  const params = new URLSearchParams({ identifier: hash, type: 'hash' })
+  const response = await fetchNeynar(`/farcaster/cast/conversation/summary?${params}`)
+  return response?.summary?.text || null
+}
+
+// A user's most-engaged (popular) casts - the highlight reel for a profile.
+export async function getUserPopular(fid) {
+  const response = await fetchNeynar(`/farcaster/feed/user/popular?fid=${fid}`)
+  return response.casts || []
+}
+
+// Which external accounts a user has verified (x / github / etc). Farcaster
+// protocol endpoint (no Neynar key needed).
+export async function getAccountVerifications(fid) {
+  try {
+    const r = await fetch(`https://api.farcaster.xyz/fc/account-verifications?fid=${fid}`)
+    const d = await r.json().catch(() => ({}))
+    return (d?.result?.verifications || []).map((v) => ({ platform: v.platform, id: v.platformId }))
+  } catch { return [] }
+}
+
+// Delete one of Zaal's own casts (irreversible). The UI must confirm first.
+export async function deleteCast(targetHash) {
+  const env = loadEnv()
+  const response = await fetchNeynar('/farcaster/cast', {
+    method: 'DELETE',
+    body: JSON.stringify({ signer_uuid: requireSigner(env), target_hash: targetHash }),
+  })
+  return response
+}
+
 // Mutual-follower social proof: people Zaal follows who ALSO follow the target.
 // "followed by alice, bob + 3 more you follow". Returns { names, count }.
 export async function getRelevantFollowers(targetFid) {

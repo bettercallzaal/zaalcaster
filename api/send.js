@@ -8,7 +8,7 @@
 // the UI must show exact text + an explicit confirm before calling this - the
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
-import { postCast, friendlyPostError, getPostingHealth, loadEnv } from '../lib.js'
+import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -32,6 +32,15 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   try {
     const body = await readJsonBody(req)
+
+    // delete one of your own casts (the UI confirms first)
+    if (body.action === 'delete') {
+      const hash = typeof body.hash === 'string' && /^0x[0-9a-fA-F]+$/.test(body.hash) ? body.hash : null
+      if (!hash) { res.status(400).json({ error: 'bad hash' }); return }
+      await deleteCast(hash)
+      res.status(200).json({ ok: true, deleted: hash })
+      return
+    }
 
     // image upload: browser sends a base64 data URL, we push it to Imgur and
     // hand back a public URL to attach as an embed. Needs IMGUR_CLIENT_ID.
