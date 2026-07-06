@@ -6,8 +6,31 @@
 //   ?limit=25 ?cursor=...
 // Read-only, compact safe cast shape.
 
-import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends } from '../lib.js'
+import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
+
+// flatten a Neynar notification (any shape) into a compact row for the UI
+function compactNotif(n) {
+  const actors = []
+  for (const r of n.reactions || []) if (r.user) actors.push(r.user)
+  for (const f of n.follows || []) if (f.user) actors.push(f.user)
+  if (n.cast?.author && ['reply', 'mention', 'quote'].includes(n.type)) actors.push(n.cast.author)
+  const a0 = actors[0] || {}
+  const cast = n.cast || (n.reactions?.[0]?.cast) || null
+  return {
+    type: n.type || '?',
+    actor: a0.username || null,
+    actorDisplay: a0.display_name || a0.username || null,
+    actorPfp: a0.pfp_url || null,
+    actorFid: a0.fid || null,
+    others: Math.max(0, actors.length - 1),
+    text: (cast?.text || '').replace(/\s+/g, ' ').slice(0, 140),
+    hash: cast?.hash || null,
+    channel: cast?.channel?.id || null,
+    timestamp: n.most_recent_timestamp || null,
+    link: cast && a0.username ? `https://farcaster.xyz/${a0.username}/${(cast.hash || '').slice(0, 10)}` : null,
+  }
+}
 
 function compact(cast) {
   const a = cast.author || {}
@@ -38,6 +61,19 @@ export default async function handler(req, res) {
       const channels = await getTrendingChannels({ limit: 10 })
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ trending: channels })
+      return
+    }
+
+    // Notifications feed (all activity, or scoped to a channel for /zao mentions)
+    if (req.query.notifs === '1') {
+      const limit = Math.min(Number(req.query.limit) || 25, 25)
+      const cursor = req.query.cursor || null
+      const channel = (req.query.channel || '').replace(/[^a-zA-Z0-9_,-]/g, '')
+      const data = channel
+        ? await getChannelNotifications(channel, { limit, cursor })
+        : await getNotifications({ limit, cursor })
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ notifs: (data.notifications || []).map(compactNotif), cursor: data.next?.cursor || null })
       return
     }
 

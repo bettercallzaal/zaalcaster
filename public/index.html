@@ -234,7 +234,7 @@
   let tab = 'feed'
   const st = {
     feed: { type: 'following', casts: [], loaded: false, digest: null, digesting: false },
-    inbox: { items: [], loaded: false, showAll: false, priority: false },
+    inbox: { items: [], loaded: false, showAll: false, priority: false, view: 'reply', notifs: [], notifChannel: '' },
     channels: { id: 'zao', casts: [], loaded: false, trending: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null, empires: [] },
@@ -414,13 +414,30 @@
 
   // ================= INBOX =================
   async function loadInbox() {
-    st.inbox.loaded = false; render()
+    st.inbox.loaded = false; st.inbox.err = null; render()
     try {
-      const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}${st.inbox.priority ? '&priority=1' : ''}`)
-      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'inbox failed')
-      st.inbox.items = d.items; st.inbox.loaded = true
+      if (st.inbox.view === 'activity') {
+        const cq = st.inbox.notifChannel ? '&channel=' + encodeURIComponent(st.inbox.notifChannel) : ''
+        const r = await fetch(`/api/feed?notifs=1${cq}`)
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || 'activity failed')
+        st.inbox.notifs = d.notifs || []; st.inbox.loaded = true
+      } else {
+        const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}${st.inbox.priority ? '&priority=1' : ''}`)
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || 'inbox failed')
+        st.inbox.items = d.items; st.inbox.loaded = true
+      }
     } catch (e) { st.inbox.err = e.message; st.inbox.loaded = true }
     render()
+  }
+  const NOTIF_VERB = { likes: 'liked', recasts: 'recast', reply: 'replied', mention: 'mentioned you', quote: 'quoted', follows: 'followed you' }
+  function notifRow(n) {
+    const verb = NOTIF_VERB[n.type] || n.type
+    const who = n.others > 0 ? `@${esc(n.actor)} +${n.others}` : `@${esc(n.actor || '?')}`
+    const body = n.text ? `<div class="body" ${n.hash ? `data-act="thread" data-hash="${esc(n.hash)}" style="cursor:pointer"` : ''}>${esc(n.text)}</div>` : ''
+    return `<div class="card" style="padding:11px 14px">
+      <div class="top"><span data-act="profile" data-user="${esc(n.actor || '')}" style="cursor:pointer">${n.actorPfp ? `<img class="lbpfp" src="${esc(n.actorPfp)}" alt="">` : '<span class="lbpfp"></span>'}</span>
+        <div class="who"><div class="name"><span data-act="profile" data-user="${esc(n.actor || '')}" style="cursor:pointer">${who}</span> <span class="ub">${esc(verb)}${n.channel ? ' - /' + esc(n.channel) : ''} - ${when(n.timestamp)}</span></div>
+        ${body}${n.link ? `<a class="open" href="${esc(n.link)}" target="_blank" rel="noopener">open</a>` : ''}</div></div></div>`
   }
   async function draftAll() {
     const items = st.inbox.items.filter((it) => ANSWERABLE.has(it.type))
@@ -462,7 +479,18 @@
     </div>`
   }
   function renderInbox() {
-    const sub = `<div class="subbar">
+    const viewTabs = `<div class="subbar" style="padding-bottom:4px">
+      <span class="chip ${st.inbox.view === 'reply' ? 'on' : ''}" data-act="inboxview" data-view="reply">to reply</span>
+      <span class="chip ${st.inbox.view === 'activity' ? 'on' : ''}" data-act="inboxview" data-view="activity">all activity</span></div>`
+    if (st.inbox.view === 'activity') {
+      const chips = ['', ...HOME_CHANNELS].map((c) => `<span class="chip ${st.inbox.notifChannel === c ? 'on' : ''}" data-notifchan="${esc(c)}">${c ? '/' + esc(c) : 'everything'}</span>`).join(' ')
+      const sub = viewTabs + `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">in:</span> ${chips}</div>`
+      if (!st.inbox.loaded) return sub + '<div class="loading">loading activity...</div>'
+      if (st.inbox.err) return sub + `<div class="err">${esc(st.inbox.err)}</div>`
+      if (!st.inbox.notifs.length) return sub + `<div class="empty">no recent activity${st.inbox.notifChannel ? ' in /' + esc(st.inbox.notifChannel) : ''}.</div>`
+      return sub + st.inbox.notifs.map(notifRow).join('')
+    }
+    const sub = viewTabs + `<div class="subbar">
       <button class="ibtn primary" data-act="draftall">draft all</button>
       <span class="chip ${st.inbox.showAll ? 'on' : ''}" data-act="toggleall">${st.inbox.showAll ? 'all types' : 'answerable only'}</span>
       <span class="chip ${st.inbox.priority ? 'on' : ''}" data-act="togglepriority">${st.inbox.priority ? 'priority sorted' : 'newest first'}</span></div>`
@@ -975,6 +1003,7 @@
     const sc = e.target.closest('[data-searchchan]'); if (sc) { st.search.channel = sc.dataset.searchchan; if (st.search.q.trim()) runSearch(); else render(); return }
     const ss = e.target.closest('[data-savedsearch]'); if (ss && !e.target.closest('[data-act="rmsearch"]')) { const s = savedSearches[+ss.dataset.savedsearch]; if (s) { st.search.q = s.q; st.search.channel = s.channel || ''; runSearch() } return }
     const ou = e.target.closest('[data-openurl]'); if (ou) { window.open(ou.dataset.openurl, '_blank', 'noopener'); return }
+    const nc = e.target.closest('[data-notifchan]'); if (nc) { st.inbox.notifChannel = nc.dataset.notifchan; loadInbox(); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
     // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
     const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
@@ -1056,6 +1085,7 @@
     if (act === 'morechan') { btn.textContent = 'loading...'; loadChannels(true); return }
     if (act === 'dosearch') { runSearch(); return }
     if (act === 'togglepriority') { st.inbox.priority = !st.inbox.priority; loadInbox(); return }
+    if (act === 'inboxview') { st.inbox.view = btn.dataset.view; loadInbox(); return }
     if (act === 'filters') { openFilters(); return }
     if (act === 'bookmark') { const c = findCast(hash); if (c) { toggleBookmark(c); render() } return }
     if (act === 'quote') {
