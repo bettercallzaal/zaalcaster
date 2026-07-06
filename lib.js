@@ -113,6 +113,39 @@ export async function getForYouFeed(options = {}) {
   return response
 }
 
+// Feed of just the fids in a list - a curated timeline. Neynar filter feed.
+export async function getFeedByFids(fids, options = {}) {
+  const { limit = 25, cursor = null } = options
+  const env = loadEnv()
+  const clean = (Array.isArray(fids) ? fids : String(fids).split(','))
+    .map((f) => String(f).trim()).filter((f) => /^\d+$/.test(f)).slice(0, 100)
+  if (!clean.length) return { casts: [] }
+
+  const params = new URLSearchParams({
+    feed_type: 'filter',
+    filter_type: 'fids',
+    fids: clean.join(','),
+    viewer_fid: env.FID,
+    limit: String(limit),
+  })
+  if (cursor) params.append('cursor', cursor)
+
+  const response = await fetchNeynar(`/farcaster/feed?${params}`)
+  return response
+}
+
+// Best friends - people Zaal has the highest mutual affinity with (real back
+// and forth). One call to seed a "close friends" list.
+export async function getBestFriends(options = {}) {
+  const { limit = 20 } = options
+  const env = loadEnv()
+  const params = new URLSearchParams({ fid: env.FID, limit: String(limit) })
+  const response = await fetchNeynar(`/farcaster/user/best_friends?${params}`)
+  return (response.users || response || []).map((u) => ({
+    fid: u.fid, username: u.username, score: u.mutual_affinity_score ?? null,
+  })).filter((u) => u.fid)
+}
+
 export async function getChannelFeed(channelId, options = {}) {
   const { limit = 20, cursor = null } = options
 

@@ -231,20 +231,21 @@
   let bookmarks = lsGet('zc_bookmarks', [])           // array of compact casts
   let muted = lsGet('zc_muted', [])                   // array of lowercased words
   let scheduled = lsGet('zc_scheduled', [])           // [{id,text,channelId,quoteHash,quoteFid,at}]
+  let lists = lsGet('zc_lists', [])                    // [{id,name,fids:[],members:[{fid,username}]}]
   let syncEnabled = false                             // server store on? (set at boot)
 
   // one persist path: write localStorage (offline cache) + push to the server
   // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
   let pushT = null
   function persist() {
-    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled)
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
     if (typeof game !== 'undefined') lsSet('zc_game', game)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -309,7 +310,13 @@
   async function loadFeed(append) {
     if (!append) { st.feed.loaded = false; st.feed.cursor = null; render() }
     try {
-      const url = `/api/feed?type=${st.feed.type}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
+      let url = `/api/feed?type=${st.feed.type}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
+      if (st.feed.type === 'list') {
+        const lst = lists.find((l) => l.id === st.feed.listId)
+        const fids = (lst?.fids || []).join(',')
+        if (!fids) { st.feed.casts = []; st.feed.loaded = true; render(); return }
+        url += '&fids=' + encodeURIComponent(fids)
+      }
       const r = await fetch(url)
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'feed failed')
       st.feed.casts = append ? st.feed.casts.concat(d.casts) : d.casts
@@ -332,11 +339,17 @@
       <span class="chip ${st.feed.type === 'foryou' ? 'on' : ''}" data-feed="foryou">for you</span>
       <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
       <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
+      ${lists.map((l) => `<span class="chip ${st.feed.type === 'list' && st.feed.listId === l.id ? 'on' : ''}" data-list="${esc(l.id)}">${esc(l.name)} ${(l.fids || []).length}</span>`).join('')}
+      <span class="chip" data-act="newlist">+ list</span>
       <button class="ibtn" data-act="digest">${st.feed.digesting ? 'summarizing...' : 'what I missed'}</button>
       <button class="ibtn" data-act="filters">filters</button></div>`
     if (st.feed.type === 'saved') {
       if (!bookmarks.length) return sub + '<div class="empty">no saved casts. tap "save" on any cast.</div>'
       return sub + dropMuted(bookmarks).map(castCard).join('')
+    }
+    if (st.feed.type === 'list') {
+      const lst = lists.find((l) => l.id === st.feed.listId)
+      if (lst && !(lst.fids || []).length) return sub + `<div class="empty">"${esc(lst.name)}" is empty. Tap a profile and "add to list", or <span class="chip" data-act="seedfriends" data-list="${esc(lst.id)}">seed close friends</span></div>`
     }
     const dig = st.feed.digest ? `<div class="digest"><div class="lab">what you missed</div><div class="t">${esc(st.feed.digest)}</div></div>` : ''
     if (!st.feed.loaded) return sub + dig + '<div class="loading">loading feed...</div>'
@@ -770,6 +783,7 @@
       const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
         ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
+        ${lists.length ? `<div class="ps" style="margin-top:6px">lists: ${lists.map((l) => `<span class="chip ${(l.fids || []).includes(u.fid) ? 'on' : ''}" data-act="addtolist" data-list="${esc(l.id)}" data-fid="${u.fid}" data-uname="${esc(u.username)}">${esc(l.name)}</span>`).join(' ')}</div>` : ''}
         <a class="open" href="${esc(u.link)}" target="_blank" rel="noopener">open on farcaster</a></div></div>`
       document.getElementById('obody').innerHTML = head + d.casts.map(castCard).join('')
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
@@ -781,12 +795,21 @@
       if (tap.dataset.act === 'profile') return openProfile(tap.dataset.user)
       if (tap.dataset.act === 'thread') return openThread(tap.dataset.hash)
     }
+    const al = e.target.closest('[data-act="addtolist"]')
+    if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const btn = e.target.closest('button[data-act]'); if (!btn) return
     const act = btn.dataset.act
     if (act === 'profile') return openProfile(btn.dataset.user)
     if (act === 'thread') return openThread(btn.dataset.hash)
     if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
   })
+  function toggleListMember(listId, fid, uname) {
+    const lst = lists.find((l) => l.id === listId); if (!lst) return
+    lst.fids = lst.fids || []; lst.members = lst.members || []
+    if (lst.fids.includes(fid)) { lst.fids = lst.fids.filter((f) => f !== fid); lst.members = lst.members.filter((m) => m.fid !== fid); toast('removed from ' + lst.name) }
+    else { lst.fids.push(fid); lst.members.push({ fid, username: uname }); toast('added to ' + lst.name) }
+    persist()
+  }
   document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) switchTab(b.dataset.tab) })
   document.getElementById('refresh').addEventListener('click', () => {
     if (tab === 'feed') loadFeed(); else if (tab === 'inbox') loadInbox(); else if (tab === 'channels') loadChannels()
@@ -851,6 +874,7 @@
 
   main.addEventListener('click', async (e) => {
     const fb = e.target.closest('[data-feed]'); if (fb) { st.feed.type = fb.dataset.feed; if (fb.dataset.feed === 'saved') render(); else loadFeed(); return }
+    const lb = e.target.closest('[data-list]'); if (lb && !lb.dataset.act) { st.feed.type = 'list'; st.feed.listId = lb.dataset.list; loadFeed(); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
     // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
     const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
@@ -878,6 +902,24 @@
     if (act === 'dgrouprm') { daily.groups.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dgroupadd') { const l = document.getElementById('dGroupLabel').value.trim(), u = document.getElementById('dGroupUrl').value.trim(); if (l && u) { daily.groups.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
 
+    if (act === 'newlist') {
+      const name = (window.prompt('name this list (e.g. builders, close friends)') || '').trim(); if (!name) return
+      const id = 'l' + Date.now().toString(36)
+      lists.push({ id, name, fids: [], members: [] }); persist()
+      st.feed.type = 'list'; st.feed.listId = id; render(); return
+    }
+    if (act === 'seedfriends') {
+      const lst = lists.find((l) => l.id === btn.dataset.list); if (!lst) return
+      toast('loading your close friends...')
+      try {
+        const d = await fetch('/api/feed?bestfriends=1').then((r) => r.json())
+        const fr = d.friends || []
+        lst.fids = fr.map((f) => f.fid); lst.members = fr.map((f) => ({ fid: f.fid, username: f.username }))
+        persist(); loadFeed()
+      } catch (err) { toast('could not seed: ' + err.message) }
+      return
+    }
+    if (act === 'listrm') { lists = lists.filter((l) => l.id !== btn.dataset.list); if (st.feed.listId === btn.dataset.list) st.feed.type = 'following'; persist(); loadFeed(); return }
     if (act === 'digest') { loadDigest(); return }
     if (act === 'morefeed') { btn.textContent = 'loading...'; loadFeed(true); return }
     if (act === 'morechan') { btn.textContent = 'loading...'; loadChannels(true); return }
@@ -986,6 +1028,7 @@
         if (Array.isArray(s.bookmarks)) { bookmarks = s.bookmarks; lsSet('zc_bookmarks', bookmarks) }
         if (Array.isArray(s.muted)) { muted = s.muted; lsSet('zc_muted', muted) }
         if (Array.isArray(s.scheduled)) { scheduled = s.scheduled; lsSet('zc_scheduled', scheduled) }
+        if (Array.isArray(s.lists)) { lists = s.lists; lsSet('zc_lists', lists) }
         if (s.daily && typeof s.daily === 'object') {
           daily = s.daily
           if (daily.date !== todayStr()) { daily.date = todayStr(); (daily.tasks || []).forEach((x) => (x.done = false)) }
