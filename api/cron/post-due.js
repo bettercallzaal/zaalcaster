@@ -57,7 +57,11 @@ export default async function handler(req, res) {
       await kvSet(KEY, state)
     }
 
-    res.status(200).json({ ok: true, checked: queue.length, posted: results.filter((r) => r.ok).length, results })
+    // record that the cron actually ran - the self-monitor checks this freshness
+    const posted = results.filter((r) => r.ok).length
+    await kvSet('zc:cron:last', { at: new Date(nowMs).toISOString(), checked: queue.length, posted }).catch(() => {})
+
+    res.status(200).json({ ok: true, checked: queue.length, posted, results })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'cron failed' })
   }

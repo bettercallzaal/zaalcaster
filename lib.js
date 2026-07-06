@@ -60,6 +60,8 @@ export function loadEnv() {
   return env
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
 async function fetchNeynar(endpoint, options = {}) {
   const env = loadEnv()
   const url = `${NEYNAR_BASE_URL}${endpoint}`
@@ -69,7 +71,17 @@ async function fetchNeynar(endpoint, options = {}) {
     ...options.headers,
   }
 
-  const res = await fetch(url, { ...options, headers })
+  // rate-limit guard: on 429, honor Retry-After (or back off) and retry twice
+  // so a busy day / live Space degrades gracefully instead of silently failing.
+  let res
+  for (let attempt = 0; attempt < 3; attempt++) {
+    res = await fetch(url, { ...options, headers })
+    if (res.status !== 429) break
+    const ra = Number(res.headers.get('retry-after'))
+    const wait = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 400 * (attempt + 1)
+    if (attempt < 2) await sleep(Math.min(wait, 3000))
+  }
+
   const json = await res.json().catch(() => ({}))
 
   if (!res.ok) {
@@ -78,6 +90,30 @@ async function fetchNeynar(endpoint, options = {}) {
   }
 
   return json
+}
+
+// Append-only action ledger: a local record of every write the tool actually
+// made (cast/reply/like/recast/delete/scheduled), so a bad post is auditable
+// without depending on Farcaster. Best-effort - never blocks or breaks a post.
+export async function logAction(type, detail = {}) {
+  try {
+    const { kvPush } = await import('./store.js')
+    await kvPush('zc:actions', { type, at: new Date().toISOString(), ...detail }, 1000)
+  } catch { /* store off / unreachable - skip logging */ }
+}
+
+// System self-check: is posting wired up, and did the scheduled-post cron run
+// recently? Surfaces the exact two failures that silently broke automation
+// before (deploy rate-limit killing cron, signer/api-key mismatch).
+export async function getSystemHealth() {
+  const posting = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
+  let cronLast = null, cronStaleHours = null
+  try {
+    const { kvGet } = await import('./store.js')
+    const c = await kvGet('zc:cron:last')
+    if (c?.at) { cronLast = c.at; cronStaleHours = Math.round((Date.now() - Date.parse(c.at)) / 36e5 * 10) / 10 }
+  } catch { /* store off */ }
+  return { posting, cronLast, cronStaleHours, ok: !!posting.ready && (cronStaleHours == null || cronStaleHours < 1) }
 }
 
 export async function getFollowingFeed(options = {}) {
@@ -287,6 +323,7 @@ export async function deleteCast(targetHash) {
     method: 'DELETE',
     body: JSON.stringify({ signer_uuid: requireSigner(env), target_hash: targetHash }),
   })
+  await logAction('delete', { hash: targetHash })
   return response
 }
 
@@ -387,6 +424,9 @@ export async function postCast(text, options = {}) {
     body: JSON.stringify(payload),
   })
 
+  await logAction(parentHash ? 'reply' : (quoteHash ? 'quote' : 'cast'), {
+    hash: response?.cast?.hash || null, text: (text || '').slice(0, 100), channel: channelId || null,
+  })
   return response
 }
 
@@ -421,6 +461,7 @@ export async function postReaction(reactionType, targetHash, targetAuthorFid = n
     body: JSON.stringify(payload),
   })
 
+  await logAction(reactionType, { hash: targetHash })
   return response
 }
 
