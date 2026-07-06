@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c0c12"/>
+      <stop offset="1" stop-color="#1a1230"/>
+    </linearGradient>
+    <linearGradient id="p" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#855DCD"/>
+      <stop offset="1" stop-color="#6d4aff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#bg)"/>
+  <rect x="120" y="250" width="220" height="150" rx="34" fill="#fff"/>
+  <path d="M170 400 L170 452 L222 400 Z" fill="#fff"/>
+  <circle cx="188" cy="322" r="16" fill="#6d4aff"/>
+  <circle cx="230" cy="322" r="16" fill="#6d4aff"/>
+  <circle cx="272" cy="322" r="16" fill="#6d4aff"/>
+  <text x="400" y="360" font-family="Inter, Helvetica, Arial, sans-serif" font-size="96" font-weight="800" fill="#fff">zaal<tspan fill="url(#p)">caster</tspan></text>
+  <text x="404" y="430" font-family="Inter, Helvetica, Arial, sans-serif" font-size="38" font-weight="500" fill="#a99cff">a gamified personal Farcaster client</text>
+  <text x="404" y="500" font-family="Inter, Helvetica, Arial, sans-serif" font-size="28" font-weight="400" fill="#8a8a99">feed - inbox - channels - search - post - grow</text>
+</svg>
