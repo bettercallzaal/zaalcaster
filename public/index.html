@@ -83,6 +83,20 @@
   #welcome .wcard { background: linear-gradient(180deg, #17122b, #0e0e15); border: 1px solid var(--accent); border-radius: 18px; padding: 22px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
   #welcome .wtitle { font-size: 22px; font-weight: 800; }
   #welcome .wsub { color: #b9b9c6; font-size: 14px; margin-top: 6px; }
+  .snapgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }
+  @media (max-width: 560px) { .snapgrid { grid-template-columns: 1fr; } }
+  .sfin { width: 100%; margin-top: 5px; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; }
+  textarea.sfin { min-height: 60px; resize: vertical; }
+  .snapprev { position: sticky; top: 0; align-self: start; }
+  .spv { border: 1px solid var(--accent); border-radius: 16px; padding: 16px; background: linear-gradient(180deg, #14101f, #0e0e15); }
+  .spvtitle { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+  .spvh { font-size: 19px; font-weight: 800; }
+  .spvs { color: #b9b9c6; font-size: 14px; margin-top: 3px; }
+  .spvt { font-size: 14px; margin-top: 8px; color: #d6d6de; }
+  .spvq { font-weight: 600; margin-top: 12px; }
+  .spvopt { border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; margin-top: 6px; font-size: 14px; }
+  .spvbtn { color: #fff; font-weight: 600; text-align: center; border-radius: 10px; padding: 10px; margin-top: 12px; }
+  .spvfoot { text-align: center; color: #6f6f7a; font-size: 11px; margin-top: 12px; }
   .lbrow { display: flex; align-items: center; gap: 8px; padding: 7px 4px; cursor: pointer; border-bottom: 1px solid var(--border); }
   .lbrow:hover { background: rgba(133,93,205,.06); }
   .lbrank { width: 22px; text-align: center; font-weight: 700; color: #6f6f7a; font-size: 13px; }
@@ -564,6 +578,94 @@
     compose.uploading = false; render()
   }
   const splitThread = (t) => String(t || '').split(/\n-{3,}\n/).map((s) => s.trim()).filter(Boolean)
+
+  // ============ ZLANK SNAPS (build a Farcaster snap, attach to a cast) ============
+  // A snap's config IS its URL: base64url(JSON.stringify(doc)) at zlank.online/s/<enc>.
+  // So we build the doc here and attach the URL - no API, no auth.
+  const SNAP_THEME_HEX = { purple: '#855DCD', amber: '#e0a020', green: '#3fbf7f', blue: '#4a9fff' }
+  const SNAP_TEMPLATES = (window.__SNAP_TEMPLATES && window.__SNAP_TEMPLATES.length) ? window.__SNAP_TEMPLATES : [
+    { name: 'Fan Vote', doc: { version: 1, title: 'Fan Vote', theme: 'purple', pages: [{ id: 'home', blocks: [
+      { type: 'header', title: 'what should we ship next?', subtitle: 'pick one. live tally after you vote.' },
+      { type: 'poll', question: 'vote your pick', options: ['new track', 'new merch', 'new tour date'] },
+      { type: 'share', label: 'share', text: 'help me decide what to ship next', icon: 'share' }] }] } },
+    { name: 'Music Drop', doc: { version: 1, title: 'Music Drop', theme: 'amber', pages: [{ id: 'home', blocks: [
+      { type: 'header', title: 'new track is out', subtitle: 'stream it now' },
+      { type: 'link', label: 'listen', url: 'https://' },
+      { type: 'share', label: 'share', text: 'new track just dropped', icon: 'share' }] }] } },
+    { name: 'Fundraiser', doc: { version: 1, title: 'Fundraiser', theme: 'green', pages: [{ id: 'home', blocks: [
+      { type: 'header', title: 'back the mission', subtitle: 'every bit helps' },
+      { type: 'text', content: 'we are raising to fund the next release.' },
+      { type: 'link', label: 'contribute', url: 'https://' },
+      { type: 'share', label: 'share', text: 'back the mission', icon: 'share' }] }] } },
+    { name: 'Event RSVP', doc: { version: 1, title: 'Event RSVP', theme: 'purple', pages: [{ id: 'home', blocks: [
+      { type: 'header', title: 'you are invited', subtitle: 'tap to rsvp' },
+      { type: 'poll', question: 'coming?', options: ['yes', 'maybe', 'cant make it'] },
+      { type: 'share', label: 'share', text: 'come through', icon: 'share' }] }] } },
+    { name: 'WaveWarZ Vote', doc: { version: 1, title: 'WaveWarZ', theme: 'purple', pages: [{ id: 'home', blocks: [
+      { type: 'header', title: 'vote the battle', subtitle: 'back music, not memes' },
+      { type: 'poll', question: 'who takes it?', options: ['artist a', 'artist b'] },
+      { type: 'share', label: 'share', text: 'vote the wavewarz battle', icon: 'share' }] }] } },
+  ]
+  function encodeSnap(doc) {
+    const bytes = new TextEncoder().encode(JSON.stringify(doc))
+    let bin = ''; for (const b of bytes) bin += String.fromCharCode(b)
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  }
+  const snapUrl = (doc) => `https://zlank.online/s/${encodeSnap(doc)}`
+  let snapSel = 0
+  function openSnapBuilder() {
+    snapSel = 0
+    openOverlay('build a snap', snapBuilderHtml())
+  }
+  function snapBuilderHtml() {
+    const cards = SNAP_TEMPLATES.map((t, i) => `<span class="chip ${i === snapSel ? 'on' : ''}" data-snaptpl="${i}">${esc(t.name)}</span>`).join(' ')
+    return `<div class="ps" style="margin-bottom:8px">pick a template, edit the fields, watch the preview, then attach it to your cast. it posts as an interactive snap.</div>
+      <div class="subbar" style="padding-top:0">${cards}</div>
+      <div id="snapEdit">${snapEditorHtml(SNAP_TEMPLATES[snapSel].doc)}</div>`
+  }
+  function snapEditorHtml(doc) {
+    const blocks = doc.pages[0].blocks
+    const fields = blocks.map((b, i) => {
+      const lab = (t) => `<div class="ub" style="margin-top:8px">${t}</div>`
+      if (b.type === 'header') return lab('header') + `<input class="sfin" id="sb_${i}_title" value="${esc(b.title || '')}" placeholder="title"><input class="sfin" id="sb_${i}_subtitle" value="${esc(b.subtitle || '')}" placeholder="subtitle">`
+      if (b.type === 'text') return lab('text') + `<textarea class="sfin" id="sb_${i}_content">${esc(b.content || '')}</textarea>`
+      if (b.type === 'poll') return lab('poll') + `<input class="sfin" id="sb_${i}_question" value="${esc(b.question || '')}" placeholder="question"><textarea class="sfin" id="sb_${i}_options" placeholder="one option per line">${esc((b.options || []).join('\n'))}</textarea>`
+      if (b.type === 'share') return lab('share text') + `<input class="sfin" id="sb_${i}_text" value="${esc(b.text || '')}" placeholder="share text">`
+      if (b.type === 'link') return lab('link') + `<input class="sfin" id="sb_${i}_label" value="${esc(b.label || '')}" placeholder="button label"><input class="sfin" id="sb_${i}_url" value="${esc(b.url || '')}" placeholder="https://">`
+      if (b.type === 'image') return lab('image') + `<input class="sfin" id="sb_${i}_url" value="${esc(b.url || '')}" placeholder="image url">`
+      return ''
+    }).join('')
+    return `<div class="snapgrid"><div class="snapform">${fields}
+      <div class="btns" style="margin-top:12px"><button class="ibtn primary" data-act="snapattach">attach to cast</button><button class="ibtn" data-act="snapopen">preview live</button></div></div>
+      <div class="snapprev" id="snapPrev">${snapPreviewHtml(doc)}</div></div>`
+  }
+  function buildSnapDoc() {
+    const doc = JSON.parse(JSON.stringify(SNAP_TEMPLATES[snapSel].doc))
+    doc.pages[0].blocks.forEach((b, i) => {
+      const g = (f) => { const el = document.getElementById(`sb_${i}_${f}`); return el ? el.value : undefined }
+      if (b.type === 'header') { const t = g('title'); if (t != null) b.title = t; const s = g('subtitle'); if (s != null) b.subtitle = s }
+      if (b.type === 'text') { const c = g('content'); if (c != null) b.content = c }
+      if (b.type === 'poll') { const q = g('question'); if (q != null) b.question = q; const o = g('options'); if (o != null) b.options = o.split('\n').map((x) => x.trim()).filter(Boolean) }
+      if (b.type === 'share') { const t = g('text'); if (t != null) b.text = t }
+      if (b.type === 'link') { const l = g('label'); if (l != null) b.label = l; const u = g('url'); if (u != null) b.url = u }
+      if (b.type === 'image') { const u = g('url'); if (u != null) b.url = u }
+    })
+    return doc
+  }
+  function snapPreviewHtml(doc) {
+    const th = SNAP_THEME_HEX[doc.theme] || '#855DCD'
+    const blocks = doc.pages[0].blocks.map((b) => {
+      if (b.type === 'header') return `<div class="spvh">${esc(b.title || '')}</div>${b.subtitle ? `<div class="spvs">${esc(b.subtitle)}</div>` : ''}`
+      if (b.type === 'text') return `<div class="spvt">${esc(b.content || '')}</div>`
+      if (b.type === 'poll') return `<div class="spvq">${esc(b.question || '')}</div>` + (b.options || []).map((o) => `<div class="spvopt">${esc(o)}</div>`).join('')
+      if (b.type === 'share') return `<div class="spvbtn" style="background:${th}">${esc(b.text || 'share')}</div>`
+      if (b.type === 'link') return `<div class="spvbtn" style="background:${th}">${esc(b.label || 'open')}</div>`
+      if (b.type === 'image') return b.url && b.url !== 'https://' ? `<img class="cimg" src="${esc(b.url)}" alt="">` : ''
+      return ''
+    }).join('')
+    return `<div class="spv" style="border-color:${th}"><div class="spvtitle" style="color:${th}">${esc(doc.title || 'snap')}</div>${blocks}<div class="spvfoot">made with zlank</div></div>`
+  }
+  function refreshSnapPreview() { const p = document.getElementById('snapPrev'); if (p) p.innerHTML = snapPreviewHtml(buildSnapDoc()) }
   function quotePreview() {
     if (!compose.quote) return ''
     const q = compose.quote
@@ -606,7 +708,7 @@
     const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
     const nParts = compose.thread ? splitThread(compose.text).length : 1
     return `<div class="compose">${banner}${quotePreview()}
-      <div class="subbar" style="padding:0 0 6px"><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span>${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
+      <div class="subbar" style="padding:0 0 6px"><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span><span class="chip" data-act="snapbuild">+ snap</span>${compose.embedUrl && compose.embedUrl.includes('zlank.online') ? '<span class="chip on" data-act="snapclear">snap attached x</span>' : ''}${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
       <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
       ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"><button class="ibtn" data-act="uploadpick">${compose.uploading ? 'uploading...' : 'upload'}</button></div><input type="file" id="composeFile" accept="image/*" style="display:none">`}
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
@@ -1032,12 +1134,17 @@
     if (rz) { runResearch(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
+    const stpl = e.target.closest('[data-snaptpl]')
+    if (stpl) { snapSel = +stpl.dataset.snaptpl; document.getElementById('obody').innerHTML = snapBuilderHtml(); return }
     const btn = e.target.closest('button[data-act]'); if (!btn) return
     const act = btn.dataset.act
     if (act === 'profile') return openProfile(btn.dataset.user)
     if (act === 'thread') return openThread(btn.dataset.hash)
     if (act === 'like' || act === 'recast') { if (!btn.classList.contains('on')) fireReact(btn); return }
+    if (act === 'snapattach') { compose.embedUrl = snapUrl(buildSnapDoc()); closeOverlay(); switchTab('compose'); toast('snap attached to your cast'); return }
+    if (act === 'snapopen') { window.open(snapUrl(buildSnapDoc()), '_blank', 'noopener'); return }
   })
+  document.getElementById('obody').addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('sfin')) refreshSnapPreview() })
   function toggleListMember(listId, fid, uname) {
     const lst = lists.find((l) => l.id === listId); if (!lst) return
     lst.fids = lst.fids || []; lst.members = lst.members || []
@@ -1260,6 +1367,8 @@
       scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
     }
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
+    if (act === 'snapbuild') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; openSnapBuilder(); return }
+    if (act === 'snapclear') { compose.embedUrl = ''; render(); return }
     if (act === 'uploadpick') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; const f = document.getElementById('composeFile'); if (f) f.click(); return }
     if (act === 'togglethread') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; compose.thread = !compose.thread; render(); return }
     if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value.trim(); if (!compose.text) return; if (compose.thread) compose.parts = splitThread(compose.text); compose.armed = true; render(); return }
