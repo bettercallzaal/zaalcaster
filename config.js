@@ -55,6 +55,7 @@ export const config = {
       { label: 'Paragraph', url: 'https://paragraph.xyz' },
       { label: 'Degen', url: 'https://www.degen.tips' },
       { label: 'Rounds', url: 'https://rounds.wtf' },
+      { label: 'Claude Code', url: 'https://claude.ai/code' },
     ],
     communities: ['zao', 'wavewarz', 'zabal', 'gmfarcaster', 'farcaster', 'founders'],
     groups: [
