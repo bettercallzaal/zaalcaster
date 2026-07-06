@@ -126,6 +126,9 @@
   .card .body { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
   .card .embed { margin-top: 7px; font-size: 13px; }
   .cimg { max-width: 100%; max-height: 420px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; display: block; }
+  .musicembed { border: 1px solid #1db954; border-radius: 12px; padding: 11px 14px; background: linear-gradient(90deg, rgba(29,185,84,.14), transparent); cursor: pointer; font-weight: 600; font-size: 14px; }
+  .musicembed:hover { border-color: #1ed760; }
+  .mtag { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: #1db954; margin-right: 6px; }
   .card .embed a { color: var(--accent); text-decoration: none; word-break: break-all; }
   .card .stats { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--dim); }
   .card .stats button { background: none; border: none; color: var(--dim); padding: 0; display: inline-flex; gap: 5px; align-items: center; }
@@ -337,6 +340,8 @@
       if (!url) return ''
       const snap = url.includes('zlank.online/s/') ? decodeSnapUrl(url) : null
       if (snap) return snapEmbedCard(snap, url)
+      const plat = musicPlatform(url)
+      if (plat) return `<div class="embed"><div class="musicembed" data-openurl="${esc(url)}"><span class="mtag">MUSIC</span> listen on ${esc(plat)}</div></div>`
       const img = typeof e === 'object' && e.img
       return img
         ? `<div class="embed"><img class="cimg" src="${esc(url)}" alt="" loading="lazy" data-openurl="${esc(url)}"></div>`
@@ -392,6 +397,8 @@
       let url = `/api/feed?type=${st.feed.type}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
       // ZAO filter: a combined feed of the home ZAO channels vs "everyone" (following/for-you)
       if (st.feed.type === 'zao') url = `/api/feed?type=channel&id=${encodeURIComponent(HOME_CHANNELS.join(','))}&limit=30${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
+      // Music: pull music-heavy channels, then keep only casts with a music link
+      if (st.feed.type === 'music') url = `/api/feed?type=channel&id=music,wavewarz,sound&limit=40${append && st.feed.cursor ? '&cursor=' + encodeURIComponent(st.feed.cursor) : ''}`
       if (st.feed.type === 'list') {
         const lst = lists.find((l) => l.id === st.feed.listId)
         const fids = (lst?.fids || []).join(',')
@@ -400,7 +407,9 @@
       }
       const r = await fetch(url)
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'feed failed')
-      st.feed.casts = append ? st.feed.casts.concat(d.casts) : d.casts
+      let casts = d.casts || []
+      if (st.feed.type === 'music') casts = casts.filter(castHasMusic)
+      st.feed.casts = append ? st.feed.casts.concat(casts) : casts
       st.feed.cursor = d.cursor; st.feed.loaded = true
     } catch (e) { st.feed.err = e.message; st.feed.loaded = true }
     render()
@@ -420,6 +429,7 @@
       <span class="chip ${st.feed.type === 'following' ? 'on' : ''}" data-feed="following">everyone</span>
       <span class="chip ${st.feed.type === 'foryou' ? 'on' : ''}" data-feed="foryou">for you</span>
       <span class="chip ${st.feed.type === 'trending' ? 'on' : ''}" data-feed="trending">trending</span>
+      <span class="chip ${st.feed.type === 'music' ? 'on' : ''}" data-feed="music">music</span>
       <span class="chip ${st.feed.type === 'saved' ? 'on' : ''}" data-feed="saved">saved ${bookmarks.length}</span>
       ${lists.map((l) => `<span class="chip ${st.feed.type === 'list' && st.feed.listId === l.id ? 'on' : ''}" data-list="${esc(l.id)}">${esc(l.name)} ${(l.fids || []).length}</span>`).join('')}
       <span class="chip" data-act="newlist">+ list</span>
@@ -656,6 +666,10 @@
     return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   }
   const snapUrl = (doc) => `https://zlank.online/s/${encodeSnap(doc)}`
+  // music-link detection for the Music feed + play-card rendering
+  const MUSIC_HOSTS = [['open.spotify.com', 'Spotify'], ['spotify.link', 'Spotify'], ['music.apple.com', 'Apple Music'], ['soundcloud.com', 'SoundCloud'], ['audius.co', 'Audius'], ['music.youtube.com', 'YouTube Music'], ['tidal.com', 'Tidal'], ['bandcamp.com', 'Bandcamp'], ['sound.xyz', 'Sound']]
+  function musicPlatform(url) { const u = String(url || '').toLowerCase(); const h = MUSIC_HOSTS.find(([host]) => u.includes(host)); return h ? h[1] : null }
+  const castHasMusic = (c) => (c.embeds || []).some((e) => musicPlatform(typeof e === 'string' ? e : (e && e.url)))
   // decode a zlank snap URL back to its doc, so we can render it inline in-feed
   function decodeSnapUrl(url) {
     const m = /zlank\.online\/s\/([A-Za-z0-9_-]+)/.exec(url || ''); if (!m) return null
