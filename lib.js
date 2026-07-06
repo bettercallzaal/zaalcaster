@@ -211,12 +211,14 @@ export async function getNotifications(options = {}) {
 }
 
 export async function searchCasts(query, options = {}) {
-  const { limit = 20 } = options
+  const { limit = 20, channelId = null, authorFid = null } = options
 
   const params = new URLSearchParams({
     q: query,
     limit: String(limit),
   })
+  if (channelId) params.append('channel_id', channelId)
+  if (authorFid) params.append('author_fid', String(authorFid))
 
   const response = await fetchNeynar(`/farcaster/cast/search?${params}`)
   return response
