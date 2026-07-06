@@ -4,7 +4,7 @@
 //   ?kind=profile&user=<fid|username>   profile + recent casts
 // Read-only.
 
-import { getConversation, getUser, getUserCasts, getRelevantFollowers } from '../lib.js'
+import { getConversation, getUser, getUserCasts, getRelevantFollowers, getConversationSummary, getUserPopular, getAccountVerifications } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compactCast(cast) {
@@ -32,8 +32,12 @@ async function thread(hash, res) {
 async function profile(target, res) {
   const user = await getUser(target)
   if (!user) { res.status(404).json({ error: 'user not found' }); return }
-  const castsRes = await getUserCasts({ fid: user.fid, limit: 20 }).catch(() => ({ casts: [] }))
-  const rel = await getRelevantFollowers(user.fid).catch(() => ({ names: [], count: 0 }))
+  const [castsRes, rel, popular, verified] = await Promise.all([
+    getUserCasts({ fid: user.fid, limit: 20 }).catch(() => ({ casts: [] })),
+    getRelevantFollowers(user.fid).catch(() => ({ names: [], count: 0 })),
+    getUserPopular(user.fid).catch(() => []),
+    getAccountVerifications(user.fid).catch(() => []),
+  ])
   const vc = user.viewer_context || {}
   res.status(200).json({
     user: {
@@ -42,9 +46,11 @@ async function profile(target, res) {
       following: user.following_count || 0, score: user.experimental?.neynar_user_score ?? null,
       youFollow: !!vc.following, followsYou: !!vc.followed_by,
       mutuals: rel.names.slice(0, 3), mutualCount: rel.count,
+      verified: (verified || []).map((v) => v.platform).filter(Boolean),
       link: `https://farcaster.xyz/${user.username}`,
     },
     casts: (castsRes.casts || []).map(compactCast),
+    popular: (popular || []).slice(0, 5).map(compactCast),
   })
 }
 
@@ -52,6 +58,13 @@ export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   try {
     res.setHeader('Cache-Control', 'no-store')
+    if (req.query.kind === 'summary') {
+      const hash = (req.query.hash || '').trim()
+      if (!hash) { res.status(400).json({ error: 'missing hash' }); return }
+      const summary = await getConversationSummary(hash).catch(() => null)
+      res.status(200).json({ summary })
+      return
+    }
     if (req.query.kind === 'profile') {
       const target = (req.query.user || '').trim()
       if (!target) { res.status(400).json({ error: 'missing user' }); return }
