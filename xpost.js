@@ -29,7 +29,7 @@ export function xEnabled() {
   return !!(ck && cs && tk && ts)
 }
 
-export async function postToX(text) {
+export async function postToX(text, { inReplyTo = null } = {}) {
   const { ck, cs, tk, ts } = creds()
   if (!(ck && cs && tk && ts)) {
     return { ok: false, reason: 'X not connected - set X_API_KEY / X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_SECRET' }
@@ -53,11 +53,14 @@ export async function postToX(text) {
   oauth.oauth_signature = crypto.createHmac('sha1', signingKey).update(base).digest('base64')
   const authHeader = 'OAuth ' + Object.keys(oauth).sort().map((k) => `${pct(k)}="${pct(oauth[k])}"`).join(', ')
 
+  const payload = { text: body }
+  if (inReplyTo) payload.reply = { in_reply_to_tweet_id: inReplyTo }
+
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: body }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000),
     })
     const d = await res.json().catch(() => ({}))
@@ -66,4 +69,17 @@ export async function postToX(text) {
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : 'X request failed' }
   }
+}
+
+// Post an array of casts as an X thread (each replies to the previous).
+export async function postThreadToX(parts) {
+  if (!xEnabled()) return { ok: false, reason: 'X not connected' }
+  let inReplyTo = null, firstUrl = null, posted = 0
+  for (const p of parts) {
+    const r = await postToX(p, { inReplyTo })
+    if (!r.ok) return posted ? { ok: true, url: firstUrl, count: posted, partial: r.reason } : r
+    inReplyTo = r.id; posted++
+    if (!firstUrl) firstUrl = r.url
+  }
+  return { ok: true, url: firstUrl, count: posted }
 }

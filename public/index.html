@@ -627,7 +627,7 @@
   }
 
   // ================= COMPOSE =================
-  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, sentX: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false, toX: false }
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, sentX: null, sentBsky: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false, toX: false, toBsky: false }
   async function uploadImage(file) {
     if (!file) return
     if (file.size > 9 * 1024 * 1024) { toast('image too big (max ~9MB)'); return }
@@ -790,13 +790,16 @@
   }
   function renderCompose() {
     if (compose.sentLink) {
+      const bline = compose.sentBsky ? (compose.sentBsky.ok
+        ? `<div class="ps" style="color:#3fbf7f;margin-top:4px">also on Bluesky - <a class="open" href="${esc(compose.sentBsky.url)}" target="_blank" rel="noopener">view</a></div>`
+        : `<div class="ps" style="color:#ffb0a0;margin-top:4px">Bluesky: ${esc(compose.sentBsky.reason || 'failed')}</div>`) : ''
       const xline = compose.sentX ? (compose.sentX.ok
         ? `<div class="ps" style="color:#3fbf7f;margin-top:6px">also on X - <a class="open" href="${esc(compose.sentX.url)}" target="_blank" rel="noopener">view</a></div>`
         : `<div class="ps" style="color:#ffb0a0;margin-top:6px">X: ${esc(compose.sentX.reason || 'failed')}</div>`) : ''
       return `<div class="compose"><div class="sentcard">
         <div class="senttitle">posted</div>
         <a class="open" href="${esc(compose.sentLink)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(compose.sentLink)}</a>
-        ${xline}
+        ${xline}${bline}
         <div class="btns" style="margin-top:16px;justify-content:center"><button class="ibtn primary" data-act="composenew">new cast</button><a class="ibtn" href="${esc(compose.sentLink)}" target="_blank" rel="noopener" style="text-decoration:none">view on farcaster</a></div>
       </div></div>`
     }
@@ -810,7 +813,7 @@
       const what = (compose.thread && compose.parts.length > 1) ? `thread of ${compose.parts.length} casts` : (compose.quote ? 'quote-cast' : 'post')
       const embedPrev = (!compose.thread && compose.embedUrl) ? `<div class="embed">${/\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(compose.embedUrl) ? `<img class="cimg" src="${esc(compose.embedUrl)}" alt="">` : `<a href="${esc(compose.embedUrl)}" target="_blank" rel="noopener">${esc(compose.embedUrl)}</a>`}</div>` : ''
       return `<div class="compose">${banner}${quotePreview()}${preview}${embedPrev}
-        <div class="btns"><span class="note">${what} as @${esc(ME)}${compose.channel ? ' to /' + esc(compose.channel) : ''}${compose.toX ? ' + cross-post to X' : ''}?</span>
+        <div class="btns"><span class="note">${what} as @${esc(ME)}${compose.channel ? ' to /' + esc(compose.channel) : ''}${compose.toX ? ' + X' : ''}${compose.toBsky ? ' + Bluesky' : ''}${compose.toX || compose.toBsky ? ' (cross-post)' : ''}?</span>
           <button class="ibtn primary" data-act="composeconfirm">${compose.sending ? 'posting...' : 'yes, post'}</button>
           <button class="ibtn" data-act="composecancel">cancel</button></div></div>`
     }
@@ -822,7 +825,7 @@
     const schedNote = syncEnabled ? '' : '<div class="ub" style="margin-top:6px">scheduling needs the server store (KV) - see setup</div>'
     const nParts = compose.thread ? splitThread(compose.text).length : 1
     return `<div class="compose">${banner}${quotePreview()}
-      <div class="subbar" style="padding:0 0 6px"><span class="chip" data-act="composemic" id="composeMic">mic</span><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span><span class="chip" data-act="snapbuild">+ snap</span>${compose.thread ? '' : `<span class="chip ${compose.toX ? 'on' : ''}" data-act="togglex">${compose.toX ? 'also to X - on' : 'also to X'}</span>`}${compose.embedUrl && compose.embedUrl.includes('zlank.online') ? '<span class="chip on" data-act="snapclear">snap attached x</span>' : ''}${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
+      <div class="subbar" style="padding:0 0 6px"><span class="chip" data-act="composemic" id="composeMic">mic</span><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span><span class="chip" data-act="snapbuild">+ snap</span><span class="chip ${compose.toX ? 'on' : ''}" data-act="togglex">${compose.toX ? 'X on' : 'also X'}</span><span class="chip ${compose.toBsky ? 'on' : ''}" data-act="togglebsky">${compose.toBsky ? 'Bsky on' : 'also Bsky'}</span>${compose.embedUrl && compose.embedUrl.includes('zlank.online') ? '<span class="chip on" data-act="snapclear">snap attached x</span>' : ''}${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
       <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
       ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"><button class="ibtn" data-act="uploadpick">${compose.uploading ? 'uploading...' : 'upload'}</button></div><input type="file" id="composeFile" accept="image/*" style="display:none">`}
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
@@ -1523,6 +1526,7 @@
     if (act === 'snapclear') { compose.embedUrl = ''; render(); return }
     if (act === 'uploadpick') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; const f = document.getElementById('composeFile'); if (f) f.click(); return }
     if (act === 'togglex') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; compose.toX = !compose.toX; if (compose.toX && postingHealth && !postingHealth.xEnabled) toast('X not connected yet - set the X_* keys in Vercel'); render(); return }
+    if (act === 'togglebsky') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; compose.toBsky = !compose.toBsky; if (compose.toBsky && postingHealth && !postingHealth.bskyEnabled) toast('Bluesky not connected yet - set BSKY_HANDLE + BSKY_APP_PASSWORD in Vercel'); render(); return }
     if (act === 'togglethread') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; compose.thread = !compose.thread; render(); return }
     if (act === 'composearm') { const ta = document.getElementById('composeText'); compose.text = ta ? ta.value.trim() : compose.text; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value.trim(); if (!compose.text) return; if (compose.thread) compose.parts = splitThread(compose.text); compose.armed = true; render(); return }
     if (act === 'composecancel') { compose.armed = false; render(); return }
@@ -1533,14 +1537,15 @@
         const body = isThread ? { casts: compose.parts, channelId: compose.channel || null } : { text: compose.text, channelId: compose.channel || null }
         if (!isThread && compose.quote) { body.quoteHash = compose.quote.hash; body.quoteFid = compose.quote.fid }
         if (!isThread && compose.embedUrl) body.embedUrl = compose.embedUrl
-        if (!isThread && compose.toX) body.alsoX = true
+        if (compose.toX) body.alsoX = true
+        if (compose.toBsky) body.alsoBsky = true
         const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
-        compose.sentLink = d.link; compose.sentX = d.x || null; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []; compose.embedUrl = ''; compose.toX = false
+        compose.sentLink = d.link; compose.sentX = d.x || null; compose.sentBsky = d.bsky || null; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []; compose.embedUrl = ''; compose.toX = false; compose.toBsky = false
       } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
       render(); return
     }
-    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.sentX = null; compose.armed = false; compose.quote = null; compose.embedUrl = ''; compose.thread = false; compose.parts = []; compose.toX = false; render(); return }
+    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.sentX = null; compose.sentBsky = null; compose.armed = false; compose.quote = null; compose.embedUrl = ''; compose.thread = false; compose.parts = []; compose.toX = false; compose.toBsky = false; render(); return }
   })
 
   // ---- filters overlay: muted keywords ----
