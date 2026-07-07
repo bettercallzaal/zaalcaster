@@ -3,7 +3,7 @@
 
 import { getFollowingFeed } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
-import { digestFeed, researchUser } from '../voice.js'
+import { digestFeed, researchUser, linkedinPost } from '../voice.js'
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
@@ -17,9 +17,17 @@ async function readJsonBody(req) {
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   try {
-    // POST = research/alignment read on a specific user (client sends the profile)
     if (req.method === 'POST') {
       const body = await readJsonBody(req)
+      // LinkedIn post draft about something we built
+      if (body.mode === 'linkedin') {
+        if (!body.topic) { res.status(400).json({ error: 'missing topic' }); return }
+        const post = await linkedinPost(String(body.topic).slice(0, 300), String(body.facts || '').slice(0, 1200))
+        res.setHeader('Cache-Control', 'no-store')
+        res.status(200).json({ available: post !== null, post })
+        return
+      }
+      // research/alignment read on a specific user (client sends the profile)
       if (!body.username) { res.status(400).json({ error: 'missing username' }); return }
       const brief = await researchUser(body)
       res.setHeader('Cache-Control', 'no-store')

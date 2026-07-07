@@ -203,6 +203,25 @@ async function callModel(prompt, maxTokens) {
   return null
 }
 
+// Draft a LinkedIn post about something the user built. Build-in-public voice,
+// 2026 best practice (hook first, specific, no hashtags, link in comments).
+export async function linkedinPost(topic, facts = '') {
+  const prompt = `Write a LinkedIn post for ${config.username}, a founder building onchain tools so independent artists own their profit, data and IP (projects: The ZAO, WaveWarZ, ZABAL, and zaalcaster - his open-source Farcaster client).
+
+Topic to post about: ${topic}
+${facts ? `Facts to ground it (use the real specifics):\n${facts}\n` : ''}
+Write it like a real founder building in public, not a corporate announcement. Rules (2026 LinkedIn best practice):
+- Open with a strong, SPECIFIC first line that earns the "see more" click: a real result, a lesson, or a contrarian take. Never "excited to announce".
+- First person, plain, honest, specific. Real detail and real numbers beat hype.
+- NO hashtags. NO emojis. No engagement bait ("comment YES"). No manufactured vulnerability.
+- 600-1200 characters, short paragraphs, one idea per few lines, skimmable.
+- Build-in-public: what you built, why, what you learned or what surprised you. Tie to the mission (artists owning their tools) only when it genuinely fits.
+- Do NOT put a URL in the body (LinkedIn throttles link posts). If a link is relevant, end the post with a separate final line exactly: "link in the comments".
+- End with a light, genuine invitation to reply (a real question), not a hard pitch.
+Output ONLY the post text.`
+  return callModel(prompt, 500)
+}
+
 // Due-diligence read on a Farcaster user: who they are + alignment with the
 // user's world (config.context) + how to engage. Returns a short brief or null.
 export async function researchUser({ username, display, bio, casts, followers, score, youFollow, followsYou } = {}) {

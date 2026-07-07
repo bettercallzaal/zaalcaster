@@ -963,7 +963,7 @@
       ['compose', 'Post', 'new cast'],
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
-      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('')
+      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
@@ -1095,6 +1095,40 @@
       out.innerHTML = d.summary ? `<div class="digest"><div class="lab">thread summary</div><div class="t">${esc(d.summary)}</div></div>` : '<div class="ub">no summary available</div>'
     } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
+  // ===== LinkedIn: turn what we built into ready-to-post LinkedIn content =====
+  const SHARE_ITEMS = [
+    { name: 'zaalcaster (open source)', info: 'my own personal Farcaster client - feeds, AI drafts, cross-post, mini app. open source + forkable.', link: 'github.com/bettercallzaal/zaalcaster', topic: 'i built and open-sourced my own personal Farcaster client instead of using the default app', facts: 'zaalcaster: a personal client i built - feeds, inbox, AI drafts in my voice, lists, cross-post to X, a no-code snap builder, runs as a Farcaster mini app. open source at github.com/bettercallzaal/zaalcaster, forkable. vibe-coded the whole thing with an AI agent. the point: artists should own the tools they build on, not rent them.' },
+    { name: 'ZLANK', info: 'no-code Farcaster snap builder - won the Snaps track at FarHack 2026.', link: 'zlank.online', topic: 'ZLANK - the no-code snap builder i built that won FarHack 2026', facts: 'ZLANK: stack blocks, hit deploy, share to feed. won the Snaps track at FarHack 2026 (agentic bootcamp). that win funded ZAOstock which became ZABAL Gamez. open source, MIT. zlank.online' },
+    { name: 'The ZAO', info: 'decentralized impact network - profit, data + IP back to independent artists.', link: 'thezao.xyz', topic: 'why i started The ZAO - returning ownership to independent artists', facts: 'The ZAO: a decentralized impact network. weekly peer-ranked Respect (the Fractal), 90+ consecutive weeks, on Base. artists own their profit, data and IP. contribution not capital.' },
+    { name: 'WaveWarZ', info: 'live-traded music battles - artists paid instantly onchain.', link: 'wavewarz.com', topic: 'WaveWarZ - music battles that pay artists 1% of every trade instantly onchain', facts: 'WaveWarZ: live-traded music battles on Solana, the front door to The ZAO. artists paid 1% of every trade instantly onchain. 500+ SOL lifetime volume, first ZAO incubator project to hit profitability. back music, not memes.' },
+    { name: 'ZABAL Gamez', info: '3-month build-a-thon for a 100+ week community.', link: 'zabalgamez.com', topic: 'ZABAL Gamez - a build-a-thon where builders keep earning from what they ship', facts: 'ZABAL Gamez: 3-month build-a-thon with The ZAO. builders ship for a 100+ week community and keep earning from what they build. zabalgamez.com' },
+    { name: 'build-in-public / vibe coding', info: 'shipped a full client in ~a week with an AI agent - the lessons.', link: 'github.com/bettercallzaal/zaalcaster', topic: 'what i learned vibe-coding a full Farcaster client in a week with an AI agent', facts: 'vibe-coded zaalcaster (a full personal Farcaster client: feeds, inbox, AI drafts, snap builder, cross-post, mini app) in about a week with an AI coding agent. lessons on shipping speed, owning your own tools, and building in public.' },
+  ]
+  async function liDraft(topic, facts, outId, btn) {
+    const out = document.getElementById(outId); if (!out) return
+    if (btn) btn.textContent = 'drafting...'
+    out.innerHTML = '<div class="loading">writing a linkedin post...</div>'
+    try {
+      const d = await fetch('/api/digest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'linkedin', topic, facts }) }).then((r) => r.json())
+      if (d.available && d.post) {
+        out.innerHTML = `<div class="digest" style="margin-top:8px"><div class="lab">linkedin draft</div><div class="t" id="${outId}_txt" style="white-space:pre-wrap">${esc(d.post)}</div><div class="subbar" style="padding-left:0;margin-top:6px"><span class="chip" data-act="licopy" data-target="${outId}_txt">copy</span><span class="chip" data-act="liredraft" data-topic="${esc(topic)}" data-facts="${esc(facts)}" data-out="${outId}">another angle</span></div></div>`
+      } else out.innerHTML = '<div class="ub">linkedin drafting needs OPENROUTER_API_KEY on the server</div>'
+    } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>` }
+    if (btn) btn.textContent = 'draft post'
+  }
+  function openLinkedIn() {
+    const items = SHARE_ITEMS.map((it, i) => `<div class="card">
+      <div class="pn" style="font-weight:700;font-size:15px">${esc(it.name)}</div>
+      <div class="ps">${esc(it.info)}</div>
+      <div class="subbar" style="padding-left:0;margin-top:6px"><a class="chip" href="https://${esc(it.link)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(it.link)}</a><span class="chip" data-act="lidraft" data-i="${i}">draft post</span></div>
+      <div id="liout_${i}"></div></div>`).join('')
+    openOverlay('LinkedIn', `<div class="ps" style="margin-bottom:8px">turn what you built into a LinkedIn post. drafts follow 2026 best practice: strong first line, build-in-public, no hashtags. <b>tips:</b> post from your personal profile, put the link in the FIRST COMMENT (not the post), reply to comments in the first hour.</div>
+      <div class="searchbar"><input id="liTopic" placeholder="type any idea to post about..."><button class="ibtn primary" data-act="lidraftcustom">draft it</button></div>
+      <div id="liout_custom"></div>
+      <div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">from what you built - tap to draft</b></div>
+      ${items}`)
+  }
+
   function openAllProjects() {
     const cards = BRANDS.map((b) => `<div class="card">
       <div class="pn" style="font-size:17px;font-weight:700">${esc(b.name)}</div>
@@ -1167,6 +1201,10 @@
     if (rz) { runResearch(); return }
     const sz = e.target.closest('[data-act="summarize"]')
     if (sz) { summarizeThread(sz.dataset.hash); return }
+    const lid = e.target.closest('[data-act="lidraft"]'); if (lid) { const it = SHARE_ITEMS[+lid.dataset.i]; if (it) liDraft(it.topic, it.facts, `liout_${lid.dataset.i}`, lid); return }
+    const lic = e.target.closest('[data-act="lidraftcustom"]'); if (lic) { const t = (document.getElementById('liTopic').value || '').trim(); if (t) liDraft(t, '', 'liout_custom', lic); return }
+    const lir = e.target.closest('[data-act="liredraft"]'); if (lir) { liDraft(lir.dataset.topic, lir.dataset.facts, lir.dataset.out, lir); return }
+    const lcp = e.target.closest('[data-act="licopy"]'); if (lcp) { const el = document.getElementById(lcp.dataset.target); if (el) { navigator.clipboard.writeText(el.textContent).then(() => toast('copied - paste into LinkedIn')).catch(() => toast('copy failed')) } return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const stplrm = e.target.closest('[data-act="snaptplrm"]')
@@ -1281,6 +1319,7 @@
     if (act === 'editdaily') { editDaily = !editDaily; render(); return }
     if (act === 'brand') { openBrand(+btn.dataset.i); return }
     if (act === 'allprojects') { openAllProjects(); return }
+    if (act === 'linkedin') { openLinkedIn(); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
