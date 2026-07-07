@@ -541,7 +541,7 @@
     if (!items.length) return
     meta.textContent = 'drafting...'
     try {
-      const r = await fetch('/api/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      const r = await fetch('/api/digest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'draft failed')
       if (!d.available) { meta.textContent = 'drafts need OPENROUTER_API_KEY'; return }
       for (const it of st.inbox.items) if (d.drafts[it.hash]) it.draft = d.drafts[it.hash]
@@ -1127,7 +1127,41 @@
     const addRow = mylinksEdit ? `<div class="urow" style="cursor:default"><input class="sfin" id="ml_newlabel" placeholder="label" style="width:92px;margin:0"><input class="sfin" id="ml_newurl" placeholder="https://..." style="flex:1;margin:0"><span data-act="mladd" style="cursor:pointer;color:#3fbf7f;padding:0 4px">+</span></div>` : ''
     openOverlay('My links', `<div class="ps" style="margin-bottom:8px">associate your Farcaster with your other profiles. edit them once, then 'copy all' when someone asks for your links, for a bio, or a first-comment link drop.</div>
       ${rows}${addRow}
-      <div class="subbar" style="margin-top:10px"><span class="chip ${mylinksEdit ? 'on' : ''}" data-act="mltoggle">${mylinksEdit ? 'done' : 'edit'}</span><span class="chip" data-act="mlcopy">copy all</span></div>`)
+      <div class="subbar" style="margin-top:10px"><span class="chip ${mylinksEdit ? 'on' : ''}" data-act="mltoggle">${mylinksEdit ? 'done' : 'edit'}</span><span class="chip" data-act="mlcopy">copy all</span><span class="chip" data-act="editprofile">edit Farcaster profile</span></div>`)
+  }
+
+  // Edit your own Farcaster profile (display / bio / pfp). A public change, so
+  // 'save' is two-step (tap, then confirm) and only fires on your confirm.
+  let pfConfirm = false
+  async function openEditProfile() {
+    pfConfirm = false
+    openOverlay('Edit Farcaster profile', '<div class="loading">loading your profile...</div>')
+    try {
+      const r = await fetch(`/api/view?kind=profile&user=${encodeURIComponent(ME)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'load failed')
+      const u = d.user
+      document.getElementById('obody').innerHTML = `<div class="ps" style="margin-bottom:8px">edit your public Farcaster profile. changes go live on the protocol. leave a field as-is to keep it.</div>
+        ${pfp(u)}
+        <div class="urow" style="cursor:default"><div style="width:80px;font-weight:600">display</div><input class="sfin" id="pf_display" value="${esc(u.display || '')}" style="flex:1;margin:0"></div>
+        <div class="urow" style="cursor:default;align-items:flex-start"><div style="width:80px;font-weight:600;padding-top:6px">bio</div><textarea class="sfin" id="pf_bio" rows="3" style="flex:1;margin:0;resize:vertical">${esc(u.bio || '')}</textarea></div>
+        <div class="urow" style="cursor:default"><div style="width:80px;font-weight:600">pfp url</div><input class="sfin" id="pf_pfp" value="${esc(u.pfp || '')}" placeholder="https://..." style="flex:1;margin:0"></div>
+        <div class="subbar" style="margin-top:10px"><span class="chip on" id="pf_save" data-act="pfsave">save to Farcaster</span><span class="ub" id="pf_msg"></span></div>`
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  async function saveProfile(btn) {
+    if (!pfConfirm) { pfConfirm = true; btn.textContent = 'tap again to confirm (public change)'; return }
+    const fields = {
+      display_name: (document.getElementById('pf_display').value || '').trim(),
+      bio: (document.getElementById('pf_bio').value || '').trim(),
+      pfp_url: (document.getElementById('pf_pfp').value || '').trim(),
+    }
+    btn.textContent = 'saving...'; const msg = document.getElementById('pf_msg')
+    try {
+      const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'profile', ...fields }) })
+      const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'save failed')
+      btn.textContent = 'saved'; if (msg) msg.textContent = 'updated: ' + (d.updated || []).join(', '); toast('profile updated')
+    } catch (e) { pfConfirm = false; btn.textContent = 'save to Farcaster'; if (msg) msg.textContent = 'error: ' + e.message }
   }
 
   // ===== LinkedIn: turn what we built into ready-to-post LinkedIn content =====
@@ -1214,9 +1248,10 @@
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
         ${(u.accounts || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center;color:#3fbf7f">connected:</span>${u.accounts.map((ac) => ac.url ? `<a class="chip" href="${esc(ac.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(ac.platform)} @${esc(ac.username)}</a>` : `<span class="chip">${esc(ac.platform)} @${esc(ac.username)}</span>`).join(' ')}</div>` : ''}
         ${(u.addresses || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center">onchain:</span>${u.addresses.map((a) => `<a class="chip" href="${esc(a.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(a.chain)} ${esc(a.short)}</a>`).join(' ')}</div>` : ''}
+        ${(u.holdings || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center">holds:</span>${u.holdings.map((h) => `<span class="chip" title="$${h.usd.toFixed(2)}">${esc(h.symbol)}</span>`).join(' ')}</div>` : ''}
         ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
         ${lists.length ? `<div class="ps" style="margin-top:6px">lists: ${lists.map((l) => `<span class="chip ${(l.fids || []).includes(u.fid) ? 'on' : ''}" data-act="addtolist" data-list="${esc(l.id)}" data-fid="${u.fid}" data-uname="${esc(u.username)}">${esc(l.name)}</span>`).join(' ')}</div>` : ''}
-        <div class="subbar" style="padding-left:0"><button class="chip ${u.youFollow ? 'on' : ''}" data-act="follow" data-fid="${u.fid}" data-following="${u.youFollow ? 1 : 0}">${u.youFollow ? 'following' : 'follow'}</button>${u.dm ? `<a class="chip" href="${esc(u.dm)}" target="_blank" rel="noopener" style="text-decoration:none">message</a>` : ''}<span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a></div>
+        <div class="subbar" style="padding-left:0"><button class="chip ${u.youFollow ? 'on' : ''}" data-act="follow" data-fid="${u.fid}" data-following="${u.youFollow ? 1 : 0}">${u.youFollow ? 'following' : 'follow'}</button>${u.dm ? `<a class="chip" href="${esc(u.dm)}" target="_blank" rel="noopener" style="text-decoration:none">message</a>` : ''}<span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a><span class="chip" data-act="mute" data-fid="${u.fid}" style="opacity:.7">mute</span><span class="chip" data-act="block" data-fid="${u.fid}" style="opacity:.7">block</span></div>
         <div id="researchOut"></div></div></div>`
       curProfile = { username: u.username, display: u.display, bio: u.bio, followers: u.followers, score: u.score, youFollow: u.youFollow, followsYou: u.followsYou, casts: (d.casts || []).map((c) => ({ text: c.text })) }
       const popular = (d.popular || []).length ? '<div class="subbar"><b style="color:#8a8a99;font-size:13px">top casts</b></div>' + d.popular.map(castCard).join('') : ''
@@ -1235,6 +1270,8 @@
     if (bc) { closeOverlay(); st.channels.id = bc.dataset.chan; switchTab('channels'); loadChannels(); return }
     const fz = e.target.closest('[data-act="follow"]')
     if (fz) { toggleFollow(fz); return }
+    const mz = e.target.closest('[data-act="mute"], [data-act="block"]')
+    if (mz) { muteOrBlock(mz); return }
     const rz = e.target.closest('[data-act="research"]')
     if (rz) { runResearch(); return }
     const sz = e.target.closest('[data-act="summarize"]')
@@ -1247,6 +1284,8 @@
     const mlrm = e.target.closest('[data-act="mlrm"]'); if (mlrm) { mlSaveInputs(); socials.splice(+mlrm.dataset.i, 1); persist(); openMyLinks(); return }
     const mlad = e.target.closest('[data-act="mladd"]'); if (mlad) { mlSaveInputs(); openMyLinks(); return }
     const mlcp = e.target.closest('[data-act="mlcopy"]'); if (mlcp) { mlSaveInputs(); const txt = (socials || []).filter((x) => x.url).map((x) => `${x.label}: ${x.url}`).join('\n'); navigator.clipboard.writeText(txt).then(() => toast('all links copied')).catch(() => toast('copy failed')); return }
+    const ep = e.target.closest('[data-act="editprofile"]'); if (ep) { openEditProfile(); return }
+    const pfs = e.target.closest('[data-act="pfsave"]'); if (pfs) { saveProfile(pfs); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const stplrm = e.target.closest('[data-act="snaptplrm"]')
@@ -1333,6 +1372,19 @@
       btn.classList.toggle('on', wasFollowing); btn.textContent = wasFollowing ? 'following' : 'follow'
       toast('follow error: ' + e.message)
     } finally { btn.disabled = false }
+  }
+  // mute / block a user (protocol lists, sync to your Farcaster app). block is
+  // two-step since it's more consequential; both are reversible in the FC app.
+  async function muteOrBlock(btn) {
+    const kind = btn.dataset.act
+    if (kind === 'block' && btn.textContent === 'block') { btn.textContent = 'tap to confirm block'; setTimeout(() => { if (btn.textContent === 'tap to confirm block') btn.textContent = 'block' }, 3000); return }
+    btn.textContent = kind === 'block' ? 'blocking...' : 'muting...'
+    try {
+      const r = await fetch('/api/react', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: kind, targetFid: btn.dataset.fid }) })
+      const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'failed')
+      btn.textContent = kind === 'block' ? 'blocked' : 'muted'; btn.classList.add('on'); toast(kind === 'block' ? 'blocked' : 'muted')
+    } catch (e) { btn.textContent = kind; toast(kind + ' error: ' + e.message) }
   }
   async function fireReply(hash, fid, text, done) {
     const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },

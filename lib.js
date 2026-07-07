@@ -516,6 +516,55 @@ export async function setFollow(targetFid, follow = true) {
   return response
 }
 
+// Read-only onchain token balances (Base) for a fid. Returns the top holdings by
+// USD so a profile can show "what they hold" - context, never a money move.
+export async function getTokenBalances(fid = null) {
+  const env = loadEnv()
+  const f = String(fid || env.FID)
+  const data = await fetchNeynar(`/farcaster/user/balance?fid=${f}&networks=base`)
+  const out = []
+  for (const ab of (data.user_balance?.address_balances || [])) {
+    for (const t of (ab.token_balances || [])) {
+      const usd = Number(t.balance?.in_usdc) || 0
+      out.push({ symbol: t.token?.symbol || '?', amount: Number(t.balance?.in_token) || 0, usd })
+    }
+  }
+  return out.sort((a, b) => b.usd - a.usd).slice(0, 6)
+}
+
+// Protocol mute / block a user (or reverse it). Personal, reversible list writes
+// that sync to your Farcaster app - unlike the app's local keyword mute. Uses the
+// api key + your fid (Neynar-managed lists), not the signer.
+export async function setMuteBlock(targetFid, kind, on = true) {
+  const env = loadEnv()
+  const target = parseInt(targetFid, 10)
+  if (!Number.isFinite(target)) throw new Error('invalid target fid')
+  const me = parseInt(env.FID, 10)
+  const path = kind === 'block' ? '/farcaster/block' : '/farcaster/mute'
+  const body = kind === 'block'
+    ? { blocker_fid: me, blocked_fid: target }
+    : { fid: me, muted_fid: target }
+  const response = await fetchNeynar(path, { method: on ? 'POST' : 'DELETE', body: JSON.stringify(body) })
+  await logAction(`${on ? '' : 'un'}${kind}`, { fid: target })
+  return response
+}
+
+// Update your own Farcaster profile (bio / display name / pfp / url). A UserData
+// write - public, needs the signer. Only sends fields you pass. Logs the change.
+export async function updateProfile(fields = {}) {
+  const env = loadEnv()
+  const allowed = ['bio', 'display_name', 'pfp_url', 'url', 'username', 'location']
+  const payload = { signer_uuid: requireSigner(env) }
+  for (const k of allowed) if (typeof fields[k] === 'string' && fields[k].length) payload[k] = fields[k]
+  if (Object.keys(payload).length === 1) throw new Error('no profile fields to update')
+  const response = await fetchNeynar('/farcaster/user', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  await logAction('profile-update', { fields: Object.keys(payload).filter((k) => k !== 'signer_uuid') })
+  return response
+}
+
 // Read-only storage usage for a fid (defaults to you). Returns per-store used /
 // capacity so the UI can warn when old casts are about to get pruned.
 export async function getStorageUsage(fid = null) {

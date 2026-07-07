@@ -3,7 +3,7 @@
 // Behind Vercel login. A like/recast is a low-stakes, reversible signal, so
 // the UI fires it on click (no confirm) - but it still needs the signer.
 
-import { postReaction, setFollow, friendlyPostError } from '../lib.js'
+import { postReaction, setFollow, setMuteBlock, friendlyPostError } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -28,6 +28,17 @@ export default async function handler(req, res) {
       if (!Number.isFinite(fid)) { res.status(400).json({ error: 'missing targetFid' }); return }
       await setFollow(fid, body.type === 'follow')
       res.status(200).json({ ok: true, type: body.type, following: body.type === 'follow' })
+      return
+    }
+
+    // protocol mute / block (and their reverses) - relationship list writes
+    if (['mute', 'unmute', 'block', 'unblock'].includes(body.type)) {
+      const fid = parseInt(body.targetFid, 10)
+      if (!Number.isFinite(fid)) { res.status(400).json({ error: 'missing targetFid' }); return }
+      const kind = body.type.includes('block') ? 'block' : 'mute'
+      const on = !body.type.startsWith('un')
+      await setMuteBlock(fid, kind, on)
+      res.status(200).json({ ok: true, type: body.type })
       return
     }
 
