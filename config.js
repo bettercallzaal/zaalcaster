@@ -30,6 +30,17 @@ export const config = {
   // One-tap quick replies (tap a chip to fill the reply box, then confirm).
   quickReplies: ['GM', 'Lfg', 'love this', 'so cool', 'congrats', 'based', 'ZM'],
 
+  // Your social profiles - associate your Farcaster with the rest. Editable in
+  // the app (My links), seeds from here. Blank ones are hidden until you add them.
+  socials: [
+    { label: 'Farcaster', url: 'https://farcaster.xyz/zaal' },
+    { label: 'X', url: 'https://x.com/bettercallzaal' },
+    { label: 'GitHub', url: 'https://github.com/bettercallzaal' },
+    { label: 'LinkedIn', url: '' },
+    { label: 'Bluesky', url: '' },
+    { label: 'Website', url: 'https://thezao.xyz' },
+  ],
+
   // How the AI drafts replies in your voice (one rule per line).
   voiceRules: [
     '- short, plain, direct. one or two sentences max. lowercase is fine.',

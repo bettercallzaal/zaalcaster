@@ -311,20 +311,21 @@
   let savedSearches = lsGet('zc_searches', [])         // [{q, channel}]
   let statsHistory = lsGet('zc_statshist', {})         // day -> {followers, score}
   let savedSnaps = lsGet('zc_snaps', [])               // [{name, doc}] custom snap templates
-  let feedback = lsGet('zc_feedback', [])              // [{text, tab, at}] in-app notes for review
+  let feedback = lsGet('zc_feedback', [])
+  let socials = lsGet('zc_socials', null)              // [{text, tab, at}] in-app notes for review
   let syncEnabled = false                             // server store on? (set at boot)
 
   // one persist path: write localStorage (offline cache) + push to the server
   // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
   let pushT = null
   function persist() {
-    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory); lsSet('zc_snaps', savedSnaps); lsSet('zc_feedback', feedback)
+    lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory); lsSet('zc_snaps', savedSnaps); lsSet('zc_feedback', feedback); if (socials) lsSet('zc_socials', socials)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, savedSnaps, feedback } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, savedSnaps, feedback, socials } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -963,7 +964,7 @@
       ['compose', 'Post', 'new cast'],
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
-      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div>`
+      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
@@ -1095,6 +1096,27 @@
       out.innerHTML = d.summary ? `<div class="digest"><div class="lab">thread summary</div><div class="t">${esc(d.summary)}</div></div>` : '<div class="ub">no summary available</div>'
     } catch (e) { out.innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
+  // ===== My links: associate Farcaster with X / LinkedIn / GitHub / etc =====
+  let mylinksEdit = false
+  function mlSaveInputs() {
+    if (!mylinksEdit) return
+    socials = (socials || []).map((s, i) => { const el = document.getElementById('ml_' + i); return { label: s.label, url: el ? el.value.trim() : s.url } })
+    const nl = document.getElementById('ml_newlabel'), nu = document.getElementById('ml_newurl')
+    if (nl && nu && nl.value.trim() && nu.value.trim()) { let u = nu.value.trim(); if (!/^https?:\/\//.test(u)) u = 'https://' + u; socials.push({ label: nl.value.trim(), url: u }) }
+    persist()
+  }
+  function openMyLinks() {
+    const rows = (socials || []).map((s, i) => {
+      if (mylinksEdit) return `<div class="urow" style="cursor:default"><div style="width:92px;font-weight:600">${esc(s.label)}</div><input class="sfin" id="ml_${i}" value="${esc(s.url || '')}" placeholder="https://..." style="flex:1;margin:0"><span data-act="mlrm" data-i="${i}" style="cursor:pointer;color:#ff8a6a;padding:0 4px">x</span></div>`
+      const short = (s.url || '').replace(/^https?:\/\//, '')
+      return `<div class="urow" style="cursor:default"><div style="width:92px;font-weight:600">${esc(s.label)}</div><div style="flex:1;min-width:0">${s.url ? `<a class="open" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(short)}</a>` : '<span class="ub">not set - tap edit</span>'}</div></div>`
+    }).join('')
+    const addRow = mylinksEdit ? `<div class="urow" style="cursor:default"><input class="sfin" id="ml_newlabel" placeholder="label" style="width:92px;margin:0"><input class="sfin" id="ml_newurl" placeholder="https://..." style="flex:1;margin:0"><span data-act="mladd" style="cursor:pointer;color:#3fbf7f;padding:0 4px">+</span></div>` : ''
+    openOverlay('My links', `<div class="ps" style="margin-bottom:8px">associate your Farcaster with your other profiles. edit them once, then 'copy all' when someone asks for your links, for a bio, or a first-comment link drop.</div>
+      ${rows}${addRow}
+      <div class="subbar" style="margin-top:10px"><span class="chip ${mylinksEdit ? 'on' : ''}" data-act="mltoggle">${mylinksEdit ? 'done' : 'edit'}</span><span class="chip" data-act="mlcopy">copy all</span></div>`)
+  }
+
   // ===== LinkedIn: turn what we built into ready-to-post LinkedIn content =====
   const SHARE_ITEMS = [
     { name: 'zaalcaster (open source)', info: 'my own personal Farcaster client - feeds, AI drafts, cross-post, mini app. open source + forkable.', link: 'github.com/bettercallzaal/zaalcaster', topic: 'i built and open-sourced my own personal Farcaster client instead of using the default app', facts: 'zaalcaster: a personal client i built - feeds, inbox, AI drafts in my voice, lists, cross-post to X, a no-code snap builder, runs as a Farcaster mini app. open source at github.com/bettercallzaal/zaalcaster, forkable. vibe-coded the whole thing with an AI agent. the point: artists should own the tools they build on, not rent them.' },
@@ -1205,6 +1227,10 @@
     const lic = e.target.closest('[data-act="lidraftcustom"]'); if (lic) { const t = (document.getElementById('liTopic').value || '').trim(); if (t) liDraft(t, '', 'liout_custom', lic); return }
     const lir = e.target.closest('[data-act="liredraft"]'); if (lir) { liDraft(lir.dataset.topic, lir.dataset.facts, lir.dataset.out, lir); return }
     const lcp = e.target.closest('[data-act="licopy"]'); if (lcp) { const el = document.getElementById(lcp.dataset.target); if (el) { navigator.clipboard.writeText(el.textContent).then(() => toast('copied - paste into LinkedIn')).catch(() => toast('copy failed')) } return }
+    const mlt = e.target.closest('[data-act="mltoggle"]'); if (mlt) { mlSaveInputs(); mylinksEdit = !mylinksEdit; openMyLinks(); return }
+    const mlrm = e.target.closest('[data-act="mlrm"]'); if (mlrm) { mlSaveInputs(); socials.splice(+mlrm.dataset.i, 1); persist(); openMyLinks(); return }
+    const mlad = e.target.closest('[data-act="mladd"]'); if (mlad) { mlSaveInputs(); openMyLinks(); return }
+    const mlcp = e.target.closest('[data-act="mlcopy"]'); if (mlcp) { mlSaveInputs(); const txt = (socials || []).filter((x) => x.url).map((x) => `${x.label}: ${x.url}`).join('\n'); navigator.clipboard.writeText(txt).then(() => toast('all links copied')).catch(() => toast('copy failed')); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const stplrm = e.target.closest('[data-act="snaptplrm"]')
@@ -1320,6 +1346,7 @@
     if (act === 'brand') { openBrand(+btn.dataset.i); return }
     if (act === 'allprojects') { openAllProjects(); return }
     if (act === 'linkedin') { openLinkedIn(); return }
+    if (act === 'mylinks') { openMyLinks(); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
@@ -1483,6 +1510,7 @@
         if (s.statsHistory && typeof s.statsHistory === 'object') { statsHistory = s.statsHistory; lsSet('zc_statshist', statsHistory) }
         if (Array.isArray(s.savedSnaps)) { savedSnaps = s.savedSnaps; lsSet('zc_snaps', savedSnaps) }
         if (Array.isArray(s.feedback)) { feedback = s.feedback; lsSet('zc_feedback', feedback) }
+        if (Array.isArray(s.socials)) { socials = s.socials; lsSet('zc_socials', socials) }
         if (s.daily && typeof s.daily === 'object') {
           daily = s.daily
           daily.tasks = daily.tasks || []; daily.apps = daily.apps || []
@@ -1554,6 +1582,7 @@
     if (cfg.username) ME = cfg.username
     if (Array.isArray(cfg.quickReplies) && cfg.quickReplies.length) QUICK = cfg.quickReplies
     if (Array.isArray(cfg.brands)) BRANDS = cfg.brands
+    if (Array.isArray(cfg.socials) && !socials) { socials = cfg.socials; lsSet('zc_socials', socials) }
     if (cfg.fid) OWNER_FID = String(cfg.fid)
     if (cfg.appName) {
       APPNAME = cfg.appName

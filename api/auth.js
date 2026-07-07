@@ -30,6 +30,7 @@ export default async function handler(req, res) {
         homeChannels: config.homeChannels,
         quickReplies: config.quickReplies || [],
         brands: config.brands || [],
+        socials: config.socials || [],
         daily: config.daily,
       },
     })
