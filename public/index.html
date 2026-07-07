@@ -320,12 +320,11 @@
   function persist() {
     lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory); lsSet('zc_snaps', savedSnaps); lsSet('zc_feedback', feedback)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
-    if (typeof game !== 'undefined') lsSet('zc_game', game)
     if (!syncEnabled) return
     clearTimeout(pushT)
     pushT = setTimeout(() => {
       fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, savedSnaps, feedback, game: (typeof game !== 'undefined' ? game : null) } }) }).catch(() => {})
+        body: JSON.stringify({ state: { daily: (typeof daily !== 'undefined' ? daily : null), bookmarks, muted, scheduled, lists, savedSearches, statsHistory, savedSnaps, feedback } }) }).catch(() => {})
     }, 800)
   }
   const isBookmarked = (h) => bookmarks.some((b) => b.hash === h)
@@ -933,96 +932,11 @@
   if (daily.date !== todayStr()) { daily.date = todayStr(); daily.tasks.forEach((x) => (x.done = false)); lsSet('zc_daily', daily) }
   const saveDaily = () => persist()
 
-  // ================= GAME (streaks, XP, levels) =================
-  const XP_PER_QUEST = 10
-  let game = lsGet('zc_game', null)
-  if (!game || typeof game !== 'object') game = { xp: 0, streak: 0, best: 0, lastDay: null, awarded: {}, badges: [] }
-  if (!game.awarded || typeof game.awarded !== 'object') game.awarded = {}
-  if (!Array.isArray(game.badges)) game.badges = []
-  if (!game.history || typeof game.history !== 'object') game.history = {} // day -> {quests, xp}
-  if (!game.weekGoal) game.weekGoal = 21 // quests per week target (3/day)
-  // prune the award ledger to today only (per-day, so quests re-award tomorrow)
-  for (const k of Object.keys(game.awarded)) if (k !== todayStr()) delete game.awarded[k]
-  // prune the activity history to the last 14 days
-  const keepFrom = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 14); return d.toISOString().slice(0, 10) })()
-  for (const k of Object.keys(game.history)) if (k < keepFrom) delete game.history[k]
-  const yesterdayStr = () => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10) }
-  const levelFor = (xp) => Math.floor((xp || 0) / 100) + 1
-  const xpInLevel = (xp) => (xp || 0) % 100
-  // streak boosters (borrowed from Empire Builder) - longer streak = XP multiplier
-  const boosterFor = (streak) => streak >= 30 ? 3 : streak >= 14 ? 2.5 : streak >= 7 ? 2 : streak >= 3 ? 1.5 : 1
-  function nextBoostHint(streak) {
-    const tiers = [[3, 1.5], [7, 2], [14, 2.5], [30, 3]]
-    for (const [days, mult] of tiers) if (streak < days) return ` - ${days - streak}d to ${mult}x xp`
-    return ' - max 3x boost'
-  }
-  // roll up the last `days` days of the activity ledger (default 7 = this week)
-  function weeklyStats(days = 7) {
-    let quests = 0, xp = 0, active = 0
-    for (let i = 0; i < days; i++) {
-      const d = new Date(); d.setUTCDate(d.getUTCDate() - i)
-      const key = d.toISOString().slice(0, 10)
-      const h = game.history[key]
-      if (h) { quests += h.quests || 0; xp += h.xp || 0; if (h.quests > 0) active++ }
-    }
-    return { quests, xp, active }
-  }
-  const saveGame = () => { lsSet('zc_game', game); persist() }
   function toast(msg) {
     const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg
     document.body.appendChild(el)
     requestAnimationFrame(() => el.classList.add('show'))
     setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300) }, 2200)
-  }
-  const BADGES = [
-    { id: 'first', name: 'First Quest', desc: 'complete a quest' },
-    { id: 'streak3', name: 'On Fire', desc: '3-day streak' },
-    { id: 'streak7', name: 'Week Strong', desc: '7-day streak' },
-    { id: 'streak30', name: 'Unstoppable', desc: '30-day streak' },
-    { id: 'perfect', name: 'Perfect Day', desc: 'all quests in one day' },
-    { id: 'lv5', name: 'Level 5', desc: 'reach level 5' },
-    { id: 'lv10', name: 'Level 10', desc: 'reach level 10' },
-    { id: 'xp1k', name: 'Grinder', desc: '1000 total XP' },
-  ]
-  const badgeMet = (id, perfect) => {
-    const g = game
-    if (id === 'first') return (g.xp || 0) >= XP_PER_QUEST
-    if (id === 'streak3') return (g.best || 0) >= 3
-    if (id === 'streak7') return (g.best || 0) >= 7
-    if (id === 'streak30') return (g.best || 0) >= 30
-    if (id === 'perfect') return !!perfect
-    if (id === 'lv5') return levelFor(g.xp) >= 5
-    if (id === 'lv10') return levelFor(g.xp) >= 10
-    if (id === 'xp1k') return (g.xp || 0) >= 1000
-    return false
-  }
-  // returns newly-unlocked badge objects (for a toast)
-  function unlockBadges(perfect) {
-    const fresh = []
-    for (const b of BADGES) if (!game.badges.includes(b.id) && badgeMet(b.id, perfect)) { game.badges.push(b.id); fresh.push(b) }
-    return fresh
-  }
-  function awardQuest(i) {
-    const day = todayStr()
-    const done = new Set(game.awarded[day] || [])
-    if (done.has(i)) return                 // already counted today
-    done.add(i); game.awarded[day] = [...done]
-    if (game.lastDay !== day) {              // first quest of the day moves the streak
-      game.streak = (game.lastDay === yesterdayStr()) ? (game.streak || 0) + 1 : 1
-      game.lastDay = day
-      if (game.streak > (game.best || 0)) game.best = game.streak
-    }
-    // streak booster: a longer streak multiplies the XP each quest is worth
-    const mult = boosterFor(game.streak || 0)
-    const gain = Math.round(XP_PER_QUEST * mult)
-    game.xp = (game.xp || 0) + gain
-    const h = game.history[day] || { quests: 0, xp: 0 }   // per-day ledger for weekly recap
-    h.quests += 1; h.xp += gain; game.history[day] = h
-    const perfect = (daily.tasks || []).length > 0 && (daily.tasks || []).every((t) => t.done)
-    const fresh = unlockBadges(perfect)
-    saveGame()
-    if (mult > 1) toast(`+${gain} xp (${mult}x streak boost)`)
-    fresh.forEach((b, k) => setTimeout(() => toast(`Badge unlocked: ${b.name}`), 200 + k * 900))
   }
 
   let editDaily = false
@@ -1050,39 +964,12 @@
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
       <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('')
-    const statbar = `<div class="statbar">
-      <div class="stat"><div class="sv">Lv ${levelFor(game.xp)}</div><div class="sl">level</div></div>
-      <div class="stat"><div class="sv">${game.streak || 0}${boosterFor(game.streak || 0) > 1 ? ` <span class="boost">${boosterFor(game.streak || 0)}x</span>` : ''}</div><div class="sl">day streak</div></div>
-      <div class="stat"><div class="sv">${game.best || 0}</div><div class="sl">best</div></div>
-      <div class="stat"><div class="sv">${game.xp || 0}</div><div class="sl">total xp</div></div>
-    </div>
-    <div class="xpbar"><div class="xpfill" style="width:${xpInLevel(game.xp)}%"></div></div>
-    <div class="xphint">${100 - xpInLevel(game.xp)} xp to Lv ${levelFor(game.xp) + 1}${nextBoostHint(game.streak || 0)}${(game.streak || 0) >= 1 ? ` <span class="chip" data-act="share" data-kind="streak">share streak</span>` : ''}</div>`
-    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> quests done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
-      ${statbar}
+    return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
       <div class="subbar"><b style="color:#8a8a99;font-size:13px">today's checklist</b></div>
       ${tasks}
       ${editDaily ? '<div class="searchbar" style="margin-top:6px"><input id="dTaskInput" placeholder="add a daily task..."><button class="ibtn" data-act="dtaskadd">add</button></div>' : ''}
-      <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">badges (${game.badges.length}/${BADGES.length})</b></div>
-      <div class="badges">${BADGES.map((b) => { const on = game.badges.includes(b.id); return `<div class="badge ${on ? 'on' : ''}" title="${esc(b.desc)}"><div class="bn">${esc(b.name)}</div><div class="bd">${on ? `unlocked <span class="chip" data-act="share" data-kind="badge" data-val="${esc(b.name)}" style="padding:1px 7px;font-size:11px">share</span>` : esc(b.desc)}</div></div>` }).join('')}</div>
-      ${(() => {
-        const w = weeklyStats(7); const goal = game.weekGoal || 21; const pct = Math.min(100, Math.round((w.quests / goal) * 100))
-        const days = []
-        for (let i = 6; i >= 0; i--) { const d = new Date(); d.setUTCDate(d.getUTCDate() - i); const key = d.toISOString().slice(0, 10); days.push({ q: (game.history[key]?.quests) || 0, dow: ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getUTCDay()], today: i === 0 }) }
-        const maxQ = Math.max(1, ...days.map((x) => x.q))
-        const spark = `<div class="spark">${days.map((x) => `<div class="sparkcol"><div class="sparkbar ${x.today ? 'today' : ''}" style="height:${Math.max(6, Math.round((x.q / maxQ) * 34))}px" title="${x.q} quests"></div><div class="sparkd">${x.dow}</div></div>`).join('')}</div>`
-        return `<div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">this week</b> <span class="chip" data-act="weekgoal">goal ${goal}</span> <span class="chip" data-act="share" data-kind="week">share recap</span></div>
-        <div class="weekgrid">
-          <div class="stat"><div class="sv">${w.quests}</div><div class="sl">quests</div></div>
-          <div class="stat"><div class="sv">${w.xp}</div><div class="sl">xp</div></div>
-          <div class="stat"><div class="sv">${w.active}/7</div><div class="sl">active days</div></div>
-        </div>
-        ${spark}
-        <div class="xpbar"><div class="xpfill" style="width:${pct}%"></div></div>
-        <div class="xphint">${w.quests}/${goal} quests this week (${pct}%)</div>`
-      })()}
       ${sched}
       <div class="subbar" style="margin-top:12px"><b style="color:#8a8a99;font-size:13px">mini apps</b></div>
       <div class="subbar">${apps || '<span class="ub">none</span>'}</div>
@@ -1159,9 +1046,9 @@
         if (/\bgm\b/.test(tx) && a.gm) hit = true
         else if (/\bpost\b|\bcast\b/.test(tx) && a.posts >= 1) hit = true
         else if (/repl|inbox|engage/.test(tx)) { const m = tx.match(/(\d+)/); const need = m ? +m[1] : 1; if (a.replies >= need) hit = true }
-        if (hit) { t.done = true; awardQuest(i); changed = true }
+        if (hit) { t.done = true; changed = true }
       })
-      if (changed) { saveDaily(); render(); toast('quests auto-completed from your activity') }
+      if (changed) { saveDaily(); render(); toast('checked off what you already did today') }
     } catch { /* activity unreachable - manual ticking still works */ }
   }
 
@@ -1394,7 +1281,7 @@
     if (act === 'editdaily') { editDaily = !editDaily; render(); return }
     if (act === 'brand') { openBrand(+btn.dataset.i); return }
     if (act === 'allprojects') { openAllProjects(); return }
-    if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; if (daily.tasks[i].done) awardQuest(i); saveDaily(); render(); return }
+    if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
     if (act === 'dapprm') { daily.apps.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
@@ -1406,24 +1293,6 @@
     if (act === 'dgrouprm') { daily.groups.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dgroupadd') { const l = document.getElementById('dGroupLabel').value.trim(), u = document.getElementById('dGroupUrl').value.trim(); if (l && u) { daily.groups.push({ label: l, url: u.startsWith('http') ? u : 'https://' + u }); saveDaily(); render() } return }
 
-    if (act === 'share') {
-      const repo = 'github.com/bettercallzaal/zaalcaster'
-      let text = ''
-      if (btn.dataset.kind === 'streak') {
-        const d = game.streak || 0
-        text = `day ${d} streak on farcaster, staying consistent. gamified my habit in my own client, zaalcaster - fork your own: ${repo}`
-      } else if (btn.dataset.kind === 'week') {
-        const w = weeklyStats(7)
-        text = `this week on farcaster: ${w.quests} quests, ${w.xp} xp, active ${w.active}/7 days. running my own gamified client, zaalcaster - fork your own: ${repo}`
-      } else {
-        text = `unlocked "${btn.dataset.val}" in zaalcaster - gamifying my farcaster habit. fork your own: ${repo}`
-      }
-      compose.text = text; compose.armed = false; compose.sentLink = null
-      switchTab('compose')
-      setTimeout(() => { const ta = document.getElementById('composeText'); if (ta) { ta.focus() } }, 60)
-      toast('draft ready - review + post')
-      return
-    }
     if (act === 'savesearch') {
       const q = st.search.q.trim(); if (!q) return
       const exists = savedSearches.some((s) => s.q === q && (s.channel || '') === st.search.channel)
@@ -1431,11 +1300,6 @@
       return
     }
     if (act === 'rmsearch') { savedSearches.splice(+btn.dataset.i, 1); persist(); render(); return }
-    if (act === 'weekgoal') {
-      const v = parseInt(window.prompt('weekly quest goal?', String(game.weekGoal || 21)) || '', 10)
-      if (v && v > 0) { game.weekGoal = v; saveGame(); render() }
-      return
-    }
     if (act === 'newlist') {
       const name = (window.prompt('name this list (e.g. builders, close friends)') || '').trim(); if (!name) return
       const id = 'l' + Date.now().toString(36)
@@ -1586,15 +1450,6 @@
           daily.communities = daily.communities || []; daily.groups = daily.groups || []
           if (daily.date !== todayStr()) { daily.date = todayStr(); daily.tasks.forEach((x) => (x.done = false)) }
           lsSet('zc_daily', daily)
-        }
-        if (s.game && typeof s.game === 'object') {
-          game = s.game
-          if (!game.awarded || typeof game.awarded !== 'object') game.awarded = {}
-          if (!Array.isArray(game.badges)) game.badges = []
-          if (!game.history || typeof game.history !== 'object') game.history = {}
-          if (!game.weekGoal) game.weekGoal = 21
-          for (const k of Object.keys(game.awarded)) if (k !== todayStr()) delete game.awarded[k]
-          lsSet('zc_game', game)
         }
       }
     } catch { /* store unreachable - stay on localStorage */ }
