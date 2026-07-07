@@ -1701,7 +1701,7 @@
     const el = document.createElement('div'); el.id = 'welcome'
     el.innerHTML = `<div class="wcard">
       <div class="wtitle">gm${u.username ? ' @' + esc(u.username) : ''}</div>
-      <div class="wsub">you found <b>${esc(APPNAME || 'zaalcaster')}</b> - @${esc(owner)}'s gamified farcaster client.</div>
+      <div class="wsub">you found <b>${esc(APPNAME || 'zaalcaster')}</b> - @${esc(owner)}'s personal farcaster client.</div>
       <div class="wsub" style="margin-top:6px">say hi - make your first post asking what it is. it posts as you.</div>
       <button class="ibtn primary" id="wpost" style="margin-top:14px;width:100%">gm @${esc(owner)} what is ${esc(APPNAME || 'zaalcaster')}?</button>
       <div style="margin-top:10px"><a class="chip" href="https://github.com/bettercallzaal/zaalcaster" target="_blank" rel="noopener" style="text-decoration:none">make your own</a> <span class="chip" id="wskip">skip</span></div>

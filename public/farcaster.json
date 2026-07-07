@@ -12,7 +12,7 @@
     "splashImageUrl": "https://z.thezao.xyz/icon.svg",
     "splashBackgroundColor": "#0c0c12",
     "subtitle": "personal farcaster client",
-    "description": "A gamified personal Farcaster client - feed, inbox, channels, search, compose, grow.",
+    "description": "A personal Farcaster client - feed, inbox, channels, search, compose, grow, cross-post.",
     "primaryCategory": "social"
   }
 }
