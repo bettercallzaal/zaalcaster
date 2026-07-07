@@ -2,7 +2,7 @@
 // engages you most, and follower count. Read-only.
 
 import { blockedByAuth } from '../auth.js'
-import { getUserCasts, getNotifications, getUser, getFollowSuggestions } from '../lib.js'
+import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
 
 // engagement weight: replies + recasts count more than likes (they spread you)
 function score(c) {
@@ -35,11 +35,12 @@ async function recentNotifications(pages = 4) {
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   try {
-    const [castsRes, notifs, me, suggestions] = await Promise.all([
+    const [castsRes, notifs, me, suggestions, storage] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       recentNotifications(4),
       getUser(process.env.FID || '19640').catch(() => null),
       getFollowSuggestions({ limit: 12 }).catch(() => []),
+      getStorageUsage().catch(() => null),
     ])
 
     const topCasts = (castsRes.casts || [])
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
       followers: me?.follower_count ?? null,
       following: me?.following_count ?? null,
       score: me?.experimental?.neynar_user_score ?? null,
-      topCasts, topEngagers, suggest,
+      topCasts, topEngagers, suggest, storage,
     })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'stats failed' })

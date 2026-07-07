@@ -46,6 +46,14 @@ async function profile(target, res) {
     return null
   }
   const accounts = (user.verified_accounts || []).map((a) => ({ platform: a.platform, username: a.username, url: acctUrl(a.platform, a.username) })).filter((a) => a.username)
+  // verified onchain addresses (read-only display - a short prefix, links to a
+  // block explorer). No money moves, just "who is this onchain".
+  const va = user.verified_addresses || {}
+  const shortAddr = (addr) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  const addresses = [
+    ...(va.eth_addresses || []).map((a) => ({ chain: 'eth', addr: a, short: shortAddr(a), url: `https://basescan.org/address/${a}` })),
+    ...(va.sol_addresses || []).map((a) => ({ chain: 'sol', addr: a, short: shortAddr(a), url: `https://solscan.io/account/${a}` })),
+  ].slice(0, 4)
   res.status(200).json({
     user: {
       username: user.username, display: user.display_name || user.username, pfp: user.pfp_url || null,
@@ -53,8 +61,9 @@ async function profile(target, res) {
       following: user.following_count || 0, score: user.experimental?.neynar_user_score ?? null,
       youFollow: !!vc.following, followsYou: !!vc.followed_by,
       mutuals: rel.names.slice(0, 3), mutualCount: rel.count,
-      verified: accounts.map((a) => a.platform), accounts,
+      verified: accounts.map((a) => a.platform), accounts, addresses,
       link: `https://farcaster.xyz/${user.username}`,
+      dm: `https://farcaster.xyz/~/inbox/create/${user.fid}`,
     },
     casts: (castsRes.casts || []).map(compactCast),
     popular: (popular || []).slice(0, 5).map(compactCast),

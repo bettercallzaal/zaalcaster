@@ -502,6 +502,35 @@ export async function postReaction(reactionType, targetHash, targetAuthorFid = n
   return response
 }
 
+// Follow / unfollow a user by fid. Protocol link add/remove - reversible, needs
+// the signer. follow=true adds, false removes. Logs to the action ledger.
+export async function setFollow(targetFid, follow = true) {
+  const env = loadEnv()
+  const fid = parseInt(targetFid, 10)
+  if (!Number.isFinite(fid)) throw new Error('invalid target fid')
+  const response = await fetchNeynar('/farcaster/user/follow', {
+    method: follow ? 'POST' : 'DELETE',
+    body: JSON.stringify({ signer_uuid: requireSigner(env), target_fids: [fid] }),
+  })
+  await logAction(follow ? 'follow' : 'unfollow', { fid })
+  return response
+}
+
+// Read-only storage usage for a fid (defaults to you). Returns per-store used /
+// capacity so the UI can warn when old casts are about to get pruned.
+export async function getStorageUsage(fid = null) {
+  const env = loadEnv()
+  const f = String(fid || env.FID)
+  const data = await fetchNeynar(`/farcaster/storage/usage?fid=${f}`)
+  const pick = (o) => (o && typeof o.used === 'number') ? { used: o.used, capacity: o.capacity || 0 } : null
+  return {
+    units: data.total_active_units ?? null,
+    casts: pick(data.casts),
+    reactions: pick(data.reactions),
+    links: pick(data.links),
+  }
+}
+
 export async function getCastDetails(castHash) {
   const response = await fetchNeynar(`/farcaster/cast?identifier=${castHash}&type=hash`)
   return response
