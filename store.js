@@ -17,18 +17,19 @@ function resolve() {
   if (!token) { const k = Object.keys(e).find((x) => x.endsWith('_REST_API_TOKEN') && !x.includes('READ_ONLY')); if (k) token = e[k] }
   return { url, token }
 }
-const URL = resolve().url
-const TOKEN = resolve().token
-
+// Resolve lazily (at call time), not at import time, so store works regardless
+// of whether env/creds were loaded before or after this module was imported.
 export function storeEnabled() {
-  return !!(URL && TOKEN)
+  const { url, token } = resolve()
+  return !!(url && token)
 }
 
 // Run one Redis command via the Upstash REST command-array form.
 async function cmd(args) {
-  const res = await fetch(URL, {
+  const { url, token } = resolve()
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(args),
     signal: AbortSignal.timeout(8000),
   })

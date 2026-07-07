@@ -6,7 +6,7 @@
 //   ?limit=25 ?cursor=...
 // Read-only, compact safe cast shape.
 
-import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday } from '../lib.js'
+import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday, getFrameCatalog, searchFrames } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 // flatten a Neynar notification (any shape) into a compact row for the UI
@@ -72,6 +72,15 @@ export default async function handler(req, res) {
       const channels = await getTrendingChannels({ limit: 10 })
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ trending: channels })
+      return
+    }
+
+    // Frame / mini-app discovery (catalog, or search with ?q=)
+    if (req.query.frames === '1') {
+      const q = (req.query.q || '').trim()
+      const frames = q ? await searchFrames(q, 20) : await getFrameCatalog(24)
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ frames })
       return
     }
 

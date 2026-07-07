@@ -47,6 +47,10 @@ export function loadEnv() {
     if (!trimmed || trimmed.startsWith('#')) continue
     const [key, ...rest] = trimmed.split('=')
     parsed[key] = rest.join('=')
+    // export KV/store creds to process.env so store.js works in CLI tools too
+    // (cockpit snooze, action ledger, health check) - Vercel already sets these.
+    // Trim + strip quotes so a stray \r / quote from the file can't break fetch.
+    if (/_REST_API_(URL|TOKEN)$/.test(key) && !process.env[key]) process.env[key] = parsed[key].trim().replace(/^["']|["']$/g, '')
   }
 
   if (!parsed.NEYNAR_API_KEY) throw new Error(`Missing NEYNAR_API_KEY in ${ENV_PATH}`)
@@ -289,6 +293,25 @@ export async function getUsersByFids(fids) {
   const params = new URLSearchParams({ fids: fids.join(','), viewer_fid: env.FID })
   const response = await fetchNeynar(`/farcaster/user/bulk?${params}`)
   return response.users || []
+}
+
+// Farcaster frames / mini-apps to discover. compactFrame normalizes the shape.
+function compactFrame(f) {
+  const name = f.manifest?.frame?.name || f.metadata?.html?.ogTitle || f.author?.username || 'frame'
+  return {
+    name,
+    image: f.image || f.manifest?.frame?.imageUrl || f.metadata?.html?.ogImage?.[0]?.url || null,
+    url: f.frames_url || f.manifest?.frame?.homeUrl || null,
+    author: f.author?.username || null,
+  }
+}
+export async function getFrameCatalog(limit = 24) {
+  const response = await fetchNeynar(`/farcaster/frame/catalog?limit=${limit}`)
+  return (response.frames || []).map(compactFrame).filter((f) => f.url)
+}
+export async function searchFrames(query, limit = 20) {
+  const response = await fetchNeynar(`/farcaster/frame/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+  return (response.frames || []).map(compactFrame).filter((f) => f.url)
 }
 
 // Neynar's AI summary of a whole conversation/thread - one call, no LLM of ours.
@@ -553,21 +576,38 @@ export function loadSpamSet() {
   return set
 }
 
+// Snoozed/skipped inbound, persisted in KV so items don't reappear next session
+// (cockpit [s]/[l], web inbox both respect it). { hash: untilMs }, 0 = forever.
+export async function getSnoozeSet() {
+  try { const { storeEnabled, kvGet } = await import('./store.js'); if (!storeEnabled()) return {}; return (await kvGet('zc:snoozed')) || {} } catch { return {} }
+}
+export async function addSnooze(hash, hours = 0) {
+  try {
+    const { storeEnabled, kvGet, kvSet } = await import('./store.js'); if (!storeEnabled()) return false
+    const s = (await kvGet('zc:snoozed')) || {}
+    s[hash] = hours > 0 ? Date.now() + hours * 36e5 : 0
+    const now = Date.now(); for (const k of Object.keys(s)) if (s[k] && s[k] < now) delete s[k]
+    await kvSet('zc:snoozed', s); return true
+  } catch { return false }
+}
+const snoozedActive = (hash, s) => { const v = s[hash]; return v !== undefined && (v === 0 || v > Date.now()) }
+
 export async function getUnansweredInbound(options = {}) {
   const { limit = 15, includeAll = false, withContext = true } = options
   const answerable = new Set(['reply', 'mention', 'quote'])
   const spam = loadSpamSet()
 
-  const [notifs, answered] = await Promise.all([
+  const [notifs, answered, snoozes] = await Promise.all([
     getNotifications({ limit }),
     getAnsweredParents(),
+    getSnoozeSet(),
   ])
 
   const items = []
   for (const n of notifs.notifications || []) {
     const c = n.cast || {}
     if (!includeAll && !answerable.has(n.type)) continue
-    if (!c.hash || answered.has(c.hash)) continue
+    if (!c.hash || answered.has(c.hash) || snoozedActive(c.hash, snoozes)) continue
     const uname = (c.author?.username || '').toLowerCase()
     if (spam.has(uname) || (c.author?.fid && spam.has(String(c.author.fid)))) continue
     items.push({

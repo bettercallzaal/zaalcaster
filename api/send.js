@@ -9,6 +9,8 @@
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
 import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast } from '../lib.js'
+import { postToX, postThreadToX, xEnabled } from '../xpost.js'
+import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -26,7 +28,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const h = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200).json(h)
+    res.status(200).json({ ...h, xEnabled: xEnabled(), bskyEnabled: bskyEnabled() })
     return
   }
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
@@ -77,7 +79,11 @@ export default async function handler(req, res) {
         parentHash = cast.hash; posted++
         if (i === 0) firstLink = `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`
       }
-      res.status(200).json({ ok: true, link: firstLink, count: posted })
+      // optional cross-post of the whole thread to X / Bluesky (toggled + confirmed)
+      let x = null, bsky = null
+      if (body.alsoX) x = await postThreadToX(parts).catch((e) => ({ ok: false, reason: e?.message || 'x failed' }))
+      if (body.alsoBsky) bsky = await postThreadToBluesky(parts).catch((e) => ({ ok: false, reason: e?.message || 'bsky failed' }))
+      res.status(200).json({ ok: true, link: firstLink, count: posted, x, bsky })
       return
     }
 
@@ -96,10 +102,21 @@ export default async function handler(req, res) {
     // parentHash -> reply; quoteHash -> quote cast; else top-level (Compose)
     const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid, embedUrl })
     const cast = response.cast
+
+    // optional cross-post to X / Bluesky - only when toggled on (confirm is the
+    // yes) and only for top-level casts. Never blocks the cast: a cross-post
+    // failure still returns the successful cast.
+    let x = null, bsky = null
+    if (!parentHash) {
+      if (body.alsoX) x = await postToX(text).catch((e) => ({ ok: false, reason: e?.message || 'x failed' }))
+      if (body.alsoBsky) bsky = await postToBluesky(text).catch((e) => ({ ok: false, reason: e?.message || 'bsky failed' }))
+    }
+
     res.status(200).json({
       ok: true,
       hash: cast.hash,
       link: `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`,
+      x, bsky,
     })
   } catch (err) {
     // lib throws a clear message when ZAAL_SIGNER_UUID is missing
