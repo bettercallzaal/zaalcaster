@@ -4,7 +4,7 @@
 //   ?kind=profile&user=<fid|username>   profile + recent casts
 // Read-only.
 
-import { getConversation, getUser, getUserCasts, getRelevantFollowers, getConversationSummary, getUserPopular } from '../lib.js'
+import { getConversation, getUser, getUserCasts, getRelevantFollowers, getConversationSummary, getUserPopular, getTokenBalances } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compactCast(cast) {
@@ -32,10 +32,11 @@ async function thread(hash, res) {
 async function profile(target, res) {
   const user = await getUser(target)
   if (!user) { res.status(404).json({ error: 'user not found' }); return }
-  const [castsRes, rel, popular] = await Promise.all([
+  const [castsRes, rel, popular, holdings] = await Promise.all([
     getUserCasts({ fid: user.fid, limit: 20 }).catch(() => ({ casts: [] })),
     getRelevantFollowers(user.fid).catch(() => ({ names: [], count: 0 })),
     getUserPopular(user.fid).catch(() => []),
+    getTokenBalances(user.fid).catch(() => []),
   ])
   const vc = user.viewer_context || {}
   // connected social accounts (x / github / etc) - clean handles + tappable urls
@@ -62,6 +63,7 @@ async function profile(target, res) {
       youFollow: !!vc.following, followsYou: !!vc.followed_by,
       mutuals: rel.names.slice(0, 3), mutualCount: rel.count,
       verified: accounts.map((a) => a.platform), accounts, addresses,
+      holdings: (holdings || []).filter((h) => h.usd >= 0.5).slice(0, 5),
       link: `https://farcaster.xyz/${user.username}`,
       dm: `https://farcaster.xyz/~/inbox/create/${user.fid}`,
     },

@@ -6,6 +6,23 @@
 
 import { getUnansweredInbound, getUsersByFids } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
+import { storeEnabled, kvList } from '../store.js'
+
+// Real-time mentions/replies captured by the Neynar webhook (api/webhook.js).
+// Merge the last day's worth in by hash so they show up instantly, before the
+// next poll. No-op when the store or webhook isn't set up.
+async function realtimeItems() {
+  if (!storeEnabled()) return []
+  try {
+    const raw = await kvList('zc:mentions', 50)
+    const day = Date.now() - 864e5
+    return raw
+      .filter((m) => m && m.hash && (m.at || 0) > day)
+      .map((m) => ({ type: m.type || 'mention', user: m.user, fid: m.fid, hash: m.hash,
+        link: `https://farcaster.xyz/${m.user}/${(m.hash || '').slice(0, 10)}`,
+        text: m.text || '', thread: [], parent: m.parentHash ? { hash: m.parentHash } : null }))
+  } catch { return [] }
+}
 
 // Rank inbound by how much it deserves Zaal's attention: intent (mentions +
 // quotes over generic replies), the sender's neynar score, and mutual-follow.
@@ -35,6 +52,10 @@ export default async function handler(req, res) {
     const priority = req.query.priority === '1' || req.query.priority === 'true'
 
     const items = await getUnansweredInbound({ limit, includeAll })
+    // fold in real-time webhook captures not already in the polled set
+    const seen = new Set(items.map((i) => i.hash))
+    const rt = (await realtimeItems()).filter((r) => !seen.has(r.hash))
+    if (rt.length) items.unshift(...rt)
     if (priority && items.length) await attachPriority(items)
 
     // never leak internals - hand the client only what it renders

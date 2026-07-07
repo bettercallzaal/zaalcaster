@@ -8,7 +8,7 @@
 // the UI must show exact text + an explicit confirm before calling this - the
 // confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
 
-import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast } from '../lib.js'
+import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast, updateProfile } from '../lib.js'
 import { postToX, postThreadToX, xEnabled } from '../xpost.js'
 import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
 import { blockedByAuth } from '../auth.js'
@@ -34,6 +34,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   try {
     const body = await readJsonBody(req)
+
+    // update your own profile (bio / display / pfp / url). Public change - the
+    // UI shows the diff and confirms before calling this.
+    if (body.action === 'profile') {
+      const fields = {}
+      for (const k of ['bio', 'display_name', 'pfp_url', 'url']) {
+        if (typeof body[k] === 'string') fields[k] = body[k].trim()
+      }
+      await updateProfile(fields)
+      res.status(200).json({ ok: true, updated: Object.keys(fields).filter((k) => fields[k]) })
+      return
+    }
 
     // delete one of your own casts (the UI confirms first)
     if (body.action === 'delete') {
