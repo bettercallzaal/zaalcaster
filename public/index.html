@@ -864,8 +864,21 @@
       const first = statsHistory[hkeys[0]].followers, delta = (d.followers ?? first) - first
       histLine = `<div style="display:flex;align-items:flex-end;gap:3px;margin-top:8px;height:28px">${bars}</div><div class="ub">followers over ${hkeys.length}d${delta ? ` - ${delta > 0 ? '+' : ''}${delta}` : ''}</div>`
     }
+    // storage: your protocol storage units. casts/reactions at 100% means the
+    // oldest are getting pruned - a nudge to rent another unit if you care.
+    let storageLine = ''
+    const sg = d.storage
+    if (sg && sg.units != null) {
+      const bar = (label, o) => {
+        if (!o || !o.capacity) return ''
+        const pct = Math.min(100, Math.round((o.used / o.capacity) * 100))
+        const col = pct >= 100 ? '#e0555f' : pct >= 85 ? '#e0a955' : '#3fbf7f'
+        return `<div class="ub" style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="width:64px">${label}</span><span style="flex:1;height:6px;background:#24242f;border-radius:3px;overflow:hidden"><span style="display:block;height:6px;width:${pct}%;background:${col}"></span></span><span style="width:38px;text-align:right">${pct}%</span></div>`
+      }
+      storageLine = `<div style="margin-top:8px"><div class="ub">storage - ${sg.units} unit${sg.units === 1 ? '' : 's'}${(sg.casts && sg.casts.used >= sg.casts.capacity) ? ' - casts full, oldest getting pruned' : ''}</div>${bar('casts', sg.casts)}${bar('reactions', sg.reactions)}${bar('links', sg.links)}</div>`
+    }
     const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
-      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${empLine}${histLine}</div>`
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${empLine}${histLine}${storageLine}</div>`
     const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
       <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
       <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>
@@ -1200,9 +1213,10 @@
       const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
         ${(u.accounts || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center;color:#3fbf7f">connected:</span>${u.accounts.map((ac) => ac.url ? `<a class="chip" href="${esc(ac.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(ac.platform)} @${esc(ac.username)}</a>` : `<span class="chip">${esc(ac.platform)} @${esc(ac.username)}</span>`).join(' ')}</div>` : ''}
+        ${(u.addresses || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center">onchain:</span>${u.addresses.map((a) => `<a class="chip" href="${esc(a.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(a.chain)} ${esc(a.short)}</a>`).join(' ')}</div>` : ''}
         ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
         ${lists.length ? `<div class="ps" style="margin-top:6px">lists: ${lists.map((l) => `<span class="chip ${(l.fids || []).includes(u.fid) ? 'on' : ''}" data-act="addtolist" data-list="${esc(l.id)}" data-fid="${u.fid}" data-uname="${esc(u.username)}">${esc(l.name)}</span>`).join(' ')}</div>` : ''}
-        <div class="subbar" style="padding-left:0"><span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a></div>
+        <div class="subbar" style="padding-left:0"><button class="chip ${u.youFollow ? 'on' : ''}" data-act="follow" data-fid="${u.fid}" data-following="${u.youFollow ? 1 : 0}">${u.youFollow ? 'following' : 'follow'}</button>${u.dm ? `<a class="chip" href="${esc(u.dm)}" target="_blank" rel="noopener" style="text-decoration:none">message</a>` : ''}<span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a></div>
         <div id="researchOut"></div></div></div>`
       curProfile = { username: u.username, display: u.display, bio: u.bio, followers: u.followers, score: u.score, youFollow: u.youFollow, followsYou: u.followsYou, casts: (d.casts || []).map((c) => ({ text: c.text })) }
       const popular = (d.popular || []).length ? '<div class="subbar"><b style="color:#8a8a99;font-size:13px">top casts</b></div>' + d.popular.map(castCard).join('') : ''
@@ -1219,6 +1233,8 @@
     }
     const bc = e.target.closest('[data-act="brandchan"]')
     if (bc) { closeOverlay(); st.channels.id = bc.dataset.chan; switchTab('channels'); loadChannels(); return }
+    const fz = e.target.closest('[data-act="follow"]')
+    if (fz) { toggleFollow(fz); return }
     const rz = e.target.closest('[data-act="research"]')
     if (rz) { runResearch(); return }
     const sz = e.target.closest('[data-act="summarize"]')
@@ -1298,6 +1314,25 @@
       const d = await r.json(); if (!r.ok) throw new Error(d.error || 'react failed')
       btn.classList.add('on'); const s = btn.querySelector('span'); if (s) s.textContent = (parseInt(s.textContent) || 0) + 1
     } catch (e) { meta.textContent = 'react error: ' + e.message }
+  }
+  // follow / unfollow toggle - fired on click (reversible). Optimistic UI, then
+  // confirm with the server; revert the chip if the write failed.
+  async function toggleFollow(btn) {
+    const fid = btn.dataset.fid
+    const wasFollowing = btn.dataset.following === '1'
+    const want = !wasFollowing
+    btn.disabled = true; btn.textContent = want ? 'following...' : 'unfollowing...'
+    try {
+      const r = await fetch('/api/react', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: want ? 'follow' : 'unfollow', targetFid: fid }) })
+      const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'follow failed')
+      btn.dataset.following = want ? '1' : '0'
+      btn.classList.toggle('on', want); btn.textContent = want ? 'following' : 'follow'
+      toast(want ? 'followed' : 'unfollowed')
+    } catch (e) {
+      btn.classList.toggle('on', wasFollowing); btn.textContent = wasFollowing ? 'following' : 'follow'
+      toast('follow error: ' + e.message)
+    } finally { btn.disabled = false }
   }
   async function fireReply(hash, fid, text, done) {
     const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
