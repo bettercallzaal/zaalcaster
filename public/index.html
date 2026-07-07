@@ -1199,7 +1199,7 @@
       }
       const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
         <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
-        ${(u.verified || []).length ? `<div class="ps" style="color:#3fbf7f">verified: ${u.verified.map((v) => esc(v)).join(', ')}</div>` : ''}
+        ${(u.accounts || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center;color:#3fbf7f">connected:</span>${u.accounts.map((ac) => ac.url ? `<a class="chip" href="${esc(ac.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(ac.platform)} @${esc(ac.username)}</a>` : `<span class="chip">${esc(ac.platform)} @${esc(ac.username)}</span>`).join(' ')}</div>` : ''}
         ${rel ? `<div class="badge">${esc(rel)}</div>` : ''}${mutual ? `<div class="ps" style="color:#a99cff">${esc(mutual)}</div>` : ''}<div class="ps">${esc(u.bio)}</div>
         ${lists.length ? `<div class="ps" style="margin-top:6px">lists: ${lists.map((l) => `<span class="chip ${(l.fids || []).includes(u.fid) ? 'on' : ''}" data-act="addtolist" data-list="${esc(l.id)}" data-fid="${u.fid}" data-uname="${esc(u.username)}">${esc(l.name)}</span>`).join(' ')}</div>` : ''}
         <div class="subbar" style="padding-left:0"><span class="chip" data-act="research">research + alignment</span><a class="chip" href="${esc(u.link)}" target="_blank" rel="noopener" style="text-decoration:none">open on farcaster</a></div>

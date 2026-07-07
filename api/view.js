@@ -4,7 +4,7 @@
 //   ?kind=profile&user=<fid|username>   profile + recent casts
 // Read-only.
 
-import { getConversation, getUser, getUserCasts, getRelevantFollowers, getConversationSummary, getUserPopular, getAccountVerifications } from '../lib.js'
+import { getConversation, getUser, getUserCasts, getRelevantFollowers, getConversationSummary, getUserPopular } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 function compactCast(cast) {
@@ -32,13 +32,20 @@ async function thread(hash, res) {
 async function profile(target, res) {
   const user = await getUser(target)
   if (!user) { res.status(404).json({ error: 'user not found' }); return }
-  const [castsRes, rel, popular, verified] = await Promise.all([
+  const [castsRes, rel, popular] = await Promise.all([
     getUserCasts({ fid: user.fid, limit: 20 }).catch(() => ({ casts: [] })),
     getRelevantFollowers(user.fid).catch(() => ({ names: [], count: 0 })),
     getUserPopular(user.fid).catch(() => []),
-    getAccountVerifications(user.fid).catch(() => []),
   ])
   const vc = user.viewer_context || {}
+  // connected social accounts (x / github / etc) - clean handles + tappable urls
+  const acctUrl = (platform, u) => {
+    const h = String(u || '').replace(/^@/, '')
+    if (platform === 'x') return `https://x.com/${h}`
+    if (platform === 'github') return `https://github.com/${h}`
+    return null
+  }
+  const accounts = (user.verified_accounts || []).map((a) => ({ platform: a.platform, username: a.username, url: acctUrl(a.platform, a.username) })).filter((a) => a.username)
   res.status(200).json({
     user: {
       username: user.username, display: user.display_name || user.username, pfp: user.pfp_url || null,
@@ -46,7 +53,7 @@ async function profile(target, res) {
       following: user.following_count || 0, score: user.experimental?.neynar_user_score ?? null,
       youFollow: !!vc.following, followsYou: !!vc.followed_by,
       mutuals: rel.names.slice(0, 3), mutualCount: rel.count,
-      verified: (verified || []).map((v) => v.platform).filter(Boolean),
+      verified: accounts.map((a) => a.platform), accounts,
       link: `https://farcaster.xyz/${user.username}`,
     },
     casts: (castsRes.casts || []).map(compactCast),
