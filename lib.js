@@ -743,6 +743,84 @@ export async function getConversation(hashOrUrl, options = {}) {
   return response
 }
 
+// Follow or unfollow a Farcaster channel. Needs the signer.
+// follow=true -> POST /farcaster/channel/follow, false -> DELETE.
+export async function setChannelFollow(channelId, follow = true) {
+  const env = loadEnv()
+  if (!channelId) throw new Error('missing channelId')
+  const response = await fetchNeynar('/farcaster/channel/follow', {
+    method: follow ? 'POST' : 'DELETE',
+    body: JSON.stringify({ signer_uuid: requireSigner(env), channel_id: channelId }),
+  })
+  await logAction(follow ? 'channel_follow' : 'channel_unfollow', { channelId })
+  return response
+}
+
+// Search channels by keyword. Returns compact channel list.
+export async function searchChannels(query, limit = 20) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  const response = await fetchNeynar(`/farcaster/channel/search?${params}`)
+  return response.channels || []
+}
+
+// Fetch a single channel's details + viewer follow status.
+export async function getChannelDetails(channelId) {
+  const env = loadEnv()
+  const params = new URLSearchParams({ id: channelId, viewer_fid: env.FID })
+  const response = await fetchNeynar(`/farcaster/channel?${params}`)
+  return response.channel || null
+}
+
+// Who liked or recast a specific cast. type = 'like' | 'recast'.
+export async function getCastReactions(castHash, reactionType = 'like', limit = 25) {
+  const params = new URLSearchParams({ hash: castHash, types: reactionType, limit: String(limit) })
+  const response = await fetchNeynar(`/farcaster/reactions/cast?${params}`)
+  return response
+}
+
+// Followers of a fid (paginated). Pass cursor for next page.
+export async function getUserFollowers(fid, limit = 25, cursor = null) {
+  const params = new URLSearchParams({ fid: String(fid), limit: String(limit) })
+  if (cursor) params.append('cursor', cursor)
+  const response = await fetchNeynar(`/farcaster/followers?${params}`)
+  return response
+}
+
+// Accounts a fid follows (paginated). Pass cursor for next page.
+export async function getUserFollowing(fid, limit = 25, cursor = null) {
+  const params = new URLSearchParams({ fid: String(fid), limit: String(limit) })
+  if (cursor) params.append('cursor', cursor)
+  const response = await fetchNeynar(`/farcaster/following?${params}`)
+  return response
+}
+
+// Sync notification read state with Farcaster/Neynar. Call after the user
+// sees the inbox. Needs the signer (verified live: the fid-only variant
+// 404s - Neynar's real route is /notifications/seen and requires signer_uuid).
+export async function markNotificationsSeen() {
+  const env = loadEnv()
+  const response = await fetchNeynar('/farcaster/notifications/seen', {
+    method: 'POST',
+    body: JSON.stringify({ signer_uuid: requireSigner(env) }),
+  })
+  return response
+}
+
+// Fetch OpenGraph metadata for a URL via Neynar's crawler. Returns
+// { title, description, image } or null on error.
+export async function getLinkPreview(url) {
+  const params = new URLSearchParams({ url })
+  const response = await fetchNeynar(`/farcaster/cast/embed/crawl?${params}`).catch(() => null)
+  if (!response) return null
+  const og = response?.metadata?.html || {}
+  const img = Array.isArray(og.ogImage) ? og.ogImage[0]?.url : (og.ogImage || null)
+  return {
+    title: og.ogTitle || null,
+    description: og.ogDescription || null,
+    image: img || null,
+  }
+}
+
 export function formatCast(cast) {
   const author = cast.author.display_name || cast.author.username
   const timestamp = new Date(cast.timestamp).toLocaleString('en-US', {

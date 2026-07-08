@@ -1,9 +1,9 @@
 // POST /api/react - like or recast from the web client.
-// Body: { type: 'like'|'recast', targetHash, targetFid? }
+// Body: { type: 'like'|'recast'|'follow'|'unfollow'|'mute'|'unmute'|'block'|'unblock'|'channel_follow'|'channel_unfollow', targetHash?, targetFid?, channelId? }
 // Behind Vercel login. A like/recast is a low-stakes, reversible signal, so
 // the UI fires it on click (no confirm) - but it still needs the signer.
 
-import { postReaction, setFollow, setMuteBlock, friendlyPostError } from '../lib.js'
+import { postReaction, setFollow, setMuteBlock, setChannelFollow, friendlyPostError } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -31,8 +31,18 @@ export default async function handler(req, res) {
       return
     }
 
+    // channel follow / unfollow - subscribe to a channel's feed
+    if (body.type === 'channel_follow' || body.type === 'channel_unfollow') {
+      const channelId = (body.channelId || '').trim()
+      if (!channelId) { res.status(400).json({ error: 'missing channelId' }); return }
+      await setChannelFollow(channelId, body.type === 'channel_follow')
+      res.status(200).json({ ok: true, type: body.type, following: body.type === 'channel_follow' })
+      return
+    }
+
     // protocol mute / block (and their reverses) - relationship list writes
     if (['mute', 'unmute', 'block', 'unblock'].includes(body.type)) {
+
       const fid = parseInt(body.targetFid, 10)
       if (!Number.isFinite(fid)) { res.status(400).json({ error: 'missing targetFid' }); return }
       const kind = body.type.includes('block') ? 'block' : 'mute'
