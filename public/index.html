@@ -226,7 +226,29 @@
   #fbmodal .ibtn.on { background: #c0392b; border-color: #c0392b; color: #fff; }
   .fblist { display: flex; flex-direction: column; }
   .fbitem { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
-  .fbitem:last-child { border-bottom: none; }
+.fbitem:last-child { border-bottom: none; }
+  /* reactions / social-list overlays */
+  .rxlist { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+  .rxrow { display: flex; gap: 10px; align-items: center; padding: 6px 2px; cursor: pointer; border-radius: 8px; }
+  .rxrow:hover { background: var(--surface2); }
+  .rxrow .rn { font-weight: 600; font-size: 14px; } .rxrow .rb { font-size: 12px; color: var(--dim); }
+  .chan-follow-btn { font-size: 12px; background: var(--surface2); color: var(--dim); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; margin-left: 8px; transition: border-color .12s, background .12s, color .12s; }
+  .chan-follow-btn.following { background: rgba(133,93,205,.18); border-color: var(--accent); color: var(--accent); }
+  .chan-follow-btn:hover { border-color: var(--accent); }
+  .chan-search-bar { display: flex; gap: 6px; margin-bottom: 10px; }
+  .chan-search-bar input { flex: 1; font: inherit; font-size: 14px; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; }
+  .chan-search-bar input:focus { outline: none; border-color: var(--accent); }
+  .chan-result { display: flex; gap: 10px; align-items: center; padding: 7px 4px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .chan-result:hover { background: var(--surface2); border-radius: 8px; }
+  .chan-result img { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; background: #24242f; flex: none; }
+  .chan-result .cn { font-weight: 600; font-size: 14px; } .chan-result .cs { font-size: 12px; color: var(--dim); }
+  .link-preview { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 8px; display: flex; gap: 0; }
+  .link-preview img { width: 80px; height: 80px; object-fit: cover; flex: none; display: block; }
+  .link-preview .lp-text { padding: 8px 10px; min-width: 0; }
+  .link-preview .lp-title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-preview .lp-desc { font-size: 12px; color: var(--dim); margin-top: 3px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .stats button.rx-tappable { cursor: pointer; }
+  .stats button.rx-tappable:hover span { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -292,7 +314,7 @@
   const st = {
     feed: { type: 'following', casts: [], frames: [], loaded: false, digest: null, digesting: false },
     inbox: { items: [], loaded: false, showAll: false, priority: false, view: 'reply', notifs: [], notifChannel: '' },
-    channels: { id: 'zao', casts: [], loaded: false, trending: [] },
+    channels: { id: 'zao', casts: [], loaded: false, trending: [], chanInfo: null, searching: false, searchResults: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null, empires: [] },
   }
@@ -364,8 +386,8 @@
           <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text)}</div>
           ${embeds}
           <div class="stats">
-            <button class="act like" data-act="like" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#9829; <span>${c.likes}</span></button>
-            <button class="act recast" data-act="recast" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&#8635; <span>${c.recasts}</span></button>
+            <button class="act like${c.likes > 0 ? ' rx-tappable' : ''}" data-act="like" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&hearts; <span data-act2="reactions" data-hash="${esc(c.hash)}" data-rtype="like">${c.likes}</span></button>
+            <button class="act recast${c.recasts > 0 ? ' rx-tappable' : ''}" data-act="recast" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">&circlearrowleft; <span data-act2="reactions" data-hash="${esc(c.hash)}" data-rtype="recast">${c.recasts}</span></button>
             <button data-act="thread" data-hash="${esc(c.hash)}">&#128172; ${c.replies}</button>
             <button data-act="replytoggle" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">reply</button>
             <button data-act="quote" data-hash="${esc(c.hash)}" data-fid="${c.fid || ''}">quote</button>
@@ -522,6 +544,8 @@
         const r = await fetch(`/api/inbox?limit=25${st.inbox.showAll ? '&all=1' : ''}${st.inbox.priority ? '&priority=1' : ''}`)
         const d = await r.json(); if (!r.ok) throw new Error(d.error || 'inbox failed')
         st.inbox.items = d.items; st.inbox.loaded = true
+        // mark notifications as seen in Farcaster (fire-and-forget, best-effort)
+        fetch('/api/inbox', { method: 'POST' }).catch(() => {})
       }
     } catch (e) { st.inbox.err = e.message; st.inbox.loaded = true }
     render()
@@ -599,7 +623,7 @@
 
   // ================= CHANNELS =================
   async function loadChannels(append) {
-    if (!append) { st.channels.loaded = false; st.channels.cursor = null; render() }
+    if (!append) { st.channels.loaded = false; st.channels.cursor = null; st.channels.chanInfo = null; render() }
     try {
       const url = `/api/feed?type=channel&id=${encodeURIComponent(st.channels.id)}&limit=30${append && st.channels.cursor ? '&cursor=' + encodeURIComponent(st.channels.cursor) : ''}`
       const r = await fetch(url)
@@ -611,14 +635,48 @@
     if (!st.channels.trending.length) {
       try { const t = await fetch('/api/feed?trending=1').then((x) => x.json()); if (t.trending) { st.channels.trending = t.trending; render() } } catch {}
     }
+    // fetch channel info (including viewer follow status) in background
+    fetch(`/api/view?kind=channel_info&id=${encodeURIComponent(st.channels.id)}`)
+      .then((r) => r.json()).then((d) => { if (d.id) { st.channels.chanInfo = d; render() } }).catch(() => {})
+  }
+  async function channelSearch(q) {
+    if (!q.trim()) { st.channels.searchResults = []; render(); return }
+    st.channels.searching = true; render()
+    try {
+      const r = await fetch(`/api/view?kind=channel_search&q=${encodeURIComponent(q.trim())}`)
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'search failed')
+      st.channels.searchResults = d.channels || []
+    } catch (e) { st.channels.searchResults = [] }
+    st.channels.searching = false; render()
+  }
+  async function toggleChannelFollow(channelId, currentlyFollowing) {
+    const want = !currentlyFollowing
+    try {
+      const r = await fetch('/api/react', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: want ? 'channel_follow' : 'channel_unfollow', channelId }) })
+      const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'failed')
+      if (st.channels.chanInfo) st.channels.chanInfo.following = want
+      toast(want ? `following /${channelId}` : `unfollowed /${channelId}`); render()
+    } catch (e) { toast('channel follow error: ' + e.message) }
   }
   function renderChannels() {
     const chips = HOME_CHANNELS.concat(HOME_CHANNELS.includes(st.channels.id) ? [] : [st.channels.id])
       .map((c) => `<span class="chip ${st.channels.id === c ? 'on' : ''}" data-chan="${esc(c)}">/${esc(c)}</span>`).join('')
     const trend = (st.channels.trending || []).filter((t) => !HOME_CHANNELS.includes(t.id)).slice(0, 8)
       .map((t) => `<span class="chip ${st.channels.id === t.id ? 'on' : ''}" data-chan="${esc(t.id)}" title="${t.casts1d} casts today">/${esc(t.id)}</span>`).join(' ')
+    const ci = st.channels.chanInfo
+    const followBtn = ci ? `<button class="chan-follow-btn ${ci.following ? 'following' : ''}" data-act="chanfollow" data-chanid="${esc(st.channels.id)}" data-following="${ci.following ? 1 : 0}">${ci.following ? 'following' : '+ follow'}</button>` : ''
+    const chanHeading = `<div style="display:flex;align-items:center;gap:4px"><b style="font-size:14px;color:#8a8a99">/${esc(st.channels.id)}</b>${ci && ci.followers ? `<span style="font-size:12px;color:var(--dim)">${ci.followers.toLocaleString()} members</span>` : ''}${followBtn}</div>`
+    const searchBar = `<div class="chan-search-bar"><input id="chanSearchInput" placeholder="search channels..." value="${esc(st.channels.chanSearchQ || '')}"><button class="ibtn" data-act="chansearch">go</button></div>`
+    const searchResults = st.channels.searching ? '<div class="loading">searching...</div>' :
+      (st.channels.searchResults || []).length ?
+        '<div>' + (st.channels.searchResults || []).map((c) =>
+          `<div class="chan-result" data-chan="${esc(c.id)}">${c.image ? `<img src="${esc(c.image)}" alt="">` : '<div style="width:28px;height:28px;border-radius:6px;background:#24242f;flex:none"></div>'}<div><div class="cn">/${esc(c.id)}</div><div class="cs">${esc(c.name)}${c.followers ? ' - ' + c.followers.toLocaleString() + ' members' : ''}</div>${c.description ? `<div class="cs" style="margin-top:1px">${esc(c.description.slice(0, 80))}</div>` : ''}</div></div>`
+        ).join('') + '</div>' : ''
     const sub = `<div class="subbar">${chips}</div>`
       + (trend ? `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">trending now:</span> ${trend}</div>` : '')
+      + searchBar + searchResults
+      + (ci ? `<div style="padding:4px 2px 8px">${chanHeading}</div>` : '')
     if (!st.channels.loaded) return sub + '<div class="loading">loading /' + esc(st.channels.id) + '...</div>'
     if (st.channels.err) return sub + `<div class="err">${esc(st.channels.err)}</div>`
     const casts = dropMuted(st.channels.casts)
@@ -627,7 +685,7 @@
   }
 
   // ================= COMPOSE =================
-  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, sentX: null, sentBsky: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false, toX: false, toBsky: false }
+  const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, sentX: null, sentBsky: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false, toX: false, toBsky: false, linkPreview: null }
   async function uploadImage(file) {
     if (!file) return
     if (file.size > 9 * 1024 * 1024) { toast('image too big (max ~9MB)'); return }
@@ -827,7 +885,8 @@
     return `<div class="compose">${banner}${quotePreview()}
       <div class="subbar" style="padding:0 0 6px"><span class="chip" data-act="composemic" id="composeMic">mic</span><span class="chip ${compose.thread ? 'on' : ''}" data-act="togglethread">thread${compose.thread && nParts > 1 ? ' (' + nParts + ')' : ''}</span><span class="chip" data-act="snapbuild">+ snap</span><span class="chip ${compose.toX ? 'on' : ''}" data-act="togglex">${compose.toX ? 'X on' : 'also X'}</span><span class="chip ${compose.toBsky ? 'on' : ''}" data-act="togglebsky">${compose.toBsky ? 'Bsky on' : 'also Bsky'}</span>${compose.embedUrl && compose.embedUrl.includes('zlank.online') ? '<span class="chip on" data-act="snapclear">snap attached x</span>' : ''}${compose.thread ? '<span class="ub" style="align-self:center">split casts with a line of ---</span>' : ''}</div>
       <textarea id="composeText" placeholder="what's happening... (posts as @${esc(ME)})">${esc(compose.text)}</textarea>
-      ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"><button class="ibtn" data-act="uploadpick">${compose.uploading ? 'uploading...' : 'upload'}</button></div><input type="file" id="composeFile" accept="image/*" style="display:none">`}
+      ${compose.thread ? '' : `<div class="searchbar" style="margin-top:6px"><input id="composeEmbed" placeholder="attach image / link url (optional)" value="${esc(compose.embedUrl)}"><button class="ibtn" data-act="uploadpick">${compose.uploading ? 'uploading...' : 'upload'}</button><button class="ibtn" data-act="linkpreview" title="fetch link preview">preview</button></div><input type="file" id="composeFile" accept="image/*" style="display:none">`}
+      ${compose.linkPreview ? `<div class="link-preview">${compose.linkPreview.image ? `<img src="${esc(compose.linkPreview.image)}" alt="">` : ''}<div class="lp-text"><div class="lp-title">${esc(compose.linkPreview.title || compose.embedUrl)}</div>${compose.linkPreview.description ? `<div class="lp-desc">${esc(compose.linkPreview.description)}</div>` : ''}</div></div>` : ''}
       <div class="btns">${chSel}<button class="ibtn primary" data-act="composearm">post now</button><span class="cc" id="composeCc">${compose.text.length}</span></div>
       <div class="btns"><input type="datetime-local" id="composeAt" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">
         <button class="ibtn" data-act="schedule" ${syncEnabled ? '' : 'disabled'}>schedule</button></div>${schedNote}
@@ -1244,8 +1303,9 @@
         const extra = u.mutualCount - u.mutuals.length
         mutual = `followed by ${u.mutuals.map((m) => '@' + m).join(', ')}${extra > 0 ? ` + ${extra} more` : ''} you follow`
       }
+      const socLine = `@${esc(u.username)} - <span class="uname" data-act="showfollowers" data-fid="${u.fid}" style="cursor:pointer" title="see followers">${u.followers} followers</span> - <span class="uname" data-act="showfollowing" data-fid="${u.fid}" style="cursor:pointer" title="see following">${u.following} following</span>${u.score != null ? ` - score ${u.score}` : ''}`
       const head = `<div class="prof">${pfp(u)}<div><div class="pn">${esc(u.display)}</div>
-        <div class="ps">@${esc(u.username)} - ${u.followers} followers - ${u.following} following${u.score != null ? ` - score ${u.score}` : ''}</div>
+        <div class="ps">${socLine}</div>
         ${(u.accounts || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center;color:#3fbf7f">connected:</span>${u.accounts.map((ac) => ac.url ? `<a class="chip" href="${esc(ac.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(ac.platform)} @${esc(ac.username)}</a>` : `<span class="chip">${esc(ac.platform)} @${esc(ac.username)}</span>`).join(' ')}</div>` : ''}
         ${(u.addresses || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center">onchain:</span>${u.addresses.map((a) => `<a class="chip" href="${esc(a.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(a.chain)} ${esc(a.short)}</a>`).join(' ')}</div>` : ''}
         ${(u.holdings || []).length ? `<div class="subbar" style="padding-left:0;margin-top:2px"><span class="ub" style="align-self:center">holds:</span>${u.holdings.map((h) => `<span class="chip" title="$${h.usd.toFixed(2)}">${esc(h.symbol)}</span>`).join(' ')}</div>` : ''}
@@ -1257,6 +1317,28 @@
       const popular = (d.popular || []).length ? '<div class="subbar"><b style="color:#8a8a99;font-size:13px">top casts</b></div>' + d.popular.map(castCard).join('') : ''
       const recent = '<div class="subbar"><b style="color:#8a8a99;font-size:13px">recent</b></div>' + d.casts.map(castCard).join('')
       document.getElementById('obody').innerHTML = head + popular + recent
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  async function openFollowList(fid, kind) {
+    openOverlay(kind, '<div class="loading">loading...</div>')
+    try {
+      const r = await fetch(`/api/view?kind=${kind}&fid=${fid}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'failed')
+      const users = d.users || []
+      document.getElementById('obody').innerHTML = users.length
+        ? `<div class="rxlist">${users.map((u) => `<div class="rxrow" data-act="profile" data-user="${esc(u.username)}">${pfp(u)}<div><div class="rn">${esc(u.display)}${u.followsYou ? ' <span class="ub">follows you</span>' : ''}</div><div class="rb">@${esc(u.username)}${u.score != null ? ' - score ' + u.score : ''}</div></div></div>`).join('')}</div>`
+        : `<div class="empty">no ${kind} yet</div>`
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  async function openReactions(hash, type) {
+    openOverlay(type === 'recast' ? 'recasts' : 'likes', '<div class="loading">loading...</div>')
+    try {
+      const r = await fetch(`/api/view?kind=reactions&hash=${encodeURIComponent(hash)}&type=${type}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'failed')
+      const users = d.users || []
+      document.getElementById('obody').innerHTML = users.length
+        ? `<div class="rxlist">${users.map((u) => `<div class="rxrow" data-act="profile" data-user="${esc(u.username)}">${pfp(u)}<div><div class="rn">${esc(u.display)}</div><div class="rb">@${esc(u.username)}${u.score != null ? ' - score ' + u.score : ''}</div></div></div>`).join('')}</div>`
+        : `<div class="empty">no ${type === 'recast' ? 'recasts' : 'likes'} yet</div>`
     } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
   // clicks inside the overlay: navigate deeper + react (reply happens in main views)
@@ -1274,6 +1356,8 @@
     if (mz) { muteOrBlock(mz); return }
     const rz = e.target.closest('[data-act="research"]')
     if (rz) { runResearch(); return }
+    const sfw = e.target.closest('[data-act="showfollowers"], [data-act="showfollowing"]')
+    if (sfw) { openFollowList(Number(sfw.dataset.fid), sfw.dataset.act === 'showfollowers' ? 'followers' : 'following'); return }
     const sz = e.target.closest('[data-act="summarize"]')
     if (sz) { summarizeThread(sz.dataset.hash); return }
     const lid = e.target.closest('[data-act="lidraft"]'); if (lid) { const it = SHARE_ITEMS[+lid.dataset.i]; if (it) liDraft(it.topic, it.facts, `liout_${lid.dataset.i}`, lid); return }
@@ -1400,8 +1484,13 @@
     else if (t.id === 'composeText') { compose.text = t.value; const cc = document.getElementById('composeCc'); if (cc) cc.textContent = t.value.length }
     else if (t.id === 'composeChannel') { compose.channel = t.value }
     else if (t.id === 'searchInput') { st.search.q = t.value }
+    else if (t.id === 'chanSearchInput') { st.channels.chanSearchQ = t.value }
+    else if (t.id === 'composeEmbed') { compose.embedUrl = t.value; compose.linkPreview = null }
   })
-  main.addEventListener('keydown', (e) => { if (e.target.id === 'searchInput' && e.key === 'Enter') runSearch() })
+  main.addEventListener('keydown', (e) => {
+    if (e.target.id === 'searchInput' && e.key === 'Enter') runSearch()
+    if (e.target.id === 'chanSearchInput' && e.key === 'Enter') channelSearch(e.target.value)
+  })
   main.addEventListener('change', (e) => {
     if (e.target.id === 'composeChannel') compose.channel = e.target.value
     if (e.target.id === 'composeFile' && e.target.files && e.target.files[0]) uploadImage(e.target.files[0])
@@ -1415,6 +1504,7 @@
     const ou = e.target.closest('[data-openurl]'); if (ou) { window.open(ou.dataset.openurl, '_blank', 'noopener'); return }
     const nc = e.target.closest('[data-notifchan]'); if (nc) { st.inbox.notifChannel = nc.dataset.notifchan; loadInbox(); return }
     const cb = e.target.closest('[data-chan]'); if (cb) { st.channels.id = cb.dataset.chan; loadChannels(); return }
+    const rx = e.target.closest('[data-act2="reactions"]'); if (rx) { openReactions(rx.dataset.hash, rx.dataset.rtype); return }
     // tappable elements that are not buttons (profile from pfp/name/urow, thread from body, unquote)
     const tap = e.target.closest('[data-act="profile"], [data-act="thread"], [data-act="unquote"]')
     if (tap && !e.target.closest('button')) {
@@ -1474,6 +1564,8 @@
     if (act === 'digest') { loadDigest(); return }
     if (act === 'morefeed') { btn.textContent = 'loading...'; loadFeed(true); return }
     if (act === 'morechan') { btn.textContent = 'loading...'; loadChannels(true); return }
+    if (act === 'chansearch') { const i = document.getElementById('chanSearchInput'); channelSearch(i ? i.value : ''); return }
+    if (act === 'chanfollow') { toggleChannelFollow(btn.dataset.chanid, btn.dataset.following === '1'); return }
     if (act === 'dosearch') { runSearch(); return }
     if (act === 'togglepriority') { st.inbox.priority = !st.inbox.priority; loadInbox(); return }
     if (act === 'inboxview') { st.inbox.view = btn.dataset.view; loadInbox(); return }
@@ -1540,8 +1632,20 @@
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
     if (act === 'composemic') { dictate('composeText', btn); return }
     if (act === 'snapbuild') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; openSnapBuilder(); return }
-    if (act === 'snapclear') { compose.embedUrl = ''; render(); return }
+    if (act === 'snapclear') { compose.embedUrl = ''; compose.linkPreview = null; render(); return }
     if (act === 'uploadpick') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; const f = document.getElementById('composeFile'); if (f) f.click(); return }
+    if (act === 'linkpreview') {
+      const em = document.getElementById('composeEmbed'); const url = (em ? em.value : compose.embedUrl).trim()
+      if (!/^https?:\/\//.test(url)) { toast('enter a valid http(s) url first'); return }
+      compose.embedUrl = url
+      try {
+        const r = await fetch(`/api/view?kind=link_preview&url=${encodeURIComponent(url)}`)
+        const d = await r.json()
+        compose.linkPreview = (d && (d.title || d.description || d.image)) ? d : null
+        if (!compose.linkPreview) toast('no preview available for that link')
+      } catch (e) { compose.linkPreview = null; toast('preview failed') }
+      render(); return
+    }
     if (act === 'togglex') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; compose.toX = !compose.toX; if (compose.toX && postingHealth && !postingHealth.xEnabled) toast('X not connected yet - set the X_* keys in Vercel'); render(); return }
     if (act === 'togglebsky') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; const em = document.getElementById('composeEmbed'); if (em) compose.embedUrl = em.value; compose.toBsky = !compose.toBsky; if (compose.toBsky && postingHealth && !postingHealth.bskyEnabled) toast('Bluesky not connected yet - set BSKY_HANDLE + BSKY_APP_PASSWORD in Vercel'); render(); return }
     if (act === 'togglethread') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; compose.thread = !compose.thread; render(); return }
@@ -1558,11 +1662,11 @@
         if (compose.toBsky) body.alsoBsky = true
         const r = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         const d = await r.json(); if (!r.ok || !d.ok) throw new Error(d.error || 'post failed')
-        compose.sentLink = d.link; compose.sentX = d.x || null; compose.sentBsky = d.bsky || null; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []; compose.embedUrl = ''; compose.toX = false; compose.toBsky = false
+        compose.sentLink = d.link; compose.sentX = d.x || null; compose.sentBsky = d.bsky || null; compose.sending = false; compose.armed = false; compose.quote = null; compose.thread = false; compose.parts = []; compose.embedUrl = ''; compose.linkPreview = null; compose.toX = false; compose.toBsky = false
       } catch (err) { compose.sending = false; compose.armed = false; meta.textContent = 'post error: ' + err.message }
       render(); return
     }
-    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.sentX = null; compose.sentBsky = null; compose.armed = false; compose.quote = null; compose.embedUrl = ''; compose.thread = false; compose.parts = []; compose.toX = false; compose.toBsky = false; render(); return }
+    if (act === 'composenew') { compose.text = ''; compose.channel = ''; compose.sentLink = null; compose.sentX = null; compose.sentBsky = null; compose.armed = false; compose.quote = null; compose.embedUrl = ''; compose.linkPreview = null; compose.thread = false; compose.parts = []; compose.toX = false; compose.toBsky = false; render(); return }
   })
 
   // ---- filters overlay: muted keywords ----

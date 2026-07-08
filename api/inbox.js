@@ -4,7 +4,7 @@
 // Reuses the same lib the CLI uses. Credentials come from Vercel env
 // (NEYNAR_API_KEY, ZAAL_FID); no secrets in the repo or the response.
 
-import { getUnansweredInbound, getUsersByFids } from '../lib.js'
+import { getUnansweredInbound, getUsersByFids, markNotificationsSeen } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
 import { storeEnabled, kvList } from '../store.js'
 
@@ -46,6 +46,19 @@ async function attachPriority(items) {
 
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
+
+  // POST /api/inbox - mark notifications seen (fire-and-forget from the client).
+  // Syncs read state to Farcaster/Neynar so other clients see the inbox cleared.
+  if (req.method === 'POST') {
+    try {
+      await markNotificationsSeen()
+      res.status(200).json({ ok: true })
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'mark-seen failed' })
+    }
+    return
+  }
+
   try {
     const limit = Math.min(Number(req.query.limit) || 15, 50)
     const includeAll = req.query.all === '1' || req.query.all === 'true'
