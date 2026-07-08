@@ -428,6 +428,9 @@ export function friendlyPostError(err) {
   if (/SIGNER_UUID missing/i.test(m)) {
     return 'Posting is off: no signer set. Run npm run mint-signer, then set SIGNER_UUID in the env.'
   }
+  if (/allowed_mute_uuids/i.test(m)) {
+    return "Mute isn't enabled for this app yet - Neynar gates it behind an allowlist. Ask Neynar support to add this app's signer, or use block instead."
+  }
   return m
 }
 
@@ -533,8 +536,11 @@ export async function getTokenBalances(fid = null) {
 }
 
 // Protocol mute / block a user (or reverse it). Personal, reversible list writes
-// that sync to your Farcaster app - unlike the app's local keyword mute. Uses the
-// api key + your fid (Neynar-managed lists), not the signer.
+// that sync to your Farcaster app - unlike the app's local keyword mute.
+// block needs the signer (verified live: /farcaster/block 400s "signer_uuid is
+// required" without it). mute only takes api-key+fid but currently 401s with
+// "dev not allowlisted in allowed_mute_uuids list" - a Neynar-side allowlist
+// gate on this app, not fixable here; needs Neynar to grant access.
 export async function setMuteBlock(targetFid, kind, on = true) {
   const env = loadEnv()
   const target = parseInt(targetFid, 10)
@@ -542,7 +548,7 @@ export async function setMuteBlock(targetFid, kind, on = true) {
   const me = parseInt(env.FID, 10)
   const path = kind === 'block' ? '/farcaster/block' : '/farcaster/mute'
   const body = kind === 'block'
-    ? { blocker_fid: me, blocked_fid: target }
+    ? { signer_uuid: requireSigner(env), blocker_fid: me, blocked_fid: target }
     : { fid: me, muted_fid: target }
   const response = await fetchNeynar(path, { method: on ? 'POST' : 'DELETE', body: JSON.stringify(body) })
   await logAction(`${on ? '' : 'un'}${kind}`, { fid: target })

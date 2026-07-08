@@ -2,7 +2,7 @@
 // engages you most, and follower count. Read-only.
 
 import { blockedByAuth } from '../auth.js'
-import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
+import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage, loadEnv } from '../lib.js'
 
 // engagement weight: replies + recasts count more than likes (they spread you)
 function score(c) {
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     const [castsRes, notifs, me, suggestions, storage] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       recentNotifications(4),
-      getUser(process.env.FID || '19640').catch(() => null),
+      getUser(loadEnv().FID).catch(() => null),
       getFollowSuggestions({ limit: 12 }).catch(() => []),
       getStorageUsage().catch(() => null),
     ])
