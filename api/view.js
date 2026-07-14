@@ -17,7 +17,7 @@ import {
   getUserPopular, getTokenBalances, getCastReactions, getUserFollowers, getUserFollowing,
   searchChannels, getChannelDetails, getLinkPreview,
 } from '../lib.js'
-import { blockedByAuth } from '../auth.js'
+import { blockedByGuestAuth } from '../auth.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -91,7 +91,7 @@ async function profile(target, res) {
 }
 
 export default async function handler(req, res) {
-  if (blockedByAuth(req, res)) return
+  if (blockedByGuestAuth(req, res)) return
   try {
     res.setHeader('Cache-Control', 'no-store')
     const { kind } = req.query

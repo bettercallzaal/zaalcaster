@@ -251,7 +251,7 @@ Push to Vercel. Set the env vars in the Vercel project:
 - Required: `NEYNAR_API_KEY`, `ZAAL_FID`
 - Posting: `ZAAL_SIGNER_UUID`
 - Drafts + digest: `OPENROUTER_API_KEY`
-- Lock the site: `APP_PASSWORD` (a simple password gate - see `auth.js`) and/or Vercel Deployment Protection. **The deployed site can post as you, so never leave it public.**
+- Lock the site: `SESSION_SECRET` + `NEYNAR_CLIENT_ID` (Sign In With Farcaster via Neynar's SIWN - see `auth.js`) and/or Vercel Deployment Protection. Anyone can sign in as themselves and gets a read-only view; only the fid in `USER_FID` gets write access. **The deployed site can post as you, so never leave it ungated.**
 - Sync + scheduled posts (optional): a Vercel KV store + `CRON_SECRET`.
 
 That's it - `<username>caster` is yours.
