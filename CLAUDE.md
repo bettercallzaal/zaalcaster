@@ -2,6 +2,9 @@
 
 Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Neynar v2.
 
+## Empire Builder read integration (2026-07-14, PR #89)
+First slice of the ZABAL Gamez tokenless-first build (research doc 1088). `empire.js` - read-only client for empirebuilder.world's public API (empires/search/owner/top-empires/leaderboards/address-stats/boosters), no auth, 60s cache, mirrors juke.js's `{ok,...}` style. `bin/empire.js` - CLI lookups. Folded into `api/stats.js` (Grow tab rank card, inert until `config.empireOwnerWallet` is set) and `api/feed.js` (replaced a duplicate inline fetch in the existing `?empire=1` top-empires proxy). Live-verified against Zaal's real empires while building: `ZABAL` (tokenized) and `ZABAL GAMEZ` (tokenless, owner `0x7234...9af`, already exists - matches doc 991's Triple-A path). Caught live: a tokenless empire's id is a synthetic string (`zabalgamez01e9af`), not a `0x` address - broadened id validation to accept both; also the owner-empires row's `id` is an internal numeric id, not the `base_token` string leaderboard/booster lookups need. No write endpoints exist in the public API (create/distribute/burn are partner-whitelisted, undocumented) - standing up an empire stays Zaal's manual step in the Empire Builder UI. NEXT (doc 1088 phased plan, not yet built): confirm Zaal's partner/write API access (blocks any create flow), the booster auto-engagement engine, Clanker token launch tooling (build-only, no live launch - Zaal's trigger), and the "coinz" crowdfund product naming (deferred, will propose options).
+
 ## Rules (non-negotiable)
 - NEVER post, reply, or like without showing Zaal the exact text first and getting a yes, unless he says "autopost" for that item.
 - NEVER commit secrets. Creds live at ~/.zao/private/farcaster-zaal.env (NEYNAR_API_KEY, ZAAL_FID, ZAAL_SIGNER_UUID). Never print their values.
