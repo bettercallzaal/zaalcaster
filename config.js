@@ -18,6 +18,14 @@ export const config = {
   // Channels shown on the Channels tab + Post picker.
   homeChannels: ['zao', 'wavewarz', 'zabal'],
 
+  // Empire Builder (empirebuilder.world) rank card on the Grow tab. Blank =
+  // no card shown. Set this to the Base wallet that owns your Empire (Zaal
+  // already has a live tokenless one - "ZABAL GAMEZ", owner
+  // 0x7234c36a71ec237c2ae7698e8916e0735001e9af, per research doc 991) - left
+  // blank here since this is Zaal's call, not a default. This app only reads
+  // Empire Builder back; it never creates, funds, or writes to one.
+  empireOwnerWallet: '',
+
   // Your brands - each gets a page (channel feed + links) in the Brands hub.
   brands: [
     { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },

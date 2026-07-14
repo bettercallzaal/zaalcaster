@@ -20,9 +20,11 @@
     "zaalcaster-cockpit": "./bin/cockpit.js",
     "zaalcaster-intro": "./bin/intro.js",
     "zaalcaster-spam": "./bin/spam.js",
-    "zaalcaster-spaces": "./bin/spaces.js"
+    "zaalcaster-spaces": "./bin/spaces.js",
+    "zaalcaster-empire": "./bin/empire.js"
   },
   "scripts": {
+    "empire": "node bin/empire.js",
     "cockpit": "node bin/cockpit.js",
     "spaces": "node bin/spaces.js",
     "spam": "node bin/spam.js",
