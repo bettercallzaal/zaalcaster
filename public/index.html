@@ -971,7 +971,8 @@
       { name: 'Per-address leaderboard stats', detail: 'one wallet\'s rank/points/lifetime rewards in a leaderboard', status: 'built', where: 'your rank, below' },
       { name: 'Boosters for an empire', detail: 'list active multipliers (NFT/ERC20/staking/reputation)', status: 'built', where: 'booster count, below' },
       { name: 'Rewards summary + by type', detail: 'distribute/burn/airdrop history for an empire', status: 'built', where: 'your empire card, below' },
-      { name: 'Distribution recipients by tx / distribution records by recipient', detail: 'who got paid in a specific transaction, or lifetime total per wallet', status: 'read-only', where: 'functions exist (getDistributionRecipients, getDistributionRecords) - not surfaced in UI yet, no natural entry point (needs a tx hash or recipient address)' },
+      { name: 'Distribution recipients by tx', detail: 'who got paid, and how much, in a specific distribution transaction', status: 'built', where: '"look up a distribution" below - paste a tx hash' },
+      { name: 'Distribution records by recipient', detail: 'lifetime total USD received per wallet', status: 'read-only', where: 'getDistributionRecords exists in empire.js - not surfaced in UI yet, needs a recipient-address entry point' },
     ] },
     { group: 'Empire creation (write, needs your wallet signature)', items: [
       { name: 'Deploy tokenless empire', detail: 'custom or Farcaster-profile-attached (profile mode is PERMANENT)', status: 'built', where: '"create a tokenless empire" below' },
@@ -1028,9 +1029,29 @@
         <span class="lbn">${e.rank != null ? e.rank : '-'}</span></div>`
     }).join('')
     const empireSec = empires ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">top empires (read-only)</b></div>' + empires : ''
-    return empCard + createBtn + empireSec
+    const txLookup = `<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">look up a distribution (paste a tx hash)</b></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="emp_txhash" placeholder="0x..." style="flex:1;margin:0"><span class="chip" data-act="lookupdist">look up</span></div>
+      <div id="empDistResult"></div>`
+    return empCard + createBtn + empireSec + txLookup
       + '<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">what this tab can do (research doc 1094a)</b></div>'
       + renderEmpireCapabilities()
+  }
+  async function lookupDistribution() {
+    const hash = (document.getElementById('emp_txhash').value || '').trim()
+    const out = document.getElementById('empDistResult')
+    if (!hash) { toast('paste a transaction hash first'); return }
+    out.innerHTML = '<div class="loading">looking up...</div>'
+    try {
+      const r = await fetch(`/api/view?kind=empire_distribution&hash=${encodeURIComponent(hash)}`)
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'lookup failed')
+      if (!d.recipients.length) { out.innerHTML = '<div class="empty">no recipients found for that hash.</div>'; return }
+      out.innerHTML = `<div class="ub" style="margin:6px 0">${d.count} recipient${d.count === 1 ? '' : 's'}</div>` + d.recipients.map((r) => `<div class="lbrow">
+        <span class="lbname">${r.username ? '@' + esc(r.username) : esc((r.address || '').slice(0, 6) + '...' + (r.address || '').slice(-4))}</span>
+        <span class="lbn">${r.amount != null ? Math.round(r.amount * 100) / 100 : ''}</span></div>`).join('')
+    } catch (e) {
+      out.innerHTML = `<div class="err">${esc(e.message)}</div>`
+    }
   }
 
   // ================= DAILY (start-here dashboard) =================
@@ -1724,6 +1745,7 @@
     if (act === 'mylinks') { openMyLinks(); return }
     if (act === 'createempire') { openCreateEmpire(); return }
     if (act === 'viewemplb') { openEmpireLeaderboard(btn.dataset.lbid); return }
+    if (act === 'lookupdist') { lookupDistribution(); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
