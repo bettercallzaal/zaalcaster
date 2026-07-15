@@ -969,7 +969,9 @@
         <span class="lbn">${e.rank != null ? e.rank : '-'}</span></div>`
     }).join('')
     const empireSec = empires ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">Empire Builder - top empires (read-only)</b></div>' + empires : ''
+    const createEmpireBtn = '<div class="subbar" style="margin-top:8px"><span class="chip" data-act="createempire">+ create a tokenless empire</span></div>'
     return hdr
+      + createEmpireBtn
       + '<div class="subbar" style="padding-top:4px"><b style="color:#8a8a99;font-size:13px">your top fans - who engages you most (reply back, it compounds)</b></div>'
       + (eng || '<div class="subbar"><span class="ub">no recent engagers</span></div>')
       + '<div class="subbar"><b style="color:#8a8a99;font-size:13px">people to engage next</b></div>'
@@ -1194,6 +1196,123 @@
       <div class="subbar" style="margin-top:10px"><span class="chip ${mylinksEdit ? 'on' : ''}" data-act="mltoggle">${mylinksEdit ? 'done' : 'edit'}</span><span class="chip" data-act="mlcopy">copy all</span><span class="chip" data-act="editprofile">edit Farcaster profile</span></div>`)
   }
 
+  // ===== Create a tokenless Empire (Empire Builder) =====
+  // The one thing this app is NOT allowed to do is sign anything or hold a
+  // key - the owner wallet signs the required message right here, in the
+  // browser, in whatever wallet is available. The server (api/stats.js) only
+  // relays the already-signed payload with its own service API key. Research
+  // doc 1092 (2026-07-14 call w/ Adrian, Empire Builder cofounder) is the
+  // source for the exact request shape + the profile-permanence warning below.
+  const empireDeploy = { mode: 'custom', name: '', bio: '', logoUri: '', address: null, connecting: false, busy: false, result: null, err: null }
+  function empireSaveDraftInputs() {
+    const n = document.getElementById('emp_name'), b = document.getElementById('emp_bio'), l = document.getElementById('emp_logo')
+    if (n) empireDeploy.name = n.value
+    if (b) empireDeploy.bio = b.value
+    if (l) empireDeploy.logoUri = l.value
+  }
+
+  // Farcaster mini-app wallet first (seamless inside Warpcast/Base app),
+  // else whatever the browser injects (MetaMask, Coinbase Wallet, etc). No
+  // WalletConnect yet - covers desktop + any wallet's built-in dApp browser.
+  function getEthProvider() {
+    if (window.__fcsdk && window.__fcsdk.wallet && window.__fcsdk.wallet.ethProvider) return window.__fcsdk.wallet.ethProvider
+    if (window.ethereum) return window.ethereum
+    return null
+  }
+
+  async function connectEmpireWallet() {
+    const provider = getEthProvider()
+    if (!provider) { toast('no wallet found - open this in a wallet app browser, or install MetaMask/Coinbase Wallet'); return }
+    empireSaveDraftInputs()
+    empireDeploy.connecting = true; renderCreateEmpire()
+    try {
+      const accounts = await provider.request({ method: 'eth_requestAccounts' })
+      empireDeploy.address = accounts && accounts[0] ? accounts[0] : null
+      if (!empireDeploy.address) toast('no account returned by wallet')
+    } catch (e) {
+      toast('wallet connect failed: ' + (e && e.message ? e.message : 'unknown error'))
+    } finally {
+      empireDeploy.connecting = false; renderCreateEmpire()
+    }
+  }
+
+  function empireMessage(mode, name, fid) {
+    if (mode === 'farcaster') return `I am deploying a tokenless Farcaster Empire with Farcaster ID ${fid} and name ${name}`
+    return `I am deploying a custom tokenless Empire named ${name}`
+  }
+
+  async function signAndDeployEmpire() {
+    empireSaveDraftInputs()
+    const name = (empireDeploy.name || '').trim()
+    const bio = (empireDeploy.bio || '').trim()
+    const logoUri = (empireDeploy.logoUri || '').trim()
+    if (!name) { toast('empire name is required'); return }
+    if (!empireDeploy.address) { toast('connect a wallet first'); return }
+    const mode = empireDeploy.mode
+    const fid = mode === 'farcaster' ? Number(OWNER_FID || 19640) : undefined
+    const farcasterUsername = mode === 'farcaster' ? (ME || 'zaal') : undefined
+    const message = empireMessage(mode, name, fid)
+
+    if (mode === 'farcaster' && !window.confirm('Farcaster mode attaches this empire to your profile PERMANENTLY - you cannot create a second one for this profile later. Continue?')) return
+    if (!window.confirm(`Your wallet will sign this exact message:\n\n"${message}"\n\nThen deploy the empire on Empire Builder. Continue?`)) return
+
+    const provider = getEthProvider()
+    if (!provider) { toast('no wallet found'); return }
+
+    empireDeploy.busy = true; empireDeploy.err = null; renderCreateEmpire()
+    try {
+      const signature = await provider.request({ method: 'personal_sign', params: [message, empireDeploy.address] })
+      const body = { mode, owner: empireDeploy.address, name, signature, message }
+      if (bio) body.bio = bio
+      if (logoUri) body.logoUri = logoUri
+      if (mode === 'farcaster') { body.fid = fid; body.farcasterUsername = farcasterUsername }
+
+      const r = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const d = await r.json()
+      if (!r.ok || !d.ok) throw new Error(d.error || 'deploy failed')
+      empireDeploy.result = d.empire
+      toast('empire deployed')
+    } catch (e) {
+      empireDeploy.err = e && e.message ? e.message : 'deploy failed'
+    } finally {
+      empireDeploy.busy = false; renderCreateEmpire()
+    }
+  }
+
+  function renderCreateEmpire() {
+    if (empireDeploy.result) {
+      const emp = empireDeploy.result.empire || {}
+      document.getElementById('obody').innerHTML = `<div class="digest"><div class="t"><b>Empire deployed</b></div>
+        <div class="ub" style="margin-top:6px">name: ${esc(emp.name || '')}</div>
+        <div class="ub">base token / id: ${esc(empireDeploy.result.baseToken || emp.baseToken || '')}</div>
+        <div class="ub">empire address: ${esc(empireDeploy.result.empireAddress || emp.empireAddress || '')}</div>
+        <div class="ub" style="margin-top:8px">Set this as <code>empireOwnerWallet</code> in config.js to see it on the Grow tab rank card.</div></div>`
+      return
+    }
+    const short = empireDeploy.address ? `${empireDeploy.address.slice(0, 6)}...${empireDeploy.address.slice(-4)}` : null
+    const walletLine = empireDeploy.address
+      ? `<div class="ub">connected: ${esc(short)}</div>`
+      : `<span class="chip" data-act="connectwallet">${empireDeploy.connecting ? 'connecting...' : 'connect wallet'}</span>`
+    const modeWarn = empireDeploy.mode === 'farcaster'
+      ? '<div class="err" style="margin-top:6px">Farcaster mode is PERMANENT for this profile - you cannot create a second empire for it later. Prefer custom mode unless you are sure.</div>'
+      : ''
+    document.getElementById('obody').innerHTML = `<div class="ps" style="margin-bottom:8px">Deploys a real tokenless empire on Empire Builder (empirebuilder.world). No token, no funds move - just a name + treasury address. You sign in your own wallet; nothing here holds a key.</div>
+      <div class="subbar" style="padding-top:0"><span class="chip ${empireDeploy.mode === 'custom' ? 'on' : ''}" data-act="empmode" data-mode="custom">custom (recommended)</span><span class="chip ${empireDeploy.mode === 'farcaster' ? 'on' : ''}" data-act="empmode" data-mode="farcaster">attach to my Farcaster profile</span></div>
+      ${modeWarn}
+      <div class="urow" style="cursor:default;margin-top:8px"><input class="sfin" id="emp_name" value="${esc(empireDeploy.name)}" placeholder="empire name" style="flex:1;margin:0"></div>
+      <div class="urow" style="cursor:default"><textarea class="sfin" id="emp_bio" placeholder="bio (optional)" rows="2" style="flex:1;margin:0;resize:vertical">${esc(empireDeploy.bio)}</textarea></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="emp_logo" value="${esc(empireDeploy.logoUri)}" placeholder="logo URL (optional)" style="flex:1;margin:0"></div>
+      <div class="subbar" style="margin-top:8px">${walletLine}</div>
+      ${empireDeploy.err ? `<div class="err" style="margin-top:6px">${esc(empireDeploy.err)}</div>` : ''}
+      <div class="subbar" style="margin-top:10px"><span class="chip" data-act="deployempire">${empireDeploy.busy ? 'deploying...' : 'sign & deploy'}</span></div>`
+  }
+
+  function openCreateEmpire() {
+    empireDeploy.mode = 'custom'; empireDeploy.result = null; empireDeploy.err = null
+    openOverlay('Create empire', '')
+    renderCreateEmpire()
+  }
+
   // Edit your own Farcaster profile (display / bio / pfp). A public change, so
   // 'save' is two-step (tap, then confirm) and only fires on your confirm.
   let pfConfirm = false
@@ -1375,6 +1494,9 @@
     const mlcp = e.target.closest('[data-act="mlcopy"]'); if (mlcp) { mlSaveInputs(); const txt = (socials || []).filter((x) => x.url).map((x) => `${x.label}: ${x.url}`).join('\n'); navigator.clipboard.writeText(txt).then(() => toast('all links copied')).catch(() => toast('copy failed')); return }
     const ep = e.target.closest('[data-act="editprofile"]'); if (ep) { openEditProfile(); return }
     const pfs = e.target.closest('[data-act="pfsave"]'); if (pfs) { saveProfile(pfs); return }
+    const empm = e.target.closest('[data-act="empmode"]'); if (empm) { empireSaveDraftInputs(); empireDeploy.mode = empm.dataset.mode; renderCreateEmpire(); return }
+    const empc = e.target.closest('[data-act="connectwallet"]'); if (empc) { connectEmpireWallet(); return }
+    const empd = e.target.closest('[data-act="deployempire"]'); if (empd) { signAndDeployEmpire(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
     const stplrm = e.target.closest('[data-act="snaptplrm"]')
@@ -1529,6 +1651,7 @@
     if (act === 'allprojects') { openAllProjects(); return }
     if (act === 'linkedin') { openLinkedIn(); return }
     if (act === 'mylinks') { openMyLinks(); return }
+    if (act === 'createempire') { openCreateEmpire(); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
