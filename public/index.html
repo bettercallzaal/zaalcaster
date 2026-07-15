@@ -273,6 +273,7 @@
   <button data-tab="compose">Post <span class="k">6</span></button>
   <button data-tab="grow">Grow <span class="k">7</span></button>
   <button data-tab="empire">Empire <span class="k">8</span></button>
+  <button data-tab="poidh">POIDH <span class="k">9</span></button>
 </div>
 
 <div id="ptr">pull to refresh</div>
@@ -316,6 +317,7 @@
     channels: { id: 'zao', casts: [], loaded: false, trending: [], chanInfo: null, searching: false, searchResults: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null, empires: [] },
+    poidh: { loaded: false, bountyId: '1249', bounty: null, claims: [], err: null },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -1036,6 +1038,55 @@
       + '<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">what this tab can do (research doc 1094a)</b></div>'
       + renderEmpireCapabilities()
   }
+
+  // ===== POIDH ("pics or it didn't happen") bounty reader - reads
+  // poidh.xyz's own tRPC endpoint (proven stable, keyless, per
+  // bettercallzaal/zpoidh's working refresh script), never guesses at
+  // undocumented internals. Read-only - claiming/creating a bounty is an
+  // on-chain tx via the PoidhV2 contract, a future slice, not this one.
+  const POIDH_KNOWN_BOUNTIES = [
+    { id: '1151', label: 'R1' }, { id: '1166', label: 'R2' },
+    { id: '1180', label: 'R3' }, { id: '1249', label: 'R4 (open pot)' },
+  ]
+  async function loadPoidh(bountyId) {
+    st.poidh.bountyId = String(bountyId)
+    st.poidh.loaded = false; st.poidh.err = null
+    if (tab === 'poidh') render()
+    try {
+      const r = await fetch(`/api/view?kind=poidh_bounty&id=${encodeURIComponent(bountyId)}`)
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'bounty lookup failed')
+      st.poidh.bounty = d.bounty; st.poidh.claims = d.claims || []
+    } catch (e) {
+      st.poidh.err = e.message; st.poidh.bounty = null; st.poidh.claims = []
+    } finally {
+      st.poidh.loaded = true
+      if (tab === 'poidh') render()
+    }
+  }
+  function renderPoidh() {
+    const chips = POIDH_KNOWN_BOUNTIES.map((b) => `<span class="chip ${st.poidh.bountyId === b.id ? 'on' : ''}" data-act="poidhbounty" data-id="${b.id}">${esc(b.label)}</span>`).join('')
+    const header = `<div class="ps" style="margin-bottom:8px">Reads live bounty + claim data from poidh.xyz. Read-only - claiming a bounty is an on-chain wallet action, done on poidh.xyz directly for now.</div>
+      <div class="subbar" style="padding-top:0">${chips}</div>
+      <div class="urow" style="cursor:default;margin-top:6px"><input class="sfin" id="poidh_id" value="${esc(st.poidh.bountyId)}" placeholder="or any bounty id" style="flex:1;margin:0"><span class="chip" data-act="poidhlookup">look up</span></div>`
+    if (!st.poidh.loaded) return header + '<div class="loading">loading bounty...</div>'
+    if (st.poidh.err) return header + `<div class="err" style="margin-top:8px">${esc(st.poidh.err)}</div>`
+    const b = st.poidh.bounty
+    if (!b) return header + '<div class="empty">no bounty found.</div>'
+    const statusLine = b.isCanceled ? 'canceled' : b.isVoting ? 'voting' : b.inProgress ? 'open' : 'closed'
+    const bountyCard = `<div class="digest" style="background:#151529;border-color:#24242f;margin-top:8px">
+      <div class="t" style="color:#a99cff;font-size:15px">${esc(b.title)}</div>
+      <div class="ub" style="margin-top:4px">${b.amountEth ? b.amountEth.toFixed(4) + ' ETH' : 'no pot'} - ${esc(statusLine)} - ${st.poidh.claims.length} claim${st.poidh.claims.length === 1 ? '' : 's'}</div>
+      <div class="ub" style="margin-top:4px;white-space:pre-wrap">${esc((b.description || '').slice(0, 400))}${(b.description || '').length > 400 ? '...' : ''}</div>
+      <div style="margin-top:6px"><a class="open" href="${esc(b.url)}" target="_blank" rel="noopener">open on poidh.xyz</a></div></div>`
+    const claims = st.poidh.claims.map((c) => `<div class="lbrow">
+      ${c.imageUrl ? `<img class="lbpfp" src="${esc(c.imageUrl)}" alt="">` : '<span class="lbpfp"></span>'}
+      <span class="lbname">${esc(c.title || 'untitled claim')}${c.isAccepted ? ' <span class="qs">accepted</span>' : ''}</span>
+      <span class="ub" style="font-size:12px">${esc((c.issuer || '').slice(0, 6))}...${esc((c.issuer || '').slice(-4))}</span></div>`).join('')
+    const claimsSec = claims ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">claims</b></div>' + claims : '<div class="subbar"><span class="ub">no claims yet</span></div>'
+    return header + bountyCard + claimsSec
+  }
+
   async function lookupDistribution() {
     const hash = (document.getElementById('emp_txhash').value || '').trim()
     const out = document.getElementById('empDistResult')
@@ -1170,6 +1221,7 @@
     else if (tab === 'compose') { meta.textContent = ''; main.innerHTML = renderCompose() }
     else if (tab === 'grow') { meta.textContent = ''; main.innerHTML = renderGrow() }
     else if (tab === 'empire') { meta.textContent = ''; main.innerHTML = renderEmpire() }
+    else if (tab === 'poidh') { meta.textContent = ''; main.innerHTML = renderPoidh() }
   }
 
   function switchTab(t) {
@@ -1181,6 +1233,7 @@
     if (t === 'channels' && !st.channels.loaded) loadChannels()
     if (t === 'grow' && !st.grow.loaded) loadGrow()
     if (t === 'empire' && !st.grow.loaded) loadGrow()
+    if (t === 'poidh' && !st.poidh.loaded) loadPoidh(st.poidh.bountyId)
     if (t === 'daily') checkAutoQuests()
     if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
   }
@@ -1746,6 +1799,8 @@
     if (act === 'createempire') { openCreateEmpire(); return }
     if (act === 'viewemplb') { openEmpireLeaderboard(btn.dataset.lbid); return }
     if (act === 'lookupdist') { lookupDistribution(); return }
+    if (act === 'poidhbounty') { loadPoidh(btn.dataset.id); return }
+    if (act === 'poidhlookup') { const v = (document.getElementById('poidh_id').value || '').trim(); if (v) loadPoidh(v); else toast('enter a bounty id'); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
@@ -1987,7 +2042,7 @@
   const palInput = document.getElementById('palInput')
   const palList = document.getElementById('palList')
   let palItems = [], palSel = 0
-  const TABS = [['daily','Daily'],['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow'],['empire','Empire']]
+  const TABS = [['daily','Daily'],['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow'],['empire','Empire'],['poidh','POIDH']]
   function palCommands(q) {
     const s = q.trim().toLowerCase()
     const cmds = []
