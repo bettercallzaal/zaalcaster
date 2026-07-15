@@ -137,6 +137,36 @@ export async function getEmpireBoosters(empireId) {
   return getJson(`/boosters/${empireId}`)
 }
 
+// GET /api/empire-rewards/[empire_id] - reward summary: empire_rewards,
+// burned, and airdrops arrays (3 most recent each per doc 582).
+export async function getEmpireRewardsSummary(empireId) {
+  if (!isValidEmpireId(empireId)) return { ok: false, status: 400, error: 'Invalid empire id (expected a Base token address)' }
+  return getJson(`/empire-rewards/${empireId}`)
+}
+
+// GET /api/empire-rewards/[empire_id]/[type] - full history for one type.
+export async function getEmpireRewardsByType(empireId, type) {
+  if (!isValidEmpireId(empireId)) return { ok: false, status: 400, error: 'Invalid empire id (expected a Base token address)' }
+  if (!['distribute', 'burned', 'airdrop'].includes(type)) return { ok: false, status: 400, error: 'type must be distribute, burned, or airdrop' }
+  return getJson(`/empire-rewards/${empireId}/${type}`)
+}
+
+// GET /api/rewards/recipients/[transactionHash] - who got paid in one
+// distribution transaction.
+const TX_HASH_PATTERN = /^0x[a-fA-F0-9]{64}$/
+export async function getDistributionRecipients(transactionHash) {
+  if (typeof transactionHash !== 'string' || !TX_HASH_PATTERN.test(transactionHash)) return { ok: false, status: 400, error: 'Invalid transaction hash' }
+  return getJson(`/rewards/recipients/${transactionHash}`)
+}
+
+// GET /api/distribution-records/[empireAddress] - lifetime USD received per
+// recipient address, with last-update timestamps. Note: keyed by the
+// empire's SmartVault/treasury address, not the base_token id used above.
+export async function getDistributionRecords(empireAddress) {
+  if (!isValidWalletAddress(empireAddress)) return { ok: false, status: 400, error: 'Invalid empire address' }
+  return getJson(`/distribution-records/${empireAddress}`)
+}
+
 // EMPIRE_BUILDER_API_KEY: process.env wins (Vercel), then the local creds
 // file, same lookup order as juke.js's loadJukeKey().
 export function loadEmpireBuilderKey() {

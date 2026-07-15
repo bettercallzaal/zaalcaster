@@ -970,8 +970,8 @@
       { name: 'Leaderboard discovery + entries', detail: 'list an empire\'s leaderboard slots and their ranked entries', status: 'built', where: '"view leaderboard" below' },
       { name: 'Per-address leaderboard stats', detail: 'one wallet\'s rank/points/lifetime rewards in a leaderboard', status: 'built', where: 'your rank, below' },
       { name: 'Boosters for an empire', detail: 'list active multipliers (NFT/ERC20/staking/reputation)', status: 'built', where: 'booster count, below' },
-      { name: 'Rewards summary + by type', detail: 'distribute/burn/airdrop history for an empire', status: 'documented', where: 'not wired up yet' },
-      { name: 'Distribution recipients by tx', detail: 'who got paid in a specific distribution transaction', status: 'documented', where: 'not wired up yet' },
+      { name: 'Rewards summary + by type', detail: 'distribute/burn/airdrop history for an empire', status: 'built', where: 'your empire card, below' },
+      { name: 'Distribution recipients by tx / distribution records by recipient', detail: 'who got paid in a specific transaction, or lifetime total per wallet', status: 'read-only', where: 'functions exist (getDistributionRecipients, getDistributionRecords) - not surfaced in UI yet, no natural entry point (needs a tx hash or recipient address)' },
     ] },
     { group: 'Empire creation (write, needs your wallet signature)', items: [
       { name: 'Deploy tokenless empire', detail: 'custom or Farcaster-profile-attached (profile mode is PERMANENT)', status: 'built', where: '"create a tokenless empire" below' },
@@ -1006,9 +1006,13 @@
       ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
       : ''
     const empLbBtn = d.empire?.topLeaderboardId ? ` <span class="chip" data-act="viewemplb" data-lbid="${esc(d.empire.topLeaderboardId)}">view leaderboard</span>` : ''
+    const rw = d.empire?.rewards
+    const rewardsLine = rw && (rw.distributedCount || rw.burnedCount || rw.airdropCount)
+      ? `<div class="ub" style="margin-top:4px">${rw.distributedCount} distribution${rw.distributedCount === 1 ? '' : 's'}${rw.mostRecentDistribution?.amount ? ` (latest ${rw.mostRecentDistribution.amount})` : ''} - ${rw.burnedCount} burn${rw.burnedCount === 1 ? '' : 's'} - ${rw.airdropCount} airdrop${rw.airdropCount === 1 ? '' : 's'}</div>`
+      : ''
     const empCard = d.empire && !d.empire.error
       ? `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="color:#a99cff;font-size:15px">${esc(d.empire.name || d.empire.id)} empire</div>
-         <div class="ub" style="margin-top:4px">${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}${mineLine}</div>
+         <div class="ub" style="margin-top:4px">${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}${mineLine}</div>${rewardsLine}
          <div style="margin-top:6px">${empLbBtn}</div></div>`
       : `<div class="digest" style="background:#151529;border-color:#24242f"><div class="ub">no empire configured yet - set config.empireOwnerWallet, or create one below</div></div>`
     const createBtn = '<div class="subbar" style="margin-top:8px"><span class="chip" data-act="createempire">+ create a tokenless empire</span></div>'
