@@ -914,8 +914,11 @@
     // when no wallet is configured yet.
     const mineKeys = ['zabal', 'zao', 'wavewarz']
     const myEmpire = (st.grow.empires || []).find((e) => mineKeys.includes((e.symbol || '').toLowerCase()) || mineKeys.includes((e.name || '').toLowerCase()) || (e.website || '').includes('zabal') || (e.warpcast || '').includes('/' + ME))
+    const mineLine = d.empire?.mine
+      ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
+      : ''
     const empLine = d.empire && !d.empire.error
-      ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(d.empire.name || d.empire.id)} empire - ${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}</div>`
+      ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(d.empire.name || d.empire.id)} empire - ${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}${mineLine}</div>`
       : myEmpire ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(myEmpire.name)} empire - rank <b>${myEmpire.rank ?? '?'}</b>${myEmpire.treasury ? ` - ${Math.round(myEmpire.treasury)} treasury` : ''}</div>` : ''
     // follower history sparkline (builds up from the first day you open Grow)
     const hkeys = Object.keys(statsHistory).sort()

@@ -3,7 +3,7 @@
 
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
-import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
+import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
 import { config } from '../config.js'
 
 async function readJsonBody(req) {
@@ -77,11 +77,31 @@ async function empireSummary() {
     getEmpireBoosters(empireId),
   ])
 
+  const slots = boards.ok ? (boards.data?.leaderboards || (Array.isArray(boards.data) ? boards.data : [])) : []
+  const topLeaderboardId = slots[0]?.id || null
+
+  // your own rank/points within the first leaderboard slot - the read
+  // functions for this existed since PR #89 but were never surfaced
+  // anywhere until now (getLeaderboardAddressStats).
+  let mine = null
+  if (topLeaderboardId) {
+    const stats = await getLeaderboardAddressStats(topLeaderboardId, wallet)
+    if (stats.ok && stats.data?.entry) {
+      mine = {
+        leaderboardName: stats.data.leaderboard?.name || slots[0]?.name || null,
+        rank: stats.data.entry.rank ?? null,
+        points: stats.data.entry.points ?? null,
+        totalRewards: stats.data.entry.totalRewards ?? null,
+      }
+    }
+  }
+
   return {
     id: empireId,
     name: empire.name || null,
-    leaderboardCount: boards.ok ? (boards.data?.leaderboards?.length ?? boards.data?.length ?? 0) : 0,
+    leaderboardCount: slots.length,
     boosters: boosters.ok ? (boosters.data?.boosters || boosters.data || []).slice(0, 8) : [],
+    mine,
   }
 }
 
