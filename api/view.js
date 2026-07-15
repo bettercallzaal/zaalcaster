@@ -18,7 +18,7 @@ import {
   searchChannels, getChannelDetails, getLinkPreview,
 } from '../lib.js'
 import { blockedByGuestAuth } from '../auth.js'
-import { getLeaderboardEntries } from '../empire.js'
+import { getLeaderboardEntries, getDistributionRecipients } from '../empire.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -167,6 +167,17 @@ export default async function handler(req, res) {
         username: e.farcaster_username || null, totalRewards: e.totalRewards ?? null,
       }))
       res.status(200).json({ name: data.data?.leaderboard?.name || null, entries }); return
+    }
+
+    if (kind === 'empire_distribution') {
+      const hash = (req.query.hash || '').trim()
+      if (!hash) { res.status(400).json({ error: 'missing hash' }); return }
+      const data = await getDistributionRecipients(hash)
+      if (!data.ok) { res.status(400).json({ error: data.error }); return }
+      const recipients = (data.data?.recipients || []).slice(0, 100).map((r) => ({
+        address: r.user_address || r.address || null, username: r.farcaster_username || null, amount: r.amount ?? null,
+      }))
+      res.status(200).json({ count: data.data?.count ?? recipients.length, recipients }); return
     }
 
     if (kind === 'link_preview') {
