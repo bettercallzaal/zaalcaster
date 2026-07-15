@@ -1,7 +1,7 @@
 // GET /api/search?q=... - search users + casts for the web client. Read-only.
 
 import { searchCasts, searchUsers } from '../lib.js'
-import { blockedByAuth } from '../auth.js'
+import { blockedByGuestAuth } from '../auth.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -17,7 +17,7 @@ function compactCast(cast) {
 }
 
 export default async function handler(req, res) {
-  if (blockedByAuth(req, res)) return
+  if (blockedByGuestAuth(req, res)) return
   try {
     const q = (req.query.q || '').trim()
     if (!q) { res.status(400).json({ error: 'empty query' }); return }

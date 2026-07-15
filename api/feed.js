@@ -7,8 +7,18 @@
 // Read-only, compact safe cast shape.
 
 import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday, getFrameCatalog, searchFrames } from '../lib.js'
-import { blockedByAuth } from '../auth.js'
+import { blockedByGuestAuth, getSession } from '../auth.js'
 import { getEmpires } from '../empire.js'
+
+// modes below that are Zaal-only even though this route is otherwise guest-
+// readable (own activity, own notifications, own close-friends seed, a
+// custom fid list) - everything else (following/trending/foryou/channel,
+// trending channels, frames, Empire reads) is fine for any signed-in guest.
+function blockedByOwner(session, res) {
+  if (session.role === 'zaal') return false
+  res.status(403).json({ error: 'zaal only' })
+  return true
+}
 
 // flatten a Neynar notification (any shape) into a compact row for the UI
 function compactNotif(n) {
@@ -67,7 +77,8 @@ function embedList(cast) {
 }
 
 export default async function handler(req, res) {
-  if (blockedByAuth(req, res)) return
+  if (blockedByGuestAuth(req, res)) return
+  const session = getSession(req)
   try {
     if (req.query.trending === '1') {
       const channels = await getTrendingChannels({ limit: 10 })
@@ -87,6 +98,7 @@ export default async function handler(req, res) {
 
     // Today's own activity - drives auto-quests (gm posted? cast? replied?)
     if (req.query.myactivity === '1') {
+      if (blockedByOwner(session, res)) return
       const a = await getMyActivityToday()
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ activity: a })
@@ -95,6 +107,7 @@ export default async function handler(req, res) {
 
     // Notifications feed (all activity, or scoped to a channel for /zao mentions)
     if (req.query.notifs === '1') {
+      if (blockedByOwner(session, res)) return
       const limit = Math.min(Number(req.query.limit) || 25, 25)
       const cursor = req.query.cursor || null
       const channel = (req.query.channel || '').replace(/[^a-zA-Z0-9_,-]/g, '')
@@ -126,6 +139,7 @@ export default async function handler(req, res) {
 
     // seed a "close friends" list from Neynar best-friends (mutual affinity)
     if (req.query.bestfriends === '1') {
+      if (blockedByOwner(session, res)) return
       const friends = await getBestFriends({ limit: 20 })
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ friends })
@@ -145,6 +159,7 @@ export default async function handler(req, res) {
     } else if (type === 'foryou') {
       data = await getForYouFeed({ limit, cursor })
     } else if (type === 'list') {
+      if (blockedByOwner(session, res)) return
       const fids = String(req.query.fids || '').split(',').filter((f) => /^\d+$/.test(f.trim()))
       data = await getFeedByFids(fids, { limit, cursor })
     } else {

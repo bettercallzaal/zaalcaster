@@ -287,10 +287,8 @@
 <div id="gate" style="position:fixed;inset:0;z-index:100;background:#0c0c12;display:none;align-items:center;justify-content:center">
   <div style="width:280px;max-width:86vw;text-align:center">
     <h1 style="font-size:20px;margin:0 0 4px">zaal<span style="color:#855DCD">caster</span></h1>
-    <div style="color:#8a8a99;font-size:13px;margin-bottom:16px">enter password</div>
-    <input id="gatePw" type="password" autocomplete="current-password" placeholder="password"
-      style="width:100%;font:inherit;font-size:16px;background:#14141d;color:#e9e9ee;border:1px solid #24242f;border-radius:10px;padding:11px 13px;box-sizing:border-box">
-    <button id="gateBtn" style="width:100%;margin-top:10px;font:inherit;font-size:15px;font-weight:600;background:#6d4aff;color:#fff;border:none;border-radius:10px;padding:11px;cursor:pointer">enter</button>
+    <div style="color:#8a8a99;font-size:13px;margin-bottom:16px">sign in with Farcaster - Zaal gets full access, everyone else gets a read-only view</div>
+    <div id="gateBox" style="display:flex;justify-content:center"></div>
     <div id="gateErr" style="color:#ff8a6a;font-size:13px;margin-top:8px;min-height:16px"></div>
   </div>
 </div>
@@ -1099,6 +1097,7 @@
   }
 
   function switchTab(t) {
+    if (ROLE !== 'zaal' && ROLE_RESTRICTED_TABS.includes(t)) t = 'feed'
     if (deckMode) { deckMode = false; document.body.classList.remove('deck'); document.getElementById('deckBtn').classList.remove('on') }
     tab = t; render()
     if (t === 'feed' && !st.feed.loaded) loadFeed()
@@ -1691,8 +1690,10 @@
     persist(); closeOverlay(); render()
   })
 
-  // ---- password gate ----
+  // ---- Sign In With Farcaster gate ----
   const gate = document.getElementById('gate')
+  let ROLE = null // null (signed out) | 'zaal' | 'guest'
+  let NEYNAR_CLIENT_ID = null
   async function pullState() {
     try {
       const r = await fetch('/api/state'); const d = await r.json()
@@ -1722,19 +1723,47 @@
   async function checkPosting() {
     try { postingHealth = await fetch('/api/send').then((r) => r.json()); if (tab === 'compose') render() } catch {}
   }
-  async function startApp() { gate.style.display = 'none'; await pullState(); switchTab('daily'); checkPosting() }
-  async function submitPw() {
-    const pw = document.getElementById('gatePw').value
+  // guest role only sees Feed/Channels/Search (+ Empire reads folded into
+  // them) - Daily/Inbox/Post/Grow stay Zaal-only, both hidden here and
+  // re-checked in switchTab() as a second line of defense. The server enforces
+  // this independently (blockedByAuth vs blockedByGuestAuth) - this is UX, not
+  // the security boundary.
+  const ROLE_RESTRICTED_TABS = ['daily', 'inbox', 'compose', 'grow']
+  function applyRole() {
+    for (const t of ROLE_RESTRICTED_TABS) {
+      const btn = document.querySelector(`#tabs button[data-tab="${t}"]`)
+      if (btn) btn.style.display = ROLE === 'zaal' ? '' : 'none'
+    }
+    const fabEl = document.getElementById('fab')
+    if (fabEl) fabEl.style.display = ROLE === 'zaal' ? '' : 'none'
+  }
+  async function startApp() {
+    gate.style.display = 'none'
+    applyRole()
+    if (ROLE === 'zaal') { await pullState(); checkPosting() }
+    switchTab(ROLE === 'zaal' ? 'daily' : 'feed')
+  }
+  window.onSiwnSuccess = async function (data) {
     document.getElementById('gateErr').textContent = ''
     try {
-      const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) })
-      if (!r.ok) { document.getElementById('gateErr').textContent = 'wrong password'; return }
+      const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fid: data.fid, signer_uuid: data.signer_uuid }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { document.getElementById('gateErr').textContent = j.error || 'sign-in failed'; return }
+      ROLE = j.role || 'guest'
       startApp()
-    } catch { document.getElementById('gateErr').textContent = 'error - try again' }
+    } catch { document.getElementById('gateErr').textContent = 'sign-in failed - try again' }
   }
-  document.getElementById('gateBtn').addEventListener('click', submitPw)
-  document.getElementById('gatePw').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPw() })
-  function showGate() { gate.style.display = 'flex'; document.getElementById('gatePw').focus() }
+  function showGate() {
+    gate.style.display = 'flex'
+    const box = document.getElementById('gateBox')
+    if (!NEYNAR_CLIENT_ID) { box.innerHTML = '<div style="color:#ff8a6a;font-size:13px">sign-in not configured yet</div>'; return }
+    box.innerHTML = `<div class="neynar_signin" data-client_id="${esc(NEYNAR_CLIENT_ID)}" data-success-callback="onSiwnSuccess" data-theme="dark"></div>`
+    if (!document.getElementById('siwnScript')) {
+      const s = document.createElement('script')
+      s.id = 'siwnScript'; s.src = 'https://neynarxyz.github.io/siwn/raw/1.2.0/index.js'; s.async = true
+      document.body.appendChild(s)
+    }
+  }
 
   // ---- cmd+k command palette ----
   const palette = document.getElementById('palette')
@@ -1895,16 +1924,18 @@
     try { voiceRec.start(); btn.textContent = 'stop'; btn.classList.add('on'); toast('listening - speak your cast') } catch { voiceRec = null }
   }
 
-  // boot: check whether a password is required before loading anything
+  // boot: check whether sign-in is required before loading anything
   ;(async () => {
     try {
       const r = await fetch('/api/auth')
       const d = await r.json()
+      ROLE = d.role
+      NEYNAR_CLIENT_ID = d.neynarClientId || null
       applyConfig(d.config)
       maybeWelcome() // owner+viewer known now; no-op if SDK context not ready (fc-ready will retry)
       if (d.enabled && !d.authed) showGate()
       else startApp()
-    } catch { startApp() } // auth endpoint unreachable (e.g. gate off) - proceed
+    } catch { ROLE = 'zaal'; startApp() } // auth endpoint unreachable - fail open, same as gate-off before
   })()
 </script>
 <!-- Farcaster Mini App SDK: when opened inside a Farcaster client, hide the splash

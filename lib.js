@@ -412,6 +412,22 @@ export async function getPostingHealth() {
   }
 }
 
+// SIWN server-side verification: given a client-claimed signer_uuid (from a
+// guest's Sign In With Neynar callback), confirm it is real, approved, and
+// find its fid. Same call getPostingHealth uses for Zaal's own signer above,
+// generalized to any signer_uuid. A 404 means the signer_uuid isn't ours
+// (Neynar scopes signer lookups to the app whose API key you call with) -
+// never trust a client's claimed fid without this round-trip.
+export async function getSignerInfo(signerUuid) {
+  const env = loadEnv()
+  const res = await fetch(`${NEYNAR_BASE_URL}/farcaster/signer?signer_uuid=${encodeURIComponent(signerUuid)}`, {
+    headers: { 'X-API-Key': env.NEYNAR_API_KEY },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!res.ok) return null
+  return res.json().catch(() => null)
+}
+
 function requireSigner(env) {
   if (!env.SIGNER) {
     throw new Error('SIGNER_UUID missing - run npm run mint-signer (or set it in the env). Reads work without it.')

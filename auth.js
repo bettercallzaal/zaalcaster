@@ -1,36 +1,46 @@
-// auth.js - a simple password gate for the deployed web app, so the site can
-// stand on its own (Vercel Deployment Protection optional).
+// auth.js - Sign In With Farcaster (via Neynar's SIWN) session gate.
 //
-// Set APP_PASSWORD in the Vercel env. When it is set, every API route requires
-// a valid session cookie; the password is entered once at /api/auth and a
-// signed cookie is set. When APP_PASSWORD is UNSET, the gate is OFF (local CLI
-// and any deploy that relies only on Vercel login keep working unchanged).
+// Any real Farcaster user can sign in; the app grants one of two roles:
+//   - 'zaal'  - the owner (fid matches USER_FID/ZAAL_FID/config.fid) - full
+//               read+write access, unchanged from the old password gate.
+//   - 'guest' - any other signed-in Farcaster user - read-only access to the
+//               public-safe surface (Feed/Channels/Search/Empire data).
+//               Every write-capable or personal route (react/send/digest/
+//               state/inbox/stats) stays behind blockedByAuth, Zaal-only.
 //
-// The cookie holds sha256(APP_PASSWORD) - not the password. An attacker can't
-// forge it without knowing the password, and the hash reveals nothing usable.
-// The actual password never leaves the server.
+// The session cookie is NOT the SIWN signer_uuid (that's write-capable for
+// its owner's account and must never leave the server) - it is
+// `${fid}.${issuedAt}` HMAC-signed with SESSION_SECRET, so a client can prove
+// "the server independently verified I am fid X" without holding anything
+// that could post on anyone's behalf. See api/auth.js for the verification
+// step (confirms the signer_uuid with Neynar before ever issuing this cookie).
+//
+// Gate is OFF (authEnabled() false) when SESSION_SECRET is unset - the same
+// escape hatch the old password gate had, for local CLI / Vercel-auth-only
+// deploys: every request is treated as Zaal.
 
 import crypto from 'node:crypto'
+import { config } from './config.js'
 
-const COOKIE = 'zc_auth'
+const COOKIE = 'zc_session'
+const MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 export function authEnabled() {
-  return !!process.env.APP_PASSWORD
+  return !!process.env.SESSION_SECRET
 }
 
-function expectedToken() {
-  return crypto.createHash('sha256').update(process.env.APP_PASSWORD || '').digest('hex')
+export function ownerFid() {
+  return Number(process.env.USER_FID || process.env.ZAAL_FID || config.fid)
+}
+
+function sign(value) {
+  return crypto.createHmac('sha256', process.env.SESSION_SECRET || '').update(value).digest('hex')
 }
 
 function eq(a, b) {
   const ba = Buffer.from(String(a)), bb = Buffer.from(String(b))
   if (ba.length !== bb.length) return false
   return crypto.timingSafeEqual(ba, bb)
-}
-
-export function verifyPassword(pw) {
-  if (!authEnabled()) return true
-  return eq(pw || '', process.env.APP_PASSWORD)
 }
 
 function readCookie(req, name) {
@@ -42,20 +52,50 @@ function readCookie(req, name) {
   return null
 }
 
-// True when the request may proceed. Gate off (no APP_PASSWORD) -> always true.
-export function checkAuth(req) {
-  if (!authEnabled()) return true
-  return eq(readCookie(req, COOKIE) || '', expectedToken())
+// Set-Cookie for a verified fid. Only ever call this after independently
+// confirming the fid with Neynar (api/auth.js POST) - never from client say-so.
+export function sessionCookie(fid) {
+  const issuedAt = Math.floor(Date.now() / 1000)
+  const payload = `${fid}.${issuedAt}`
+  const value = `${payload}.${sign(payload)}`
+  return `${COOKIE}=${value}; Path=/; Max-Age=${MAX_AGE_SECONDS}; HttpOnly; Secure; SameSite=Lax`
 }
 
-// Set-Cookie header value for a successful login (30 days, httpOnly, secure).
-export function loginCookie() {
-  return `${COOKIE}=${expectedToken()}; Path=/; Max-Age=${60 * 60 * 24 * 30}; HttpOnly; Secure; SameSite=Lax`
+export function clearSessionCookie() {
+  return `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
 }
 
-// Guard helper for API routes: returns true if it already sent a 401.
+// null (no/invalid/expired session) | { fid, role: 'zaal' | 'guest' }
+export function getSession(req) {
+  if (!authEnabled()) return { fid: ownerFid(), role: 'zaal' } // gate off = full local access
+  const raw = readCookie(req, COOKIE)
+  if (!raw) return null
+  const parts = raw.split('.')
+  if (parts.length !== 3) return null
+  const [fidStr, issuedAtStr, sig] = parts
+  if (!eq(sig, sign(`${fidStr}.${issuedAtStr}`))) return null
+  const issuedAt = Number(issuedAtStr)
+  if (!Number.isFinite(issuedAt) || Date.now() / 1000 - issuedAt > MAX_AGE_SECONDS) return null
+  const fid = Number(fidStr)
+  if (!Number.isFinite(fid)) return null
+  return { fid, role: fid === ownerFid() ? 'zaal' : 'guest' }
+}
+
+// Guard for Zaal-only routes (Inbox, Post/send, react, digest, state, stats).
+// Returns true if it already sent a 401.
 export function blockedByAuth(req, res) {
-  if (checkAuth(req)) return false
+  const session = getSession(req)
+  if (session && session.role === 'zaal') return false
+  res.status(401).json({ error: 'unauthorized' })
+  return true
+}
+
+// Guard for the public-but-signed-in surface (Feed, Channels, Search, profile
+// + thread overlays, Empire reads) - any verified Farcaster user, guest or
+// Zaal. Individual handlers still gate their own Zaal-only branches (e.g.
+// feed.js's notifications/best-friends modes) with getSession + role check.
+export function blockedByGuestAuth(req, res) {
+  if (getSession(req)) return false
   res.status(401).json({ error: 'unauthorized' })
   return true
 }
