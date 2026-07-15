@@ -3,7 +3,7 @@
 
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
-import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
+import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
 import { config } from '../config.js'
 
 async function readJsonBody(req) {
@@ -72,9 +72,10 @@ async function empireSummary() {
   const empireId = empire.base_token || empire.token_address || empire.address
   if (!empireId) return { name: empire.name || null, error: 'empire found but had no usable id' }
 
-  const [boards, boosters] = await Promise.all([
+  const [boards, boosters, rewards] = await Promise.all([
     getEmpireLeaderboards(empireId),
     getEmpireBoosters(empireId),
+    getEmpireRewardsSummary(empireId),
   ])
 
   const slots = boards.ok ? (boards.data?.leaderboards || (Array.isArray(boards.data) ? boards.data : [])) : []
@@ -96,12 +97,27 @@ async function empireSummary() {
     }
   }
 
+  // recent reward activity - live-verified shape against ZABAL: distinct
+  // arrays empire_rewards/burned_rewards/airdrop_rewards (NOT "burned"/
+  // "airdrops" as doc 582 originally described - Empire Builder's actual
+  // response uses the _rewards suffix consistently). Compact to counts +
+  // most-recent amount so the tab stays a summary, not a ledger.
+  const recentReward = (arr) => (arr && arr[0]) ? { amount: arr[0].amount ?? arr[0].total_amount ?? null, type: arr[0].type ?? arr[0].distribution_type ?? null } : null
+  const rewardsSummary = rewards.ok ? {
+    distributedCount: (rewards.data?.empire_rewards || []).length,
+    burnedCount: (rewards.data?.burned_rewards || rewards.data?.burned || []).length,
+    airdropCount: (rewards.data?.airdrop_rewards || rewards.data?.airdrops || []).length,
+    mostRecentDistribution: recentReward(rewards.data?.empire_rewards),
+    mostRecentBurn: recentReward(rewards.data?.burned_rewards || rewards.data?.burned),
+  } : null
+
   return {
     id: empireId,
     name: empire.name || null,
     leaderboardCount: slots.length,
     topLeaderboardId,
     boosters: boosters.ok ? (boosters.data?.boosters || boosters.data || []).slice(0, 8) : [],
+    rewards: rewardsSummary,
     mine,
   }
 }
