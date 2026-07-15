@@ -100,6 +100,7 @@ async function empireSummary() {
     id: empireId,
     name: empire.name || null,
     leaderboardCount: slots.length,
+    topLeaderboardId,
     boosters: boosters.ok ? (boosters.data?.boosters || boosters.data || []).slice(0, 8) : [],
     mine,
   }

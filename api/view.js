@@ -18,6 +18,7 @@ import {
   searchChannels, getChannelDetails, getLinkPreview,
 } from '../lib.js'
 import { blockedByGuestAuth } from '../auth.js'
+import { getLeaderboardEntries } from '../empire.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -154,6 +155,18 @@ export default async function handler(req, res) {
         image: c.image_url || null, followers: c.follower_count || 0,
         following: !!(c.viewer_context?.following),
       }); return
+    }
+
+    if (kind === 'empire_leaderboard') {
+      const id = (req.query.id || '').trim()
+      if (!id) { res.status(400).json({ error: 'missing id' }); return }
+      const data = await getLeaderboardEntries(id)
+      if (!data.ok) { res.status(502).json({ error: data.error }); return }
+      const entries = (data.data?.entries || []).slice(0, 25).map((e) => ({
+        address: e.address, rank: e.rank, score: e.score ?? null, points: e.points ?? null,
+        username: e.farcaster_username || null, totalRewards: e.totalRewards ?? null,
+      }))
+      res.status(200).json({ name: data.data?.leaderboard?.name || null, entries }); return
     }
 
     if (kind === 'link_preview') {
