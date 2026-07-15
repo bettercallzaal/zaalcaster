@@ -917,8 +917,9 @@
     const mineLine = d.empire?.mine
       ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
       : ''
+    const empLbBtn = d.empire?.topLeaderboardId ? ` <span class="chip" data-act="viewemplb" data-lbid="${esc(d.empire.topLeaderboardId)}">view leaderboard</span>` : ''
     const empLine = d.empire && !d.empire.error
-      ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(d.empire.name || d.empire.id)} empire - ${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}${mineLine}</div>`
+      ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(d.empire.name || d.empire.id)} empire - ${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}${mineLine}${empLbBtn}</div>`
       : myEmpire ? `<div class="t" style="color:#a99cff;font-size:14px;margin-top:4px">${esc(myEmpire.name)} empire - rank <b>${myEmpire.rank ?? '?'}</b>${myEmpire.treasury ? ` - ${Math.round(myEmpire.treasury)} treasury` : ''}</div>` : ''
     // follower history sparkline (builds up from the first day you open Grow)
     const hkeys = Object.keys(statsHistory).sort()
@@ -1316,6 +1317,23 @@
     renderCreateEmpire()
   }
 
+  async function openEmpireLeaderboard(leaderboardId) {
+    openOverlay('Leaderboard', '<div class="loading">loading leaderboard...</div>')
+    try {
+      const r = await fetch(`/api/view?kind=empire_leaderboard&id=${encodeURIComponent(leaderboardId)}`)
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'leaderboard failed')
+      if (!d.entries || !d.entries.length) { document.getElementById('obody').innerHTML = '<div class="empty">no entries yet.</div>'; return }
+      const rows = d.entries.map((e) => `<div class="lbrow">
+        <span class="lbrank ${e.rank <= 3 ? 'top' : ''}">${e.rank}</span>
+        <span class="lbname">${e.username ? '@' + esc(e.username) : esc(e.address.slice(0, 6) + '...' + e.address.slice(-4))}</span>
+        <span class="lbn">${e.points != null ? e.points : (e.score ?? '')}</span></div>`).join('')
+      document.getElementById('obody').innerHTML = `${d.name ? `<div class="ps" style="margin-bottom:8px">${esc(d.name)}</div>` : ''}${rows}`
+    } catch (e) {
+      document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>`
+    }
+  }
+
   // Edit your own Farcaster profile (display / bio / pfp). A public change, so
   // 'save' is two-step (tap, then confirm) and only fires on your confirm.
   let pfConfirm = false
@@ -1655,6 +1673,7 @@
     if (act === 'linkedin') { openLinkedIn(); return }
     if (act === 'mylinks') { openMyLinks(); return }
     if (act === 'createempire') { openCreateEmpire(); return }
+    if (act === 'viewemplb') { openEmpireLeaderboard(btn.dataset.lbid); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
     if (act === 'dtaskadd') { const v = document.getElementById('dTaskInput').value.trim(); if (v) { daily.tasks.push({ t: v, done: false }); saveDaily(); render() } return }
