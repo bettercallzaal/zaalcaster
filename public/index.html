@@ -1289,14 +1289,26 @@
   // Farcaster mini-app wallet first (seamless inside Warpcast/Base app),
   // else whatever the browser injects (MetaMask, Coinbase Wallet, etc). No
   // WalletConnect yet - covers desktop + any wallet's built-in dApp browser.
-  function getEthProvider() {
-    if (window.__fcsdk && window.__fcsdk.wallet && window.__fcsdk.wallet.ethProvider) return window.__fcsdk.wallet.ethProvider
+  // The mini-app SDK's real API is the async sdk.wallet.getEthereumProvider()
+  // (a method, not a plain .ethProvider property - an earlier version of
+  // this code guessed wrong, which silently fell through to a raw
+  // window.ethereum and threw an opaque error). Outside a Farcaster client
+  // host the method itself may not behave, so it's wrapped defensively.
+  async function getEthProvider() {
+    if (window.__fcsdk && window.__fcsdk.wallet && typeof window.__fcsdk.wallet.getEthereumProvider === 'function') {
+      try {
+        const p = await window.__fcsdk.wallet.getEthereumProvider()
+        if (p) return p
+      } catch {
+        // not inside a Farcaster client host, or no wallet configured there - fall through
+      }
+    }
     if (window.ethereum) return window.ethereum
     return null
   }
 
   async function connectEmpireWallet() {
-    const provider = getEthProvider()
+    const provider = await getEthProvider()
     if (!provider) { toast('no wallet found - open this in a wallet app browser, or install MetaMask/Coinbase Wallet'); return }
     empireSaveDraftInputs()
     empireDeploy.connecting = true; renderCreateEmpire()
@@ -1311,8 +1323,7 @@
     }
   }
 
-  function empireMessage(mode, name, fid) {
-    if (mode === 'farcaster') return `I am deploying a tokenless Farcaster Empire with Farcaster ID ${fid} and name ${name}`
+  function empireMessage(name) {
     return `I am deploying a custom tokenless Empire named ${name}`
   }
 
@@ -1323,24 +1334,19 @@
     const logoUri = (empireDeploy.logoUri || '').trim()
     if (!name) { toast('empire name is required'); return }
     if (!empireDeploy.address) { toast('connect a wallet first'); return }
-    const mode = empireDeploy.mode
-    const fid = mode === 'farcaster' ? Number(OWNER_FID || 19640) : undefined
-    const farcasterUsername = mode === 'farcaster' ? (ME || 'zaal') : undefined
-    const message = empireMessage(mode, name, fid)
+    const message = empireMessage(name)
 
-    if (mode === 'farcaster' && !window.confirm('Farcaster mode attaches this empire to your profile PERMANENTLY - you cannot create a second one for this profile later. Continue?')) return
     if (!window.confirm(`Your wallet will sign this exact message:\n\n"${message}"\n\nThen deploy the empire on Empire Builder. Continue?`)) return
 
-    const provider = getEthProvider()
+    const provider = await getEthProvider()
     if (!provider) { toast('no wallet found'); return }
 
     empireDeploy.busy = true; empireDeploy.err = null; renderCreateEmpire()
     try {
       const signature = await provider.request({ method: 'personal_sign', params: [message, empireDeploy.address] })
-      const body = { mode, owner: empireDeploy.address, name, signature, message }
+      const body = { mode: 'custom', owner: empireDeploy.address, name, signature, message }
       if (bio) body.bio = bio
       if (logoUri) body.logoUri = logoUri
-      if (mode === 'farcaster') { body.fid = fid; body.farcasterUsername = farcasterUsername }
 
       const r = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const d = await r.json()
@@ -1368,12 +1374,7 @@
     const walletLine = empireDeploy.address
       ? `<div class="ub">connected: ${esc(short)}</div>`
       : `<span class="chip" data-act="connectwallet">${empireDeploy.connecting ? 'connecting...' : 'connect wallet'}</span>`
-    const modeWarn = empireDeploy.mode === 'farcaster'
-      ? '<div class="err" style="margin-top:6px">Farcaster mode is PERMANENT for this profile - you cannot create a second empire for it later. Prefer custom mode unless you are sure.</div>'
-      : ''
     document.getElementById('obody').innerHTML = `<div class="ps" style="margin-bottom:8px">Deploys a real tokenless empire on Empire Builder (empirebuilder.world). No token, no funds move - just a name + treasury address. You sign in your own wallet; nothing here holds a key.</div>
-      <div class="subbar" style="padding-top:0"><span class="chip ${empireDeploy.mode === 'custom' ? 'on' : ''}" data-act="empmode" data-mode="custom">custom (recommended)</span><span class="chip ${empireDeploy.mode === 'farcaster' ? 'on' : ''}" data-act="empmode" data-mode="farcaster">attach to my Farcaster profile</span></div>
-      ${modeWarn}
       <div class="urow" style="cursor:default;margin-top:8px"><input class="sfin" id="emp_name" value="${esc(empireDeploy.name)}" placeholder="empire name" style="flex:1;margin:0"></div>
       <div class="urow" style="cursor:default"><textarea class="sfin" id="emp_bio" placeholder="bio (optional)" rows="2" style="flex:1;margin:0;resize:vertical">${esc(empireDeploy.bio)}</textarea></div>
       <div class="urow" style="cursor:default"><input class="sfin" id="emp_logo" value="${esc(empireDeploy.logoUri)}" placeholder="logo URL (optional)" style="flex:1;margin:0"></div>
@@ -1586,7 +1587,6 @@
     const mlcp = e.target.closest('[data-act="mlcopy"]'); if (mlcp) { mlSaveInputs(); const txt = (socials || []).filter((x) => x.url).map((x) => `${x.label}: ${x.url}`).join('\n'); navigator.clipboard.writeText(txt).then(() => toast('all links copied')).catch(() => toast('copy failed')); return }
     const ep = e.target.closest('[data-act="editprofile"]'); if (ep) { openEditProfile(); return }
     const pfs = e.target.closest('[data-act="pfsave"]'); if (pfs) { saveProfile(pfs); return }
-    const empm = e.target.closest('[data-act="empmode"]'); if (empm) { empireSaveDraftInputs(); empireDeploy.mode = empm.dataset.mode; renderCreateEmpire(); return }
     const empc = e.target.closest('[data-act="connectwallet"]'); if (empc) { connectEmpireWallet(); return }
     const empd = e.target.closest('[data-act="deployempire"]'); if (empd) { signAndDeployEmpire(); return }
     const al = e.target.closest('[data-act="addtolist"]')
