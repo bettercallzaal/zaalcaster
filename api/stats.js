@@ -3,8 +3,39 @@
 
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
-import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters } from '../empire.js'
+import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
 import { config } from '../config.js'
+
+async function readJsonBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body
+  const chunks = []
+  for await (const chunk of req) chunks.push(chunk)
+  const raw = Buffer.concat(chunks).toString('utf8')
+  if (!raw) return {}
+  try { return JSON.parse(raw) } catch { return {} }
+}
+
+// Manual validation, matching this repo's dependency-free convention (no
+// zod here - see empire.js's own id/address regex checks). The signature
+// itself is verified by Empire Builder, not here; this just rejects
+// obviously-malformed requests before spending an API call on them, and
+// re-derives the expected message server-side so a tampered client can't
+// smuggle a different message than what it claims to have signed.
+function validateDeployPayload(body) {
+  if (body.mode !== 'custom' && body.mode !== 'farcaster') return 'mode must be "custom" or "farcaster"'
+  if (typeof body.owner !== 'string' || !isValidWalletAddress(body.owner)) return 'owner must be a wallet address'
+  if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 100) return 'name is required, max 100 chars'
+  if (body.bio != null && (typeof body.bio !== 'string' || body.bio.length > 2000)) return 'bio must be a string, max 2000 chars'
+  if (body.logoUri != null && typeof body.logoUri !== 'string') return 'logoUri must be a string'
+  if (body.mode === 'farcaster') {
+    if (typeof body.fid !== 'number' || !Number.isFinite(body.fid) || body.fid <= 0) return 'fid is required for farcaster mode'
+    if (typeof body.farcasterUsername !== 'string' || !body.farcasterUsername.trim()) return 'farcasterUsername is required for farcaster mode'
+  }
+  if (typeof body.signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(body.signature)) return 'signature must be a 0x hex string'
+  const expectedMessage = tokenlessEmpireMessage({ mode: body.mode, name: body.name, fid: body.fid })
+  if (body.message !== expectedMessage) return `message does not match the expected text for this name/mode (expected: "${expectedMessage}")`
+  return null
+}
 
 // engagement weight: replies + recasts count more than likes (they spread you)
 function score(c) {
@@ -70,6 +101,33 @@ async function recentNotifications(pages = 4) {
 
 export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
+
+  // POST = deploy a tokenless empire. The client has already connected a
+  // wallet and signed tokenlessEmpireMessage() in it - this endpoint never
+  // signs anything, it only relays the already-signed payload to Empire
+  // Builder with the server-side API key. Zaal-only (blockedByAuth above),
+  // same as every other write route in this app.
+  if (req.method === 'POST') {
+    const body = await readJsonBody(req)
+    const err = validateDeployPayload(body)
+    if (err) { res.status(400).json({ error: err }); return }
+
+    const result = await deployTokenlessEmpire({
+      mode: body.mode,
+      owner: body.owner,
+      name: body.name.trim(),
+      ...(body.mode === 'farcaster' ? { fid: body.fid, farcasterUsername: body.farcasterUsername } : {}),
+      ...(body.bio ? { bio: body.bio } : {}),
+      ...(body.logoUri ? { logoUri: body.logoUri } : {}),
+      signature: body.signature,
+      message: body.message,
+    })
+
+    if (!result.ok) { res.status(502).json({ error: result.error }); return }
+    res.status(200).json({ ok: true, empire: result.data })
+    return
+  }
+
   try {
     const [castsRes, notifs, me, suggestions, storage, empire] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),

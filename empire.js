@@ -1,15 +1,22 @@
-// empire.js - Empire Builder read client (empirebuilder.world), dependency-free
-// ESM, mirrors juke.js's never-throws { ok, ... } style.
+// empire.js - Empire Builder client (empirebuilder.world), dependency-free ESM,
+// mirrors juke.js's never-throws { ok, ... } style.
 //
 // Empire Builder (Zaal is a partner, white-label) wraps a Farcaster/Base
 // project in leaderboards + boosters + a treasury. Per research doc 991, the
-// Triple-A path is: stand up a TOKENLESS empire first (Zaal's own manual step
-// in the Empire Builder UI - not this file), build energy, tokenize later.
+// Triple-A path is: stand up a TOKENLESS empire first, build energy, tokenize
+// later.
 //
-// This file is READ-ONLY. Empire Builder's public API (doc 582, verified
-// 2026-05-01) documents 8 read endpoints and zero write endpoints - create,
-// distribute, and burn are partner-whitelisted and undocumented, so this file
-// does not attempt them. No API key is required for any call below.
+// READS need no key (public, doc 582, verified 2026-05-01). The one WRITE
+// call below - deployTokenlessEmpire - needs both an x-api-key (server-only,
+// EMPIRE_BUILDER_API_KEY) AND a signature this file never produces itself:
+// the empire's `owner` wallet must EIP-191-sign the exact required message
+// client-side, in the owner's own wallet. This file only relays an
+// already-signed payload - it has no way to sign anything and never holds a
+// private key, so it cannot deploy an empire on its own. The human always
+// pulls the trigger by signing in their wallet app.
+
+import fs from 'fs'
+import path from 'path'
 
 const API_ORIGIN = 'https://empirebuilder.world/api'
 const REQUEST_TIMEOUT_MS = 10_000
@@ -128,4 +135,70 @@ export async function getLeaderboardAddressStats(leaderboardId, walletAddress) {
 export async function getEmpireBoosters(empireId) {
   if (!isValidEmpireId(empireId)) return { ok: false, status: 400, error: 'Invalid empire id (expected a Base token address)' }
   return getJson(`/boosters/${empireId}`)
+}
+
+// EMPIRE_BUILDER_API_KEY: process.env wins (Vercel), then the local creds
+// file, same lookup order as juke.js's loadJukeKey().
+export function loadEmpireBuilderKey() {
+  if (process.env.EMPIRE_BUILDER_API_KEY) return process.env.EMPIRE_BUILDER_API_KEY.trim()
+  try {
+    const credsPath = path.join(process.env.HOME || '', '.zao/private/farcaster-zaal.env')
+    if (fs.existsSync(credsPath)) {
+      for (const line of fs.readFileSync(credsPath, 'utf-8').split('\n')) {
+        const t = line.trim()
+        if (!t || t.startsWith('#')) continue
+        const [k, ...rest] = t.split('=')
+        if (k === 'EMPIRE_BUILDER_API_KEY') return rest.join('=').trim()
+      }
+    }
+  } catch {
+    // unreadable creds - treated as no key
+  }
+  return null
+}
+
+// Exact message strings Empire Builder requires the owner wallet to sign
+// (EIP-191 personal_sign) - client and server must agree on these byte for
+// byte, so they live here as the single source of truth for both sides.
+export function tokenlessEmpireMessage({ mode, name, fid }) {
+  if (mode === 'farcaster') return `I am deploying a tokenless Farcaster Empire with Farcaster ID ${fid} and name ${name}`
+  return `I am deploying a custom tokenless Empire named ${name}`
+}
+
+// POST /api/deploy-empire-tokenless - the one write call this file makes.
+// `payload` must already carry a valid `signature` over `tokenlessEmpireMessage`,
+// produced client-side by the owner wallet - see the file header. This
+// function does not sign, does not hold a key, and does not decide who is
+// allowed to call it (that's the caller's job - see api/stats.js's
+// blockedByAuth gate).
+export async function deployTokenlessEmpire(payload) {
+  const key = loadEmpireBuilderKey()
+  if (!key) return { ok: false, status: 401, error: 'EMPIRE_BUILDER_API_KEY not set (env or ~/.zao/private/farcaster-zaal.env)' }
+
+  let res
+  try {
+    res = await fetch(`${API_ORIGIN}/deploy-empire-tokenless`, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'TimeoutError'
+    return { ok: false, status: 502, error: timedOut ? 'Empire Builder API timed out' : 'Could not reach the Empire Builder API' }
+  }
+
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    data = null
+  }
+
+  if (!res.ok) {
+    const detail = data?.error || data?.message || JSON.stringify(data || {}).slice(0, 300)
+    return { ok: false, status: res.status, error: `Empire Builder deploy failed (${res.status}): ${detail}` }
+  }
+
+  return { ok: true, data }
 }
