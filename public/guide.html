@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zaalcaster guide</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0c0c12; color: #e9e9ee; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 28px 18px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h1 span { color: #855DCD; }
+  .sub { color: #8a8a99; margin: 0 0 24px; }
+  h2 { font-size: 19px; margin: 34px 0 10px; color: #a99cff; }
+  p, li { color: #c9c9d4; }
+  code { background: #1a1a26; border: 1px solid #24242f; border-radius: 5px; padding: 1px 6px; font-size: 13px; color: #e9e9ee; }
+  .key { display: inline-block; background: #1e1e38; border: 1px solid #33334d; border-radius: 5px; padding: 0 8px; font-size: 13px; color: #a99cff; font-weight: 600; }
+  a { color: #a99cff; }
+
+  /* the daily loop - the heart of the page */
+  .loop { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+  .loop li { counter-increment: step; display: flex; gap: 14px; align-items: flex-start; background: #151529; border: 1px solid #24242f; border-radius: 12px; padding: 13px 16px; margin: 8px 0; }
+  .loop li::before { content: counter(step); flex: none; width: 28px; height: 28px; border-radius: 50%; background: #1e1e38; border: 1px solid #33334d; color: #a99cff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; margin-top: 1px; }
+  .loop b { color: #e9e9ee; }
+  .loop .how { display: block; color: #8a8a99; font-size: 13px; margin-top: 2px; }
+
+  /* collapsible reference */
+  details { background: #14141d; border: 1px solid #24242f; border-radius: 12px; margin: 8px 0; padding: 0; }
+  summary { cursor: pointer; padding: 13px 16px; font-weight: 600; color: #e9e9ee; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "+"; color: #a99cff; margin-right: 10px; font-weight: 700; }
+  details[open] summary::before { content: "-"; }
+  details .body { padding: 0 16px 14px; }
+  details ol, details ul { margin: 6px 0; padding-left: 20px; }
+  details li { margin: 6px 0; }
+  .warn { color: #e0a955; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #24242f; vertical-align: top; }
+  th { color: #8a8a99; font-weight: 600; }
+  .footer { margin-top: 44px; color: #6f6f7a; font-size: 13px; border-top: 1px solid #24242f; padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>zaal<span>caster</span> guide</h1>
+<p class="sub">The daily loop first - follow the numbers, ~15 minutes. Everything else is reference, folded below. Updated 2026-07-16.</p>
+
+<h2>The daily loop</h2>
+<ol class="loop">
+  <li><div><b>Open Daily and say GM.</b>
+    <span class="how"><span class="key">1</span> - post a GM cast. The checklist ticks itself once the app sees it went out.</span></div></li>
+  <li><div><b>Clear your ZOE tasks.</b>
+    <span class="how">Same screen, ZOE card - soonest due first. Do the quick ones now, tap <b>done</b> as you go. The shared board updates instantly.</span></div></li>
+  <li><div><b>Get to inbox zero.</b>
+    <span class="how"><span class="key">3</span> - tap <b>draft all</b>, then walk the list: send the good drafts, edit the close ones, skip the rest. Every send is a confirm - nothing fires on its own.</span></div></li>
+  <li><div><b>Skim your channels.</b>
+    <span class="how"><span class="key">4</span> - /zao, /wavewarz, /zabal. Reply or boost one good cast per channel.</span></div></li>
+  <li><div><b>Engage 3 new people.</b>
+    <span class="how"><span class="key">7</span> - Grow's "people to engage next" list, or just work the feed (<span class="key">2</span>). First touches compound.</span></div></li>
+  <li><div><b>Post the day's cast.</b>
+    <span class="how"><span class="key">6</span> - one real post. Got a second idea? Schedule it for later instead of stacking them.</span></div></li>
+  <li><div><b>Reply to your top fans.</b>
+    <span class="how">Still on Grow - the "top fans" list is who engages you most. A reply to them is worth ten cold casts.</span></div></li>
+  <li><div><b>Log decisions as they happen.</b>
+    <span class="how">Made a call today? Type it into the ZOE card's decision box. It lands in the tracker and the knowledge graph - future you can find it with Ask ZAO (<span class="key">cmd+K</span>).</span></div></li>
+</ol>
+
+<h2>Weekly, not daily</h2>
+<ol class="loop">
+  <li><div><b>Check your empire.</b>
+    <span class="how"><span class="key">8</span> - leaderboard moving? Boosters still right? Paste any distribution tx to see who got paid.</span></div></li>
+  <li><div><b>Check the bounty board.</b>
+    <span class="how"><span class="key">9</span> - open POIDH rounds, new claims worth judging or boosting.</span></div></li>
+  <li><div><b>Glance at the coin.</b>
+    <span class="how">Grow tab shows your Zora coin's market cap + 24h move. A glance, not a habit.</span></div></li>
+</ol>
+
+<h2>Reference</h2>
+
+<details>
+<summary>Getting in - owner vs guest</summary>
+<div class="body">
+<p>The app is gated by Sign In With Farcaster. The owner (the configured fid) gets everything. Everyone else gets a read-only view: Feed, Channels, Search, POIDH. No write action exists in the guest surface - the server enforces it, not just the UI. Nothing a guest does can post, like, or spend on the owner's behalf.</p>
+</div>
+</details>
+
+<details>
+<summary>Tabs + keys</summary>
+<div class="body">
+<table>
+  <tr><th>Key</th><th>Tab</th><th>What</th></tr>
+  <tr><td><span class="key">1</span></td><td>Daily</td><td>checklist, ZOE card, launcher, scheduled posts</td></tr>
+  <tr><td><span class="key">2</span></td><td>Feed</td><td>following / for-you / trending / lists</td></tr>
+  <tr><td><span class="key">3</span></td><td>Inbox</td><td>unanswered replies + mentions, AI drafts</td></tr>
+  <tr><td><span class="key">4</span></td><td>Chan</td><td>home channels + any channel</td></tr>
+  <tr><td><span class="key">5</span></td><td>Search</td><td>people + casts</td></tr>
+  <tr><td><span class="key">6</span></td><td>Post</td><td>compose, quote, schedule, cross-post</td></tr>
+  <tr><td><span class="key">7</span></td><td>Grow</td><td>followers, top fans, top casts, Zora coin</td></tr>
+  <tr><td><span class="key">8</span></td><td>Empire</td><td>Empire Builder: empire, leaderboards, boosters</td></tr>
+  <tr><td><span class="key">9</span></td><td>POIDH</td><td>bounty reader</td></tr>
+</table>
+<p><span class="key">cmd+K</span> anywhere: jump to a tab, open a profile with <code>@name</code>, search, or Ask ZAO.</p>
+</div>
+</details>
+
+<details>
+<summary>ZOE - what the card actually does</summary>
+<div class="body">
+<p>ZOE is the ZAO's assistant agent. It lives on Telegram, but zaalcaster plugs into the same two surfaces it works from:</p>
+<ul>
+  <li><b>Tasks</b> - the ZOE card on Daily reads the shared team tracker. Tapping <b>done</b> completes the task on the real board - no Telegram round trip.</li>
+  <li><b>Decisions</b> - the decision box writes a permanent record to the tracker; ZOE mirrors it into the knowledge graph.</li>
+  <li><b>Ask ZAO</b> - <span class="key">cmd+K</span>, type a topic, pick Ask ZAO. Searches months of meetings and decisions: "what did we decide about the Empire API?" gets a real answer.</li>
+</ul>
+</div>
+</details>
+
+<details>
+<summary>Posting - previews, scheduling, cross-post</summary>
+<div class="body">
+<ul>
+  <li>Everything previews before sending; the confirm tap is the send. The app never posts on its own.</li>
+  <li><b>Schedule</b>: pick a datetime, queue it - a cron sends it even with the app closed. Queued posts show on Daily.</li>
+  <li><b>Cross-post</b>: mirror the same cast to X and Bluesky in one action.</li>
+</ul>
+</div>
+</details>
+
+<details>
+<summary>Empire - the tokenless-first playbook</summary>
+<div class="body">
+<p>Empire Builder (empirebuilder.world) wraps a community in leaderboards, boosters, and a treasury - with or without a token. The playbook: <b>don't launch a token first</b>. Stand up a tokenless empire, build real energy on a leaderboard, tokenize later when there's something for the token to amplify.</p>
+<p>On the tab: your empire card (leaderboards, boosters, rewards, your rank), view-leaderboard (top 25 with Farcaster names), a paste-a-tx-hash lookup showing exactly who a distribution paid, the ecosystem's top empires, and a capabilities catalog marking what's live vs documented.</p>
+</div>
+</details>
+
+<details>
+<summary>Create a tokenless empire (step by step)</summary>
+<div class="body">
+<p>Needs: a wallet (MetaMask, Coinbase Wallet, or a Farcaster client's built-in one) and a minute. No token, no funds move.</p>
+<ol>
+  <li>Empire tab -> <b>+ create a tokenless empire</b>.</li>
+  <li>Name it (bio + logo optional).</li>
+  <li><b>Connect wallet</b> - this wallet becomes the empire's owner, use the one you mean to keep.</li>
+  <li><b>Sign & deploy</b> - your wallet shows the exact sentence you're signing, nothing hidden. The app never holds a key; your signature is the only thing that can deploy.</li>
+  <li>Copy the empire id it returns, put the owner wallet into <code>config.js</code> (<code>empireOwnerWallet</code>) - the tab shows your card from then on.</li>
+</ol>
+<p class="warn">No "attach to my Farcaster profile" option on purpose: a profile-attached empire is permanent - that profile can never create another. Create standalone.</p>
+</div>
+</details>
+
+<details>
+<summary>Add a booster (step by step)</summary>
+<div class="body">
+<p>A booster multiplies leaderboard points for people who hold something - reward your actual community.</p>
+<ol>
+  <li>Empire tab -> <b>+ add booster</b> on your card.</li>
+  <li>Type: <b>ERC20</b> (hold a token), <b>NFT</b> (hold from a collection), or <b>reputation</b> (QUOTIENT score).</li>
+  <li>Paste the contract address (skipped for reputation).</li>
+  <li>Multiplier 1.1 - 5.0.</li>
+  <li>Minimum to qualify in normal amounts - e.g. <code>1000000</code> for a 1M floor. Decimals stay 18 unless the token is unusual; the math is exact.</li>
+  <li>Name + symbol (display only), connect wallet, sign. Live within a minute.</li>
+</ol>
+</div>
+</details>
+
+<details>
+<summary>POIDH - bounties</summary>
+<div class="body">
+<p>POIDH ("pics or it didn't happen", poidh.xyz): fund a pot, people submit proof, the pot pays. The tab reads any bounty live - round chips for the BCZ rounds, or paste any bounty id for the pot, status, and every claim with images. Claiming itself happens on poidh.xyz (it's an on-chain action from your wallet).</p>
+</div>
+</details>
+
+<details>
+<summary>Setup - what unlocks what</summary>
+<div class="body">
+<table>
+  <tr><th>Feature</th><th>Needs</th></tr>
+  <tr><td>Reading Farcaster</td><td><code>NEYNAR_API_KEY</code> + your fid</td></tr>
+  <tr><td>Posting</td><td>a Neynar managed signer (<code>npm run mint-signer</code>)</td></tr>
+  <tr><td>Sign-in gate</td><td><code>SESSION_SECRET</code> + <code>NEYNAR_CLIENT_ID</code> - both or neither; half-set fails closed on purpose</td></tr>
+  <tr><td>AI drafts + digest</td><td><code>OPENROUTER_API_KEY</code></td></tr>
+  <tr><td>Sync + scheduled posts</td><td>Vercel KV + <code>CRON_SECRET</code></td></tr>
+  <tr><td>Create empire / boosters</td><td><code>EMPIRE_BUILDER_API_KEY</code> + your wallet in the browser</td></tr>
+  <tr><td>Empire card</td><td><code>empireOwnerWallet</code> in config.js</td></tr>
+  <tr><td>Zora coin card</td><td><code>zoraCoinAddress</code> in config.js - no key</td></tr>
+  <tr><td>ZOE card + Ask ZAO</td><td><code>ZAO_TRACKER_URL</code>, <code>ZAO_TRACKER_KEY</code>, <code>BONFIRE_API_KEY</code>, <code>BONFIRE_ID</code></td></tr>
+  <tr><td>POIDH, top empires</td><td>nothing - public APIs</td></tr>
+</table>
+</div>
+</details>
+
+<details>
+<summary>Fork it</summary>
+<div class="body">
+<p>zaalcaster is one person's client, built to be forked. Name yours <code>&lt;your-farcaster-username&gt;caster</code>. Identity, channels, brands, voice, and every integration knob live in <code>config.js</code> + env vars - the <a href="https://github.com/bettercallzaal/zaalcaster">README</a> walks the whole thing.</p>
+</div>
+</details>
+
+<div class="footer">zaalcaster - reads are free, nothing is sent without your confirm. <a href="/">back to the app</a></div>
+
+</div>
+</body>
+</html>

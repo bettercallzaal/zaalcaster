@@ -294,7 +294,7 @@
     <div id="gateErr" style="color:#ff8a6a;font-size:13px;margin-top:8px;min-height:16px"></div>
   </div>
 </div>
-<footer>your farcaster - reads are free, nothing is sent without your confirm</footer>
+<footer>your farcaster - reads are free, nothing is sent without your confirm - <a href="/guide.html" style="color:#8a8a99">guide</a></footer>
 <button id="fab" title="leave feedback">feedback</button>
 
 <script>
@@ -1248,7 +1248,7 @@
       ['compose', 'Post', 'new cast'],
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
-      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div>`
+      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div><div class="launch" data-openurl="/guide.html"><div class="ll">Guide</div><div class="ls">how it all works</div></div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
