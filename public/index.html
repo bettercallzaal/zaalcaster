@@ -932,8 +932,15 @@
       }
       storageLine = `<div style="margin-top:8px"><div class="ub">storage - ${sg.units} unit${sg.units === 1 ? '' : 's'}${(sg.casts && sg.casts.used >= sg.casts.capacity) ? ' - casts full, oldest getting pruned' : ''}</div>${bar('casts', sg.casts)}${bar('reactions', sg.reactions)}${bar('links', sg.links)}</div>`
     }
+    // Zora Creator Coin card - inert until config.zoraCoinAddress is set.
+    let zoraLine = ''
+    if (d.zora && !d.zora.error) {
+      const z = d.zora
+      const delta = z.marketCapDelta24h != null ? `${z.marketCapDelta24h > 0 ? '+' : ''}${z.marketCapDelta24h.toFixed(2)}%` : ''
+      zoraLine = `<div class="t" style="color:#a99cff;font-size:14px;margin-top:8px"><a class="open" href="${esc(z.url)}" target="_blank" rel="noopener">$${esc(z.symbol)}</a> Zora coin - ${z.marketCap != null ? '$' + z.marketCap.toLocaleString() : '?'} mcap${delta ? ` (${delta})` : ''}</div>`
+    }
     const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
-      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${histLine}${storageLine}</div>`
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${histLine}${storageLine}${zoraLine}</div>`
     const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
       <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
       <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>

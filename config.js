@@ -26,6 +26,13 @@ export const config = {
   // Empire Builder back; it never creates, funds, or writes to one.
   empireOwnerWallet: '',
 
+  // Zora Creator Coin card on the Grow tab. Blank = no card shown. Set to
+  // your coin's contract address on Base - Zaal's is already known:
+  // 0x2275c5e507f1d01a0c043a4f888ec58f8215c285 (found live as a booster
+  // entry on the ZABAL Empire leaderboard) - left blank here for the same
+  // reason as empireOwnerWallet above, it's Zaal's call to set it.
+  zoraCoinAddress: '',
+
   // Your brands - each gets a page (channel feed + links) in the Brands hub.
   brands: [
     { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },

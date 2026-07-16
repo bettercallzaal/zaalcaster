@@ -4,6 +4,7 @@
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
 import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
+import { getCoin } from '../zora.js'
 import { config } from '../config.js'
 
 async function readJsonBody(req) {
@@ -122,6 +123,23 @@ async function empireSummary() {
   }
 }
 
+// Zora Creator Coin card. Inert until config.zoraCoinAddress is set.
+async function zoraSummary() {
+  const address = config.zoraCoinAddress
+  if (!address) return null
+  const coin = await getCoin(address)
+  if (!coin.ok) return { error: coin.error }
+  return {
+    name: coin.data.name,
+    symbol: coin.data.symbol,
+    priceUsdc: coin.data.tokenPrice?.priceInUsdc ? Number(coin.data.tokenPrice.priceInUsdc) : null,
+    marketCap: coin.data.marketCap ? Number(coin.data.marketCap) : null,
+    marketCapDelta24h: coin.data.marketCapDelta24h ? Number(coin.data.marketCapDelta24h) : null,
+    totalVolume: coin.data.totalVolume ? Number(coin.data.totalVolume) : null,
+    url: `https://zora.co/coin/base:${address}`,
+  }
+}
+
 // pull several pages of notifications so "who engages you" is deep, not just
 // the last 25. Caps at 4 pages (100 notifs) to stay fast.
 async function recentNotifications(pages = 4) {
@@ -166,13 +184,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [castsRes, notifs, me, suggestions, storage, empire] = await Promise.all([
+    const [castsRes, notifs, me, suggestions, storage, empire, zora] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       recentNotifications(4),
       getUser(process.env.FID || '19640').catch(() => null),
       getFollowSuggestions({ limit: 12 }).catch(() => []),
       getStorageUsage().catch(() => null),
       empireSummary().catch(() => null),
+      zoraSummary().catch(() => null),
     ])
 
     const topCasts = (castsRes.casts || [])
@@ -204,7 +223,7 @@ export default async function handler(req, res) {
       followers: me?.follower_count ?? null,
       following: me?.following_count ?? null,
       score: me?.experimental?.neynar_user_score ?? null,
-      topCasts, topEngagers, suggest, storage, empire,
+      topCasts, topEngagers, suggest, storage, empire, zora,
     })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'stats failed' })
