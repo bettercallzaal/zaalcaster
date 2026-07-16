@@ -62,6 +62,7 @@ export default async function handler(req, res) {
         brands: config.brands || [],
         socials: config.socials || [],
         daily: config.daily,
+        productName: config.productName,
       },
     })
     return

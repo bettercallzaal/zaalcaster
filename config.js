@@ -7,10 +7,12 @@
 // Secrets (Neynar key, your signer) live in env vars, never here.
 
 const username = 'zaal' // <-- your Farcaster username, no @
+const PRODUCT_NAME = 'SPARKZ' // Product name for the Stage 1 wizard - change this one line to rename
 
 export const config = {
   username,
   appName: `${username}caster`,
+  productName: PRODUCT_NAME,
 
   // Your Farcaster FID. Env USER_FID (or ZAAL_FID) overrides this at runtime.
   fid: '19640',

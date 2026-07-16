@@ -344,6 +344,7 @@
   let BRANDS = [] // your brands, set from config on boot
   let OWNER_FID = null // the app owner's fid (from config) - guests get the welcome
   let APPNAME = 'zaalcaster' // set from config on boot
+  let PRODUCT_NAME = 'SPARKZ' // wizard product name, set from config on boot
   // a row of one-tap quick-reply chips that fill the reply box for a given cast
   const quickRow = (hash) => `<div class="subbar" style="padding:2px 0 6px;gap:6px">${QUICK.map((q) => `<span class="chip" data-act="quick" data-hash="${esc(hash)}" data-q="${esc(q)}">${esc(q)}</span>`).join('')}</div>`
 
@@ -1066,6 +1067,11 @@
   function renderEmpire() {
     if (!st.grow.loaded) return '<div class="loading">loading empire data...</div>'
     if (st.grow.err) return `<div class="err">${esc(st.grow.err)}</div>`
+    let result = ''
+    // Show the wizard if not completed
+    if (!wizard.ready) {
+      result += renderWizardStep()
+    }
     const d = st.grow.data
     const mineLine = d.empire?.mine
       ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
@@ -1099,9 +1105,10 @@
     const txLookup = `<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">look up a distribution (paste a tx hash)</b></div>
       <div class="urow" style="cursor:default"><input class="sfin" id="emp_txhash" placeholder="0x..." style="flex:1;margin:0"><span class="chip" data-act="lookupdist">look up</span></div>
       <div id="empDistResult"></div>`
-    return empCard + createBtn + boosterQueueSection() + empireSec + txLookup
+    result += empCard + createBtn + boosterQueueSection() + empireSec + txLookup
       + '<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">what this tab can do (research doc 1094a)</b></div>'
       + renderEmpireCapabilities()
+    return result
   }
 
   // ===== The booster engage-back queue (doc 1088 Phase 2b, confirm-first).
@@ -1557,6 +1564,117 @@
       <div class="subbar" style="margin-top:10px"><span class="chip ${mylinksEdit ? 'on' : ''}" data-act="mltoggle">${mylinksEdit ? 'done' : 'edit'}</span><span class="chip" data-act="mlcopy">copy all</span><span class="chip" data-act="editprofile">edit Farcaster profile</span></div>`)
   }
 
+  // ===== Stage 1 Ideation Wizard (SPARKZ: idea -> name -> create empire -> boost energy -> launch prep) =====
+  // A guided walk-through of doc 1088's Stage 1 workflow, walking the creator through each phase.
+  // Reuses existing flows (openCreateEmpire logic, booster queue, launch prep) and persists progress
+  // via the store pattern (localStorage + optional KV). Product name is config.productName, so
+  // renaming is a single constant change - the code itself stays product-agnostic.
+  const wizard = {
+    currentStep: 1,
+    steps: [
+      { num: 1, title: 'Your idea', desc: 'what is this project about' },
+      { num: 2, title: 'Name it', desc: 'what do you want to call it' },
+      { num: 3, title: 'Create empire', desc: 'launch a tokenless empire for it' },
+      { num: 4, title: 'Build energy', desc: 'scan and engage with supporters' },
+      { num: 5, title: 'Ready to launch', desc: 'prep your token launch' },
+    ],
+    idea: '',
+    empireName: '',
+    empireCreated: false,
+    ready: false,
+  }
+
+  function loadWizardState() {
+    const stored = lsGet('zc_wizard', {})
+    wizard.currentStep = stored.currentStep || 1
+    wizard.idea = stored.idea || ''
+    wizard.empireName = stored.empireName || ''
+    wizard.empireCreated = stored.empireCreated || false
+    wizard.ready = stored.ready || false
+  }
+
+  function saveWizardState() {
+    lsSet('zc_wizard', {
+      currentStep: wizard.currentStep,
+      idea: wizard.idea,
+      empireName: wizard.empireName,
+      empireCreated: wizard.empireCreated,
+      ready: wizard.ready,
+    })
+  }
+
+  function renderWizardStep() {
+    const step = wizard.steps[wizard.currentStep - 1]
+    if (!step) return '<div class="err">invalid step</div>'
+
+    let content = `<div class="subbar" style="margin-top:10px">
+      <b style="color:#8a8a99;font-size:13px">${PRODUCT_NAME} Stage 1 - Step ${wizard.currentStep} of 5</b>
+    </div>
+    <div class="digest" style="margin-top:8px">
+      <div class="t">${esc(step.title)}</div>
+      <div class="ub" style="margin-top:4px;color:#8a8a99">${esc(step.desc)}</div>
+    </div>`
+
+    if (wizard.currentStep === 1) {
+      // Step 1: Idea input
+      content += `<div class="urow" style="cursor:default">
+        <textarea class="sfin" id="wiz_idea" placeholder="e.g. a gamified builder community, a music collaboration tool, an onchain art platform..." rows="3" style="flex:1;margin:0;resize:vertical">${esc(wizard.idea)}</textarea>
+      </div>
+      <div class="ub" style="margin-top:6px;color:#8a8a99;font-size:13px">no more than a few sentences - what is the core idea</div>`
+    } else if (wizard.currentStep === 2) {
+      // Step 2: Name it
+      content += `<div class="urow" style="cursor:default">
+        <input class="sfin" id="wiz_name" value="${esc(wizard.empireName)}" placeholder="e.g. BUILDERS, CANVAS, SOUNDZ, ZAO..." style="flex:1;margin:0">
+      </div>
+      <div class="ub" style="margin-top:6px;color:#8a8a99;font-size:13px">the name of your empire - can be updated on Empire Builder later</div>`
+    } else if (wizard.currentStep === 3) {
+      // Step 3: Create empire (reuse the empire signing logic)
+      if (wizard.empireCreated) {
+        content += `<div class="digest" style="margin-top:8px;background:#1a3a2a">
+          <div class="ub" style="color:#3fbf7f">Empire created successfully</div>
+          <div class="ub" style="margin-top:4px">your ${esc(wizard.empireName)} empire is now on Empire Builder. next: build energy by running the booster scan.</div>
+        </div>`
+      } else {
+        content += `<div class="ps" style="margin-top:8px">deploys a tokenless empire with the name you chose. you sign in your own wallet - nothing here holds a key.</div>
+        <div class="subbar" style="margin-top:8px"><span class="chip" data-act="wizcreateemp">${empireDeploy.busy ? 'creating...' : (!empireDeploy.address ? 'connect wallet & create' : 'create ' + esc(wizard.empireName))}</span></div>
+        ${empireDeploy.address ? `<div class="ub" style="margin-top:6px">wallet: ${esc(empireDeploy.address.slice(0, 6))}...${esc(empireDeploy.address.slice(-4))}</div>` : ''}
+        ${empireDeploy.err ? `<div class="err" style="margin-top:6px">${esc(empireDeploy.err)}</div>` : ''}`
+      }
+    } else if (wizard.currentStep === 4) {
+      // Step 4: Energy checklist (reuse booster queue)
+      content += boosterQueueSection()
+    } else if (wizard.currentStep === 5) {
+      // Step 5: Launch prep (reuse launch prep logic)
+      content += `<div class="ps" style="margin-top:8px">prep your token launch. this creates the @clanker launch cast and pre-fills the Post tab, where you preview and confirm before sending.</div>
+        <div class="urow" style="cursor:default"><input class="sfin" id="wiz_lp_name" value="${esc(launchForm.name)}" placeholder="token name" style="flex:1;margin:0"><input class="sfin" id="wiz_lp_ticker" value="${esc(launchForm.ticker)}" placeholder="TICKER" style="width:110px;margin:0"></div>
+        <div class="urow" style="cursor:default"><input class="sfin" id="wiz_lp_purpose" value="${esc(launchForm.purpose)}" placeholder="one line on what it funds (optional)" style="flex:1;margin:0"></div>
+        <div class="subbar" style="margin-top:8px"><span class="chip" data-act="wizlaunchprep">prefill Post tab</span></div>`
+    }
+
+    // Progress bar
+    const progressBars = wizard.steps.map((s, i) => {
+      const completed = i < wizard.currentStep - 1
+      const current = i === wizard.currentStep - 1
+      return `<div style="flex:1;height:3px;background:${completed ? '#3fbf7f' : (current ? '#f5a623' : '#24242f')};border-radius:1px"></div>`
+    }).join('<div style="width:4px"></div>')
+
+    content = `<div style="display:flex;gap:4px;margin-top:8px;margin-bottom:8px">${progressBars}</div>` + content
+
+    // Navigation
+    let navChips = ''
+    if (wizard.currentStep > 1) {
+      navChips += `<span class="chip" data-act="wizprev">back</span>`
+    }
+    if (wizard.currentStep < 5) {
+      navChips += `<span class="chip" data-act="wiznext">next</span>`
+    } else {
+      navChips += `<span class="chip" data-act="wizdone">done</span>`
+    }
+    content += `<div class="subbar" style="margin-top:10px">${navChips}</div>`
+
+    return content
+  }
+
   // ===== Create a tokenless Empire (Empire Builder) =====
   // The one thing this app is NOT allowed to do is sign anything or hold a
   // key - the owner wallet signs the required message right here, in the
@@ -1644,6 +1762,11 @@
       const d = await r.json()
       if (!r.ok || !d.ok) throw new Error(d.error || 'deploy failed')
       empireDeploy.result = d.empire
+      // Mark wizard step 3 as complete if we're in the wizard
+      if (wizard.currentStep === 3) {
+        wizard.empireCreated = true
+        saveWizardState()
+      }
       toast('empire deployed')
     } catch (e) {
       empireDeploy.err = e && e.message ? e.message : 'deploy failed'
@@ -2305,6 +2428,37 @@
     if (act === 'openstaking') { openStaking(); return }
     if (act === 'openlaunchprep') { openLaunchPrep(); return }
     if (act === 'loadbooster') { if (!st.booster.loading) loadBoosterQueue(); return }
+    // Wizard actions
+    if (act === 'wizprev') { wizard.currentStep = Math.max(1, wizard.currentStep - 1); saveWizardState(); render(); return }
+    if (act === 'wiznext') {
+      // Save inputs before moving to next step
+      if (wizard.currentStep === 1) { wizard.idea = (document.getElementById('wiz_idea').value || '').trim() }
+      else if (wizard.currentStep === 2) { wizard.empireName = (document.getElementById('wiz_name').value || '').trim() }
+      else if (wizard.currentStep === 5) { launchForm.name = (document.getElementById('wiz_lp_name').value || '').trim(); launchForm.ticker = (document.getElementById('wiz_lp_ticker').value || '').trim(); launchForm.purpose = (document.getElementById('wiz_lp_purpose').value || '').trim() }
+      if (wizard.currentStep < 5) { wizard.currentStep++; saveWizardState(); render() }
+      return
+    }
+    if (act === 'wizcreateemp') {
+      wizard.empireName = (document.getElementById('wiz_name').value || '').trim()
+      if (!wizard.empireName) { toast('go back and name your empire first'); return }
+      // Set up the wallet rerender to update the wizard view instead of the overlay
+      walletRerender = () => render()
+      // Connect wallet and set up to create empire within wizard
+      if (!empireDeploy.address) { connectEmpireWallet(); return }
+      // Prepare empire deploy with wizard data
+      empireDeploy.name = wizard.empireName
+      empireDeploy.mode = 'custom'
+      signAndDeployEmpire()
+      return
+    }
+    if (act === 'wizlaunchprep') {
+      launchForm.name = (document.getElementById('wiz_lp_name').value || '').trim()
+      launchForm.ticker = (document.getElementById('wiz_lp_ticker').value || '').trim()
+      launchForm.purpose = (document.getElementById('wiz_lp_purpose').value || '').trim()
+      launchPrefill()
+      return
+    }
+    if (act === 'wizdone') { wizard.ready = true; saveWizardState(); render(); return }
     if (act === 'mgrreload') { loadGrow(); return }
     if (act === 'mgrenqueue') { managerEnqueue(); return }
     if (act === 'zoedone') { zoeMarkDone(btn.dataset.id, btn); return }
@@ -2522,7 +2676,7 @@
   async function startApp() {
     gate.style.display = 'none'
     applyRole()
-    if (ROLE === 'zaal') { await pullState(); checkPosting() }
+    if (ROLE === 'zaal') { await pullState(); loadWizardState(); checkPosting() }
     switchTab(ROLE === 'zaal' ? 'daily' : 'feed')
   }
   window.onSiwnSuccess = async function (data) {
@@ -2613,6 +2767,7 @@
     if (Array.isArray(cfg.brands)) BRANDS = cfg.brands
     if (Array.isArray(cfg.socials) && !socials) { socials = cfg.socials; lsSet('zc_socials', socials) }
     if (cfg.fid) OWNER_FID = String(cfg.fid)
+    if (cfg.productName) PRODUCT_NAME = cfg.productName
     if (cfg.appName) {
       APPNAME = cfg.appName
       document.title = cfg.appName
