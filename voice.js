@@ -1,6 +1,26 @@
-// voice.js - draft generation in Zaal's voice, shared by engage --drafts and cockpit.
-// One batched model call: OpenRouter when ~/.zao/private/openrouter.key exists,
-// local claude CLI as the zero-config fallback. Print/return only - never posts.
+// voice.js - draft generation in Zaal's voice, shared by engage --drafts,
+// cockpit, and the web app. Print/return only - NEVER posts (the hard rule:
+// drafting and sending are separate acts, and sending always goes through a
+// human confirm).
+//
+// WHY ONE BATCHED CALL, NOT ONE PER ITEM: a whole inbox drafts in a single
+// prompt (ITEM 1..N in, "ITEM n: draft" lines out). One call is cheaper and
+// faster than N, and - more importantly - the model sees the whole batch, so
+// it doesn't repeat the same opener across ten replies.
+//
+// WHY TWO BACKENDS: OpenRouter when a key exists (works on Vercel, where no
+// local binary can run), local `claude` CLI as the zero-config fallback (works
+// on the mac with zero setup). Same prompt either way. If both are
+// unavailable, drafts are null and every caller degrades to manual replies.
+//
+// WHY THE VOICE LEARNS FROM TWO SOURCES rather than more rules:
+//   1. saveVoiceExample() - every time Zaal EDITS a draft in cockpit before
+//      sending, the (their text, draft was, zaal wrote) triple is appended to
+//      a private file. His corrections are ground truth no rule captures;
+//      the last 5 are fed into every prompt.
+//   2. loadWinningCasts() - his own highest-engagement casts, cached in KV
+//      for a week, shown as "these landed" examples. Outcome data, not taste.
+// Both files/caches live OUTSIDE the repo (private by construction).
 
 import fs from 'fs'
 import path from 'path'

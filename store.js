@@ -1,10 +1,20 @@
 // store.js - a tiny persistent key/value store over Upstash Redis / Vercel KV's
 // REST API. No SDK, just fetch - keeps zaalcaster dependency-free.
 //
-// Enabled when KV_REST_API_URL + KV_REST_API_TOKEN are set (Vercel KV), or the
-// UPSTASH_REDIS_REST_* equivalents. When unset, the store is OFF and callers
-// fall back to per-browser localStorage. This is what makes the Daily
-// dashboard, bookmarks, and the scheduled-post queue sync across devices.
+// WHY REST AND NOT A REDIS CLIENT: a TCP Redis client is a connection pool to
+// manage inside serverless functions (cold starts, connection limits) plus an
+// npm dependency. Upstash's REST form is one stateless HTTPS call per
+// command - slower per-op, but this store handles a handful of small blobs
+// per session, not a hot path. Correctness and zero deps beat latency here.
+//
+// WHY OPTIONAL-BY-DESIGN: enabled only when KV_REST_API_URL + KV_REST_API_TOKEN
+// (or UPSTASH_/STORAGE_ prefixed equivalents) are set. When unset, every
+// caller degrades: frontend state falls back to per-browser localStorage,
+// the action ledger skips, scheduled posts are disabled. A fork gets a fully
+// working client with NO infra, and adding the KV store upgrades sync/
+// scheduling without touching code. The prefix-agnostic resolve() exists
+// because Vercel's KV integration has renamed its env vars across versions -
+// scanning for *_REST_API_URL survives their next rename too.
 
 // Resolve the REST url/token from whatever names the Vercel integration used
 // (KV_*, UPSTASH_REDIS_*, STORAGE_*, or any custom prefix ending in
