@@ -19,6 +19,7 @@ import {
 } from '../lib.js'
 import { blockedByGuestAuth } from '../auth.js'
 import { getLeaderboardEntries, getDistributionRecipients } from '../empire.js'
+import { getBountyWithClaims } from '../poidh.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -178,6 +179,28 @@ export default async function handler(req, res) {
         address: r.user_address || r.address || null, username: r.farcaster_username || null, amount: r.amount ?? null,
       }))
       res.status(200).json({ count: data.data?.count ?? recipients.length, recipients }); return
+    }
+
+    if (kind === 'poidh_bounty') {
+      const id = (req.query.id || '').trim()
+      if (!id) { res.status(400).json({ error: 'missing bounty id' }); return }
+      const chainId = req.query.chain ? Number(req.query.chain) : 8453
+      const { bounty, claims } = await getBountyWithClaims(id, chainId)
+      if (!bounty.ok) { res.status(400).json({ error: bounty.error }); return }
+      const b = bounty.data
+      res.status(200).json({
+        bounty: {
+          id: b.id, onChainId: b.onChainId, title: b.title, description: b.description || '',
+          issuer: b.issuer, amountEth: b.amount ? Number(b.amount) / 1e18 : 0,
+          inProgress: !!b.inProgress, isVoting: !!b.isVoting, isCanceled: !!b.isCanceled,
+          url: `https://poidh.xyz/base/bounty/${b.id}`,
+        },
+        claims: claims.ok ? (claims.data?.items || []).slice(0, 50).map((c) => ({
+          id: c.id, title: c.title || '', description: c.description || '', imageUrl: c.url || null,
+          issuer: c.issuer, isAccepted: !!c.isAccepted,
+        })) : [],
+      })
+      return
     }
 
     if (kind === 'link_preview') {
