@@ -16,7 +16,7 @@
 // cast shape - the frontend never sees raw Neynar objects, which is what
 // made the API-drift fallbacks a server-side-only concern.
 
-import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday, getFrameCatalog, searchFrames } from '../lib.js'
+import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday, getFrameCatalog, searchFrames, getBoosterCandidates } from '../lib.js'
 import { blockedByGuestAuth, getSession } from '../auth.js'
 import { getEmpires } from '../empire.js'
 import { getOpenTasks } from '../zoe.js'
@@ -155,6 +155,26 @@ export default async function handler(req, res) {
       const friends = await getBestFriends({ limit: 20 })
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ friends })
+      return
+    }
+
+    // Booster engage-back queue (doc 1088 Phase 2b): who liked Zaal's recent
+    // casts or casted the booster phrases, each with a cast to engage on.
+    // Owner-only (it's his growth tool + reads his reaction data). Loaded on
+    // demand from the UI (a button, not auto) - it fans out ~15-20 Neynar
+    // calls per load, so the human decides when to spend them.
+    if (req.query.booster === '1') {
+      if (blockedByOwner(session, res)) return
+      const phrases = Array.isArray(config.boosterPhrases) && config.boosterPhrases.length ? config.boosterPhrases : ['zabal gamez']
+      const cands = await getBoosterCandidates({ phrases, limit: 12 })
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({
+        candidates: cands.map((c) => ({
+          fid: c.fid, username: c.username, display: c.display, pfp: c.pfp,
+          score: c.score, reasons: c.reasons,
+          cast: c.cast ? compact(c.cast) : null,
+        })),
+      })
       return
     }
 

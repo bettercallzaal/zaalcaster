@@ -355,6 +355,7 @@
     grow: { loaded: false, data: null, empires: [] },
     poidh: { loaded: false, bountyId: '1249', bounty: null, claims: [], claimsError: null, err: null },
     zoe: { loaded: false, enabled: true, tasks: [], err: null },
+    booster: { loaded: false, loading: false, candidates: [], err: null },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -1096,9 +1097,44 @@
     const txLookup = `<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">look up a distribution (paste a tx hash)</b></div>
       <div class="urow" style="cursor:default"><input class="sfin" id="emp_txhash" placeholder="0x..." style="flex:1;margin:0"><span class="chip" data-act="lookupdist">look up</span></div>
       <div id="empDistResult"></div>`
-    return empCard + createBtn + empireSec + txLookup
+    return empCard + createBtn + boosterQueueSection() + empireSec + txLookup
       + '<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">what this tab can do (research doc 1094a)</b></div>'
       + renderEmpireCapabilities()
+  }
+
+  // ===== The booster engage-back queue (doc 1088 Phase 2b, confirm-first).
+  // Detection is the machine's job; every engagement is Zaal's tap. Each
+  // candidate renders their cast as a full castCard, so the like button
+  // (one-tap, reversible tier) and reply-with-confirm come from the existing
+  // affordances - no new send paths, no new confirm rules to get wrong.
+  async function loadBoosterQueue() {
+    st.booster.loading = true; st.booster.err = null
+    if (tab === 'empire') render()
+    try {
+      const r = await fetch('/api/feed?booster=1')
+      const d = await r.json()
+      if (!r.ok) throw new Error(r.status === 401 ? 'session expired - refresh and sign in again' : (d.error || 'queue failed'))
+      st.booster.candidates = d.candidates || []
+      st.booster.loaded = true
+    } catch (e) {
+      st.booster.err = e.message
+    } finally {
+      st.booster.loading = false
+      if (tab === 'empire') render()
+    }
+  }
+  function boosterQueueSection() {
+    const head = `<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">booster - people giving this energy right now</b> <span class="chip" data-act="loadbooster">${st.booster.loading ? 'scanning...' : (st.booster.loaded ? 'rescan' : 'scan')}</span></div>`
+    if (!st.booster.loaded && !st.booster.loading && !st.booster.err) return head + '<div class="subbar"><span class="ub">tap scan - finds who liked your recent casts or casted about ZABAL Gamez, so you can engage back. every like/reply is still your tap.</span></div>'
+    if (st.booster.err) return head + `<div class="err" style="margin:6px 0">${esc(st.booster.err)}</div>`
+    if (st.booster.loading) return head + '<div class="loading">scanning likes + mentions...</div>'
+    if (!st.booster.candidates.length) return head + '<div class="subbar"><span class="ub">nobody new right now - cast something and rescan later.</span></div>'
+    return head + st.booster.candidates.map((c) => `
+      <div class="urow" style="cursor:default;margin-top:2px" data-act="profile" data-user="${esc(c.username)}">
+        ${c.pfp ? `<img class="pfp" src="${esc(c.pfp)}" alt="">` : '<div class="pfp"></div>'}
+        <div><div class="un">${esc(c.display || c.username)} <span class="ub">@${esc(c.username)}${c.score != null ? ' - score ' + c.score : ''}</span></div>
+        <div class="ub">${esc(c.reasons.join(' + '))}</div></div></div>
+      ${c.cast ? castCard(c.cast) : '<div class="subbar"><span class="ub">no recent cast to engage on - visit their profile</span></div>'}`).join('')
   }
 
   // ===== POIDH ("pics or it didn't happen") bounty reader - reads
@@ -2134,6 +2170,7 @@
     if (act === 'lookupdist') { lookupDistribution(); return }
     if (act === 'addbooster') { openAddBooster(); return }
     if (act === 'openstaking') { openStaking(); return }
+    if (act === 'loadbooster') { if (!st.booster.loading) loadBoosterQueue(); return }
     if (act === 'zoedone') { zoeMarkDone(btn.dataset.id, btn); return }
     if (act === 'zoedecadd') { zoeLogDecision(); return }
     if (act === 'poidhbounty') { loadPoidh(btn.dataset.id); return }

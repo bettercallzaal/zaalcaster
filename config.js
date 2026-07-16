@@ -39,6 +39,12 @@ export const config = {
   // they're unset.
   trackerOwner: 'Zaal',
 
+  // Booster engagement queue (Empire tab): phrases that mark someone as
+  // giving the project energy when they cast them. Anyone who likes your
+  // recent casts also qualifies. Detection only - every engagement back is
+  // still your tap (doc 1088's booster idea, built confirm-first).
+  boosterPhrases: ['zabal gamez', 'zabal games'],
+
   // Your brands - each gets a page (channel feed + links) in the Brands hub.
   brands: [
     { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },
