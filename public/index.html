@@ -274,6 +274,7 @@
   <button data-tab="grow">Grow <span class="k">7</span></button>
   <button data-tab="empire">Empire <span class="k">8</span></button>
   <button data-tab="poidh">POIDH <span class="k">9</span></button>
+  <button data-tab="manager">Manager <span class="k">0</span></button>
 </div>
 
 <div id="ptr">pull to refresh</div>
@@ -356,6 +357,7 @@
     poidh: { loaded: false, bountyId: '1249', bounty: null, claims: [], claimsError: null, err: null },
     zoe: { loaded: false, enabled: true, tasks: [], err: null },
     booster: { loaded: false, loading: false, candidates: [], err: null },
+    manager: { submitting: false, msg: null, msgErr: false },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -1137,6 +1139,69 @@
       ${c.cast ? castCard(c.cast) : '<div class="subbar"><span class="ub">no recent cast to engage on - visit their profile</span></div>'}`).join('')
   }
 
+  // ===== Manager console (owner-only): status of the bot ecosystem (this
+  // deploy, ZOL, ZOE) + a whitelisted command queue. Reuses the /api/stats
+  // fetch (st.grow) since Vercel's 12-function cap means this data rides
+  // along in stats.js rather than getting its own endpoint - see that
+  // file's managerSummary() for why queued commands aren't auto-executed
+  // from here (ZOL/ZOE aren't reachable from a Vercel function).
+  async function managerEnqueue() {
+    const target = document.getElementById('mgr_target').value
+    const cmd = document.getElementById('mgr_cmd').value
+    const paramVal = (document.getElementById('mgr_param').value || '').trim()
+    st.manager.submitting = true; st.manager.msg = null; render()
+    try {
+      const r = await fetch('/api/stats', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'manager_enqueue', target, cmd, params: paramVal ? { draftId: paramVal } : {} }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'enqueue failed')
+      st.manager.msg = `queued: ${target} / ${cmd}`; st.manager.msgErr = false
+      document.getElementById('mgr_param').value = ''
+      loadGrow()
+    } catch (e) {
+      st.manager.msg = e.message; st.manager.msgErr = true
+    } finally {
+      st.manager.submitting = false; render()
+    }
+  }
+  function renderManager() {
+    if (!st.grow.loaded) return '<div class="loading">loading manager status...</div>'
+    if (st.grow.err) return `<div class="err">${esc(st.grow.err)}</div>`
+    const m = st.grow.data?.manager
+    if (!m) return '<div class="empty">no manager data in this deploy yet.</div>'
+    const h = m.zaalcaster || {}
+    const healthCard = `<div class="digest"><div class="t">zaalcaster (this deploy)</div>
+      <div class="ub" style="margin-top:4px">posting: <b style="color:${h.posting?.ready ? '#3fbf7f' : '#ff8a6a'}">${h.posting?.ready ? 'ready' : 'not ready' + (h.posting?.reason ? ' - ' + esc(h.posting.reason) : '')}</b></div>
+      <div class="ub">cron: ${h.cronStaleHours != null ? `${h.cronStaleHours}h ago ${h.cronStaleHours < 1 ? '(ok)' : '(STALE)'}` : 'unknown'}</div></div>`
+    const targetCards = (m.targets || []).filter((t) => t !== 'zaalcaster').map((t) =>
+      `<div class="digest"><div class="t">${esc(t)}</div><div class="ub" style="margin-top:4px">${esc(m.notes?.[t] || '')}</div></div>`).join('')
+    const jobsRows = (m.jobs || []).length
+      ? m.jobs.map((j) => `<div class="urow" style="cursor:default"><div><div class="un">${esc(j.target)} / ${esc(j.cmd)} <span class="ub">${j.status || 'pending'}</span></div>
+          <div class="ub">${when(j.at)}${j.params && Object.keys(j.params).length ? ' - ' + esc(JSON.stringify(j.params)) : ''}</div></div></div>`).join('')
+      : '<div class="empty">queue is empty.</div>'
+    const actionsRows = (m.recentActions || []).length
+      ? m.recentActions.map((a) => `<div class="ub" style="padding:4px 0">[${esc(a.type || '?')}] ${when(a.at)}${a.text ? ' - ' + esc(a.text.slice(0, 60)) : ''}</div>`).join('')
+      : '<div class="ub">no actions logged yet.</div>'
+    const cmdOptions = (m.commands || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')
+    const targetOptions = (m.targets || []).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')
+    const form = m.enabled ? `<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">queue a command</b></div>
+      <div class="urow" style="cursor:default;gap:8px;flex-wrap:wrap">
+        <select id="mgr_target" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">${targetOptions}</select>
+        <select id="mgr_cmd" style="font:inherit;background:#0e0e15;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px">${cmdOptions}</select>
+        <input class="sfin" id="mgr_param" placeholder="param (e.g. draft id) - optional" style="flex:1;min-width:160px;margin:0">
+        <span class="chip" data-act="mgrenqueue">${st.manager.submitting ? 'queuing...' : 'queue it'}</span>
+      </div>
+      ${st.manager.msg ? (st.manager.msgErr ? `<div class="err" style="margin-top:6px;padding:8px;text-align:left">${esc(st.manager.msg)}</div>` : `<div class="ub" style="margin-top:6px;color:#3fbf7f">${esc(st.manager.msg)}</div>`) : ''}
+      <div class="ub" style="margin-top:6px">whitelisted commands only - queued here, executed by whatever worker for that target exists (see notes above; ZOL/ZOE draining isn't wired up yet).</div>`
+      : '<div class="err">KV store not configured - command queue unavailable.</div>'
+    return healthCard + targetCards
+      + '<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">queue <span class="chip" data-act="mgrreload">refresh</span></b></div>' + jobsRows
+      + form
+      + '<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">recent actions</b></div>' + actionsRows
+  }
+
   // ===== POIDH ("pics or it didn't happen") bounty reader - reads
   // poidh.xyz's own tRPC endpoint (proven stable, keyless, per
   // bettercallzaal/zpoidh's working refresh script), never guesses at
@@ -1387,6 +1452,7 @@
     else if (tab === 'grow') { meta.textContent = ''; main.innerHTML = renderGrow() }
     else if (tab === 'empire') { meta.textContent = ''; main.innerHTML = renderEmpire() }
     else if (tab === 'poidh') { meta.textContent = ''; main.innerHTML = renderPoidh() }
+    else if (tab === 'manager') { meta.textContent = ''; main.innerHTML = renderManager() }
   }
 
   function switchTab(t) {
@@ -1399,6 +1465,7 @@
     if (t === 'grow' && !st.grow.loaded) loadGrow()
     if (t === 'empire' && !st.grow.loaded) loadGrow()
     if (t === 'poidh' && !st.poidh.loaded) loadPoidh(st.poidh.bountyId)
+    if (t === 'manager' && !st.grow.loaded) loadGrow()
     if (t === 'daily' && !st.zoe.loaded && ROLE === 'zaal') loadZoe()
     if (t === 'daily') checkAutoQuests()
     if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
@@ -2238,6 +2305,8 @@
     if (act === 'openstaking') { openStaking(); return }
     if (act === 'openlaunchprep') { openLaunchPrep(); return }
     if (act === 'loadbooster') { if (!st.booster.loading) loadBoosterQueue(); return }
+    if (act === 'mgrreload') { loadGrow(); return }
+    if (act === 'mgrenqueue') { managerEnqueue(); return }
     if (act === 'zoedone') { zoeMarkDone(btn.dataset.id, btn); return }
     if (act === 'zoedecadd') { zoeLogDecision(); return }
     if (act === 'poidhbounty') { loadPoidh(btn.dataset.id); return }
@@ -2441,7 +2510,7 @@
   // re-checked in switchTab() as a second line of defense. The server enforces
   // this independently (blockedByAuth vs blockedByGuestAuth) - this is UX, not
   // the security boundary.
-  const ROLE_RESTRICTED_TABS = ['daily', 'inbox', 'compose', 'grow', 'empire']
+  const ROLE_RESTRICTED_TABS = ['daily', 'inbox', 'compose', 'grow', 'empire', 'manager']
   function applyRole() {
     for (const t of ROLE_RESTRICTED_TABS) {
       const btn = document.querySelector(`#tabs button[data-tab="${t}"]`)
@@ -2483,7 +2552,7 @@
   const palInput = document.getElementById('palInput')
   const palList = document.getElementById('palList')
   let palItems = [], palSel = 0
-  const TABS = [['daily','Daily'],['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow'],['empire','Empire'],['poidh','POIDH']]
+  const TABS = [['daily','Daily'],['feed','Feed'],['inbox','Inbox'],['channels','Channels'],['search','Search'],['compose','Compose'],['grow','Grow'],['empire','Empire'],['poidh','POIDH'],['manager','Manager']]
   function palCommands(q) {
     const s = q.trim().toLowerCase()
     const cmds = []

@@ -13,12 +13,45 @@
 // word for what was signed. (Header used to say "Read-only" - stale since
 // the Empire write slice landed; fixed in the 2026-07-16 docs pass.)
 
+import crypto from 'node:crypto'
 import { blockedByAuth } from '../auth.js'
-import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
+import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage, getSystemHealth } from '../lib.js'
 import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, getStakingStatus, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, addStakingBooster, addStakingBoosterMessage, activateStaking, activateStakingMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
 import { getCoin } from '../zora.js'
 import { markTaskDone, logDecision } from '../zoe.js'
 import { config } from '../config.js'
+import { storeEnabled, kvList, kvPush } from '../store.js'
+
+// Manager console (owner-only): surfaces bot/agent status and a command
+// queue for ZOL (Pi) / ZOE (VPS) / this deploy. WHY QUEUE-ONLY, NOT
+// EXECUTE-HERE: a Vercel function has no path to ZOL (Tailscale-private,
+// no public HTTPS - see scripts/dashboard.js in the zolbot repo) or to SSH
+// into the Pi/VPS. This endpoint only records the request; something with
+// network access to that target has to drain zc:jobs. Until that worker
+// exists per target, queued jobs sit at status 'pending' - visible, not
+// silently dropped, so a fork or a future worker has an honest starting
+// point instead of a fake "done".
+const MANAGER_TARGETS = ['zol', 'zoe', 'zaalcaster']
+const MANAGER_CMDS = ['status', 'approve_draft', 'reject_draft', 'restart', 'run_tests']
+const MANAGER_NOTES = {
+  zol: 'Runs on a Pi reachable only over Tailscale, no public HTTPS (scripts/dashboard.js) - queued commands need a Tailscale-connected worker to drain, not wired up yet.',
+  zoe: 'Syncs via the Supabase cowork tracker over HTTPS - reachable, but queue-draining is not wired up yet.',
+  zaalcaster: 'This deploy - restart/run_tests here would need a CI hook (Vercel deploy hook or GitHub Action), not wired up yet.',
+}
+
+function validateManagerEnqueue(body) {
+  if (!MANAGER_TARGETS.includes(body.target)) return `target must be one of ${MANAGER_TARGETS.join(', ')}`
+  if (!MANAGER_CMDS.includes(body.cmd)) return `cmd must be one of ${MANAGER_CMDS.join(', ')}`
+  if (body.params != null && typeof body.params !== 'object') return 'params must be an object'
+  return null
+}
+
+async function managerSummary() {
+  const zaalcaster = await getSystemHealth().catch((err) => ({ ok: false, error: err instanceof Error ? err.message : 'health check failed' }))
+  if (!storeEnabled()) return { enabled: false, zaalcaster, targets: MANAGER_TARGETS, commands: MANAGER_CMDS, notes: MANAGER_NOTES }
+  const [jobs, recentActions] = await Promise.all([kvList('zc:jobs', 20), kvList('zc:actions', 10)])
+  return { enabled: true, zaalcaster, jobs, recentActions, targets: MANAGER_TARGETS, commands: MANAGER_CMDS, notes: MANAGER_NOTES }
+}
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
@@ -246,6 +279,19 @@ export default async function handler(req, res) {
       return
     }
 
+    // manager console: queue a whitelisted command for ZOL/ZOE/this deploy.
+    // Owner-only via blockedByAuth above - no draining/execution happens
+    // here, see managerSummary()'s header comment for why.
+    if (body.action === 'manager_enqueue') {
+      const merr = validateManagerEnqueue(body)
+      if (merr) { res.status(400).json({ error: merr }); return }
+      const job = { id: crypto.randomUUID(), target: body.target, cmd: body.cmd, params: body.params || {}, status: 'pending', at: Date.now() }
+      const ok = await kvPush('zc:jobs', job, 200)
+      if (!ok) { res.status(503).json({ error: 'store not reachable - queue unavailable' }); return }
+      res.status(200).json({ ok: true, job })
+      return
+    }
+
     // staking booster - same wallet-signed relay model
     if (body.action === 'add_staking_booster') {
       const serr = validateStakingBoosterPayload(body)
@@ -318,7 +364,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [castsRes, notifs, me, suggestions, storage, empire, zora] = await Promise.all([
+    const [castsRes, notifs, me, suggestions, storage, empire, zora, manager] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       recentNotifications(4),
       getUser(process.env.FID || '19640').catch(() => null),
@@ -326,6 +372,7 @@ export default async function handler(req, res) {
       getStorageUsage().catch(() => null),
       empireSummary().catch(() => null),
       zoraSummary().catch(() => null),
+      managerSummary().catch(() => ({ enabled: false })),
     ])
 
     const topCasts = (castsRes.casts || [])
@@ -357,7 +404,7 @@ export default async function handler(req, res) {
       followers: me?.follower_count ?? null,
       following: me?.following_count ?? null,
       score: me?.experimental?.neynar_user_score ?? null,
-      topCasts, topEngagers, suggest, storage, empire, zora,
+      topCasts, topEngagers, suggest, storage, empire, zora, manager,
     })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'stats failed' })
