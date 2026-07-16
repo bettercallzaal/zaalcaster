@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zaalcaster - Personal Farcaster Client + Token</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #222; background: #fff; }
+    header { background: #0a1628; color: #fff; padding: 60px 20px; text-align: center; }
+    header h1 { font-size: 48px; margin-bottom: 10px; }
+    header p { font-size: 20px; color: #f5a623; margin-bottom: 30px; }
+    .cta-buttons { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
+    .btn { padding: 12px 30px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn-primary { background: #f5a623; color: #0a1628; font-weight: 600; }
+    .btn-primary:hover { background: #e0a020; }
+    .btn-secondary { background: transparent; border: 2px solid #f5a623; color: #f5a623; font-weight: 600; }
+    .btn-secondary:hover { background: #f5a623; color: #0a1628; }
+    
+    section { max-width: 1000px; margin: 0 auto; padding: 60px 20px; }
+    h2 { font-size: 32px; margin-bottom: 20px; color: #0a1628; }
+    h3 { font-size: 20px; margin-top: 30px; margin-bottom: 10px; color: #0a1628; }
+    p { margin-bottom: 15px; line-height: 1.7; }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; margin-top: 40px; }
+    .feature { background: #f9f9f9; padding: 25px; border-radius: 8px; border-left: 4px solid #f5a623; }
+    .feature h4 { font-size: 18px; margin-bottom: 10px; color: #0a1628; }
+    .feature p { margin-bottom: 0; font-size: 14px; }
+    
+    .token-section { background: #f9f9f9; border-radius: 8px; padding: 40px; margin: 40px 0; }
+    .token-section h3 { margin-top: 0; }
+    .token-mechanics { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px; }
+    .mechanic { background: white; padding: 20px; border-radius: 6px; }
+    .mechanic h4 { color: #f5a623; margin-bottom: 10px; }
+    
+    .flow { background: white; border-left: 4px solid #f5a623; padding: 20px; margin: 20px 0; border-radius: 4px; }
+    .flow strong { color: #0a1628; }
+    
+    footer { background: #0a1628; color: #f5a623; text-align: center; padding: 30px 20px; margin-top: 60px; }
+    footer a { color: #f5a623; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    
+    @media (max-width: 600px) {
+      header h1 { font-size: 32px; }
+      .cta-buttons { flex-direction: column; }
+      .token-mechanics { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Zaalcaster</h1>
+    <p>Personal Farcaster client. Open source. Token-powered.</p>
+    <div class="cta-buttons">
+      <a href="https://github.com/bettercallzaal/zaalcaster" class="btn btn-primary">View on GitHub</a>
+      <a href="/#" class="btn btn-secondary">Launch App</a>
+    </div>
+  </header>
+
+  <section>
+    <h2>What is Zaalcaster?</h2>
+    <p>Zaalcaster is Zaal's personal Farcaster client - a lightweight, open-source reader and posting tool for anyone who wants a clean, purpose-built interface to Farcaster. Everyone can read; only Zaal posts.</p>
+    <p>It's a daily cockpit for managing replies, monitoring channels, drafting posts in a personal voice, and engaging your community - all without the noise of a general social feed.</p>
+
+    <h2 style="margin-top: 50px;">Core Features</h2>
+    <div class="features">
+      <div class="feature">
+        <h4>Daily Cockpit</h4>
+        <p>Unanswered inbound + top-of-feed in one screen. See what needs a reply before anything else.</p>
+      </div>
+      <div class="feature">
+        <h4>Reply Queue</h4>
+        <p>Ranked by sender credibility (neynar score, follows, mutual connections) - the highest-signal replies first.</p>
+      </div>
+      <div class="feature">
+        <h4>Channel Feeds</h4>
+        <p>Read specific channels (/zao, /wavewarz, /zabal) without the main feed noise.</p>
+      </div>
+      <div class="feature">
+        <h4>Reply Drafts</h4>
+        <p>AI-powered draft suggestions grounded in ZAO context and your personal voice. Never posts without your approval.</p>
+      </div>
+      <div class="feature">
+        <h4>Open Source</h4>
+        <p>MIT licensed. Fork it. Run your own. No hidden costs. Pure Neynar API - one signer, one key.</p>
+      </div>
+      <div class="feature">
+        <h4>Zero Dependencies</h4>
+        <p>Node 20+ built-ins only. No npm packages. Deploy anywhere.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Introducing $zaalcaster</h2>
+    <div class="token-section">
+      <h3>A token for attention and alignment</h3>
+      <p>$zaalcaster is more than a token - it's a mechanism for signaling what you think deserves Zaal's reply attention, with skin in the game.</p>
+      
+      <h3 style="margin-top: 30px;">How It Works</h3>
+      <p>Two levers, both you control:</p>
+      
+      <div class="token-mechanics">
+        <div class="mechanic">
+          <h4>Hold - Stake</h4>
+          <p>Show how much $zaalcaster you believe in by staking it. Your standing balance is visible when your replies queue up. Signals long-term alignment.</p>
+        </div>
+        <div class="mechanic">
+          <h4>Spend - Tip</h4>
+          <p>Attach a tip to a specific Farcaster link you want Zaal to see. 50% burned (deflationary), 50% to Zaal. Pay-per-boost for the posts that matter most to you.</p>
+        </div>
+      </div>
+
+      <div class="flow">
+        <strong>The Flow:</strong> Open zaalcaster → submit a Farcaster link + tip amount → enters Zaal's reply queue, ranked by (your stake + tip) → Zaal's judgment applies (human stays in the loop) → he replies
+      </div>
+
+      <h3>Economics</h3>
+      <ul style="margin-left: 20px; margin-bottom: 15px;">
+        <li><strong>Zaal keeps ~50%</strong>, vested over month one. No dump - signals alignment.</li>
+        <li><strong>Contributor rewards</strong> are discretionary - valuable PRs earn tokens at Zaal's judgment.</li>
+        <li><strong>Anti-spam floor</strong> on tips prevents dust submissions.</li>
+        <li><strong>Zaal's judgment is the final ranker</strong> - a big holder + small tip vs small holder + big tip is his call. Prevents pay-to-spam.</li>
+      </ul>
+
+      <h3>Why It Works</h3>
+      <p>Three demand sources converge: hold (stake), spend (tips), and scarcity (burn). Revenue to Zaal on every boost. Skin-in-the-game from everyone who tips. No false promises - Zaal replies on his judgment, which keeps it real.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Quick Start</h2>
+    <h3>For Readers</h3>
+    <p>Clone the repo. Install Node 20+. Set your Neynar API key. Read the timeline, channels, or search. Free. Open source. No accounts.</p>
+    
+    <h3>For Posters</h3>
+    <p>Same setup + mint a Neynar managed signer (server-side, your key never leaves Neynar). Now you can post, reply, and participate.</p>
+
+    <h3>For Builders</h3>
+    <p>Fork it as <code>&lt;yourusername&gt;caster</code>. Make it yours. Contribute valuable features back - Zaalcaster rewards PRs with $zaalcaster tokens.</p>
+  </section>
+
+  <section>
+    <h2>Built On</h2>
+    <ul style="margin-left: 20px;">
+      <li><strong>Neynar v2 API</strong> - Farcaster data + managed signer</li>
+      <li><strong>Vercel</strong> - serverless platform</li>
+      <li><strong>Clanker</strong> - token issuance (v5 compatible)</li>
+      <li><strong>Empire Builder</strong> - leaderboards, staking, rewards</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>Open source. MIT licensed. <a href="https://github.com/bettercallzaal/zaalcaster">GitHub</a> | <a href="https://zaal.sh">@zaal</a></p>
+  </footer>
+</body>
+</html>
