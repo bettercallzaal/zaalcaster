@@ -317,7 +317,7 @@
     channels: { id: 'zao', casts: [], loaded: false, trending: [], chanInfo: null, searching: false, searchResults: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null, empires: [] },
-    poidh: { loaded: false, bountyId: '1249', bounty: null, claims: [], err: null },
+    poidh: { loaded: false, bountyId: '1249', bounty: null, claims: [], claimsError: null, err: null },
   }
 
   const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -900,7 +900,7 @@
     try {
       const [r, er] = await Promise.all([fetch('/api/stats'), fetch('/api/feed?empire=1').catch(() => null)])
       const d = await r.json()
-      if (!r.ok) throw new Error(d.error || 'stats failed')
+      if (!r.ok) throw new Error(r.status === 401 ? 'session expired - refresh and sign in again' : (d.error || 'stats failed'))
       st.grow.data = d; st.grow.loaded = true
       if (d.followers != null) { statsHistory[todayStr()] = { followers: d.followers, score: d.score ?? null }; const keep = (() => { const x = new Date(); x.setUTCDate(x.getUTCDate() - 30); return x.toISOString().slice(0, 10) })(); for (const k of Object.keys(statsHistory)) if (k < keep) delete statsHistory[k]; persist() }
       try { const ed = er && (await er.json()); st.grow.empires = (ed && ed.empires) || [] } catch { st.grow.empires = [] }
@@ -935,11 +935,15 @@
       storageLine = `<div style="margin-top:8px"><div class="ub">storage - ${sg.units} unit${sg.units === 1 ? '' : 's'}${(sg.casts && sg.casts.used >= sg.casts.capacity) ? ' - casts full, oldest getting pruned' : ''}</div>${bar('casts', sg.casts)}${bar('reactions', sg.reactions)}${bar('links', sg.links)}</div>`
     }
     // Zora Creator Coin card - inert until config.zoraCoinAddress is set.
+    // An API failure renders AS a failure, never silently as "no card".
     let zoraLine = ''
-    if (d.zora && !d.zora.error) {
+    if (d.zora && d.zora.error) {
+      zoraLine = `<div class="ub" style="margin-top:8px;color:#e0a955">Zora coin: ${esc(d.zora.error)}</div>`
+    } else if (d.zora) {
       const z = d.zora
-      const delta = z.marketCapDelta24h != null ? `${z.marketCapDelta24h > 0 ? '+' : ''}${z.marketCapDelta24h.toFixed(2)}%` : ''
-      zoraLine = `<div class="t" style="color:#a99cff;font-size:14px;margin-top:8px"><a class="open" href="${esc(z.url)}" target="_blank" rel="noopener">$${esc(z.symbol)}</a> Zora coin - ${z.marketCap != null ? '$' + z.marketCap.toLocaleString() : '?'} mcap${delta ? ` (${delta})` : ''}</div>`
+      const num = (v) => (v != null && Number.isFinite(v)) ? v : null
+      const delta = num(z.marketCapDelta24h) != null ? `${z.marketCapDelta24h > 0 ? '+' : ''}${z.marketCapDelta24h.toFixed(2)}%` : ''
+      zoraLine = `<div class="t" style="color:#a99cff;font-size:14px;margin-top:8px"><a class="open" href="${esc(z.url)}" target="_blank" rel="noopener">$${esc(z.symbol)}</a> Zora coin - ${num(z.marketCap) != null ? '$' + z.marketCap.toLocaleString() : '?'} mcap${delta ? ` (${delta})` : ''}</div>`
     }
     const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
       <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${histLine}${storageLine}${zoraLine}</div>`
@@ -1024,7 +1028,9 @@
       ? `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="color:#a99cff;font-size:15px">${esc(d.empire.name || d.empire.id)} empire</div>
          <div class="ub" style="margin-top:4px">${d.empire.leaderboardCount} leaderboard${d.empire.leaderboardCount === 1 ? '' : 's'}${d.empire.boosters?.length ? ` - ${d.empire.boosters.length} booster${d.empire.boosters.length === 1 ? '' : 's'}` : ''}${mineLine}</div>${rewardsLine}
          <div style="margin-top:6px">${empLbBtn}</div></div>`
-      : `<div class="digest" style="background:#151529;border-color:#24242f"><div class="ub">no empire configured yet - set config.empireOwnerWallet, or create one below</div></div>`
+      : d.empire?.error
+        ? `<div class="digest" style="background:#151529;border-color:#24242f"><div class="err">Empire Builder: ${esc(d.empire.error)}</div><div class="ub" style="margin-top:4px">this is an API problem, not a config problem - your empire is still there, try again in a bit</div></div>`
+        : `<div class="digest" style="background:#151529;border-color:#24242f"><div class="ub">no empire configured yet - set config.empireOwnerWallet, or create one below</div></div>`
     const createBtn = '<div class="subbar" style="margin-top:8px"><span class="chip" data-act="createempire">+ create a tokenless empire</span></div>'
     const mine = ['zabal', 'zao', 'wavewarz']
     const empires = (st.grow.empires || []).map((e, i) => {
@@ -1056,19 +1062,25 @@
     { id: '1180', label: 'R3' }, { id: '1249', label: 'R4 (open pot)' },
   ]
   async function loadPoidh(bountyId) {
-    st.poidh.bountyId = String(bountyId)
+    bountyId = String(bountyId)
+    st.poidh.bountyId = bountyId
     st.poidh.loaded = false; st.poidh.err = null
     if (tab === 'poidh') render()
     try {
       const r = await fetch(`/api/view?kind=poidh_bounty&id=${encodeURIComponent(bountyId)}`)
       const d = await r.json()
-      if (!r.ok) throw new Error(d.error || 'bounty lookup failed')
-      st.poidh.bounty = d.bounty; st.poidh.claims = d.claims || []
+      // a newer click superseded this request - drop the stale response
+      if (st.poidh.bountyId !== bountyId) return
+      if (!r.ok) throw new Error(r.status === 401 ? 'session expired - refresh and sign in again' : (d.error || 'bounty lookup failed'))
+      st.poidh.bounty = d.bounty; st.poidh.claims = d.claims || []; st.poidh.claimsError = d.claimsError || null
     } catch (e) {
+      if (st.poidh.bountyId !== bountyId) return
       st.poidh.err = e.message; st.poidh.bounty = null; st.poidh.claims = []
     } finally {
-      st.poidh.loaded = true
-      if (tab === 'poidh') render()
+      if (st.poidh.bountyId === bountyId) {
+        st.poidh.loaded = true
+        if (tab === 'poidh') render()
+      }
     }
   }
   function renderPoidh() {
@@ -1090,13 +1102,17 @@
       ${c.imageUrl ? `<img class="lbpfp" src="${esc(c.imageUrl)}" alt="">` : '<span class="lbpfp"></span>'}
       <span class="lbname">${esc(c.title || 'untitled claim')}${c.isAccepted ? ' <span class="qs">accepted</span>' : ''}</span>
       <span class="ub" style="font-size:12px">${esc((c.issuer || '').slice(0, 6))}...${esc((c.issuer || '').slice(-4))}</span></div>`).join('')
-    const claimsSec = claims ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">claims</b></div>' + claims : '<div class="subbar"><span class="ub">no claims yet</span></div>'
+    const claimsSec = st.poidh.claimsError
+      ? `<div class="subbar" style="margin-top:8px"><span class="ub" style="color:#e0a955">claims failed to load: ${esc(st.poidh.claimsError)}</span></div>`
+      : claims ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">claims</b></div>' + claims : '<div class="subbar"><span class="ub">no claims yet</span></div>'
     return header + bountyCard + claimsSec
   }
 
   async function lookupDistribution() {
-    const hash = (document.getElementById('emp_txhash').value || '').trim()
+    const hashEl = document.getElementById('emp_txhash')
     const out = document.getElementById('empDistResult')
+    if (!hashEl || !out) return // tab re-rendered away mid-flight
+    const hash = (hashEl.value || '').trim()
     if (!hash) { toast('paste a transaction hash first'); return }
     out.innerHTML = '<div class="loading">looking up...</div>'
     try {
@@ -1458,7 +1474,7 @@
       if (!d.entries || !d.entries.length) { document.getElementById('obody').innerHTML = '<div class="empty">no entries yet.</div>'; return }
       const rows = d.entries.map((e) => `<div class="lbrow">
         <span class="lbrank ${e.rank <= 3 ? 'top' : ''}">${e.rank}</span>
-        <span class="lbname">${e.username ? '@' + esc(e.username) : esc(e.address.slice(0, 6) + '...' + e.address.slice(-4))}</span>
+        <span class="lbname">${e.username ? '@' + esc(e.username) : e.address ? esc(e.address.slice(0, 6) + '...' + e.address.slice(-4)) : '?'}</span>
         <span class="lbn">${e.points != null ? e.points : (e.score ?? '')}</span></div>`).join('')
       document.getElementById('obody').innerHTML = `${d.name ? `<div class="ps" style="margin-bottom:8px">${esc(d.name)}</div>` : ''}${rows}`
     } catch (e) {

@@ -199,6 +199,8 @@ export default async function handler(req, res) {
           id: c.id, title: c.title || '', description: c.description || '', imageUrl: c.url || null,
           issuer: c.issuer, isAccepted: !!c.isAccepted,
         })) : [],
+        // "0 claims" and "claims fetch failed" must render differently.
+        claimsError: claims.ok ? null : claims.error,
       })
       return
     }

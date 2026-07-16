@@ -47,9 +47,17 @@ export function isValidLeaderboardId(value) {
 
 const cache = new Map() // url -> { at, payload }
 
+// Expired entries were only ever skipped on read, never deleted - on warm
+// Vercel invocations the map grows forever. Sweep on each call (n is tiny).
+function sweepCache() {
+  const now = Date.now()
+  for (const [k, v] of cache) if (now - v.at >= CACHE_TTL_MS) cache.delete(k)
+}
+
 async function getJson(path) {
   const url = `${API_ORIGIN}${path}`
 
+  sweepCache()
   const hit = cache.get(url)
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.payload
 

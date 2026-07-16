@@ -9,7 +9,7 @@
 // When SESSION_SECRET is unset the gate is off (enabled:false, authed:true,
 // role:'zaal') - local CLI / Vercel-auth-only deploys unchanged.
 
-import { authEnabled, getSession, sessionCookie, clearSessionCookie, ownerFid } from '../auth.js'
+import { authEnabled, misconfigured, getSession, sessionCookie, clearSessionCookie, ownerFid } from '../auth.js'
 import { getSignerInfo } from '../lib.js'
 import { config } from '../config.js'
 
@@ -27,13 +27,16 @@ export default async function handler(req, res) {
     const session = getSession(req)
     res.setHeader('Cache-Control', 'no-store')
     res.status(200).json({
-      enabled: authEnabled(),
+      enabled: authEnabled() || misconfigured(),
       authed: !!session,
       role: session?.role || null,
+      // Sign-in cannot work while misconfigured (see auth.js) - hide the
+      // widget so the gate shows the not-configured message instead.
+      misconfigured: misconfigured(),
       // Public identifier for Neynar's "Sign In With Neynar" widget - not a
       // secret (Neynar's own docs show it directly in page HTML). Unset until
       // Zaal registers an app + sets NEYNAR_CLIENT_ID in Vercel.
-      neynarClientId: process.env.NEYNAR_CLIENT_ID || null,
+      neynarClientId: misconfigured() ? null : (process.env.NEYNAR_CLIENT_ID || null),
       config: {
         appName: config.appName,
         username: config.username,
@@ -49,6 +52,11 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // Never issue a cookie signed with an empty key (forgeable).
+    if (misconfigured()) {
+      res.status(500).json({ error: 'server misconfigured: SESSION_SECRET must be set when NEYNAR_CLIENT_ID is set' })
+      return
+    }
     const body = await readJsonBody(req)
     const claimedFid = Number(body.fid)
     const signerUuid = String(body.signer_uuid || '').trim()

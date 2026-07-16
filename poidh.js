@@ -23,12 +23,20 @@ export const POIDH_CONTRACTS = {
 
 const cache = new Map() // url -> { at, payload }
 
+// Sweep expired entries so the map can't grow unboundedly across warm
+// serverless invocations (same fix as empire.js).
+function sweepCache() {
+  const now = Date.now()
+  for (const [k, v] of cache) if (now - v.at >= CACHE_TTL_MS) cache.delete(k)
+}
+
 // tRPC's GET convention: /api/trpc/<procedure>?batch=1&input={"0":{"json":<payload>}}
 // -> response is an array, [0].result.data.json is the actual payload.
 async function trpcGet(proc, payload) {
   const input = encodeURIComponent(JSON.stringify({ 0: { json: payload } }))
   const url = `${TRPC_BASE}/${proc}?batch=1&input=${input}`
 
+  sweepCache()
   const hit = cache.get(url)
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.payload
 
