@@ -190,20 +190,40 @@ export default async function handler(req, res) {
       const id = (req.query.id || '').trim()
       if (!id) { res.status(400).json({ error: 'missing bounty id' }); return }
       const chainId = req.query.chain ? Number(req.query.chain) : 8453
+      // URL path segment + native currency per chain. Segments verified live
+      // 2026-07-16 by fetching each poidh.xyz/<seg>/bounty/1 and checking the
+      // titles differ per chain ("ethereum"/"eth" are NOT valid - "mainnet" is).
+      // Amounts are wei-style base units of the chain's NATIVE token, so degen
+      // pots are DEGEN, not ETH - labeling them ETH was the bug this fixes.
+      const POIDH_CHAINS = {
+        1: { segment: 'mainnet', currency: 'ETH' },
+        42161: { segment: 'arbitrum', currency: 'ETH' },
+        8453: { segment: 'base', currency: 'ETH' },
+        666666666: { segment: 'degen', currency: 'DEGEN' },
+      }
+      const chain = POIDH_CHAINS[chainId]
+      if (!chain) { res.status(400).json({ error: 'unsupported chain' }); return }
       const { bounty, claims } = await getBountyWithClaims(id, chainId)
       if (!bounty.ok) { res.status(400).json({ error: bounty.error }); return }
       const b = bounty.data
+      // items is already capped at 100 by the client's fetch limit; the UI
+      // shows 50, so claimsCount lets it say "50 of N" instead of lying.
+      const claimItems = claims.ok ? (claims.data?.items || []) : []
       res.status(200).json({
         bounty: {
           id: b.id, onChainId: b.onChainId, title: b.title, description: b.description || '',
-          issuer: b.issuer, amountEth: b.amount ? Number(b.amount) / 1e18 : 0,
+          issuer: b.issuer, amount: b.amount ? Number(b.amount) / 1e18 : 0, currency: chain.currency,
           inProgress: !!b.inProgress, isVoting: !!b.isVoting, isCanceled: !!b.isCanceled,
-          url: `https://poidh.xyz/base/bounty/${b.id}`,
+          // poidh.xyz routes on the db id, NOT onChainId - verified live
+          // 2026-07-16 (bounty db id 1249 = onChainId 263; /base/bounty/1249
+          // is the right page, /base/bounty/263 is a different bounty).
+          url: `https://poidh.xyz/${chain.segment}/bounty/${b.id}`,
         },
-        claims: claims.ok ? (claims.data?.items || []).slice(0, 50).map((c) => ({
+        claims: claimItems.slice(0, 50).map((c) => ({
           id: c.id, title: c.title || '', description: c.description || '', imageUrl: c.url || null,
           issuer: c.issuer, isAccepted: !!c.isAccepted,
-        })) : [],
+        })),
+        claimsCount: claims.ok ? claimItems.length : null,
         // "0 claims" and "claims fetch failed" must render differently.
         claimsError: claims.ok ? null : claims.error,
       })
