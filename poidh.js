@@ -1,12 +1,22 @@
 // poidh.js - POIDH ("pics or it didn't happen") bounty client, dependency-free
-// ESM, mirrors empire.js/juke.js's never-throws { ok, ... } style.
+// ESM. Follows the shared client pattern - see empire.js's "THE CLIENT
+// PATTERN" header for the never-throws / validate-first / cache+sweep /
+// no-SDK rationale.
 //
-// POIDH has no public REST/GraphQL docs. This calls the same tRPC endpoint
-// their own frontend (poidh.xyz) uses - proven stable and keyless by
-// bettercallzaal/zpoidh's own scripts/refresh-poidh-leaderboard.py, which
-// has run this exact call shape in production. Read-only: no write endpoint
-// here (claiming/creating a bounty is an on-chain tx via the PoidhV2
-// contract, needing a connected wallet - a future slice, not this one).
+// WHY tRPC-scraping is acceptable here: POIDH has no public REST/GraphQL
+// docs at all, so the choice was (a) their contracts via RPC (heavy - needs
+// an RPC provider + ABI decoding for what is just a read), (b) guess at
+// internals, or (c) call the same tRPC endpoint their own frontend uses.
+// (c) won because it was ALREADY PROVEN in production by bettercallzaal/
+// zpoidh's scripts/refresh-poidh-leaderboard.py - this file copies that
+// script's exact call shape rather than inventing one. If POIDH ever ships a
+// real public API, migrate; until then the zpoidh script and this file break
+// together, which makes drift visible fast.
+//
+// Read-only BY SCOPE, not by accident: claiming/creating a bounty is an
+// on-chain tx against the PoidhV2 contract (addresses below), which needs
+// the wallet-signing flow - a future slice mirroring create-empire's trust
+// model, deliberately not smuggled into a "reader" file.
 
 const TRPC_BASE = 'https://poidh.xyz/api/trpc'
 const REQUEST_TIMEOUT_MS = 10_000

@@ -1,6 +1,11 @@
 // juke.js - Juke Audio (Farcaster live spaces) client, ported from ZAODEVZ/Zuke
 // (src/lib/spaces/juke-api.ts + juke.ts) into dependency-free ESM for zaalcaster.
 //
+// Historical note: this file is the ORIGIN of the never-throws { ok, ... }
+// client pattern every later integration copied (empire.js documents the
+// full rationale under "THE CLIENT PATTERN"). It predates the 60s-cache rule
+// (spaces are created, not polled, so caching would be wrong here anyway).
+//
 // Two paths, per juke.audio/llms.txt:
 //   - Read/embed: no key. GET /v1/rooms/{id}, embed at juke.audio/embed/{id}.
 //   - Create/manage: server-only, key-only. POST /v1/developer/spaces with
