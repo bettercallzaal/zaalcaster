@@ -993,7 +993,8 @@
       { name: 'Deploy empire for an existing token', detail: 'wrap an already-deployed token as an empire', status: 'documented', where: 'not wired up yet' },
     ] },
     { group: 'Boosters + staking (write)', items: [
-      { name: 'Add / remove booster', detail: 'NFT, ERC20, or reputation (QUOTIENT) score multiplier', status: 'documented', where: 'not wired up yet - exact message contract for remove is unconfirmed, being verified before building' },
+      { name: 'Add booster', detail: 'NFT, ERC20, or reputation (QUOTIENT) score multiplier', status: 'built', where: '"+ add booster" on your empire card above' },
+      { name: 'Remove booster', detail: 'delete a booster by id', status: 'documented', where: 'held - its signed-message contract is undocumented, pending Adrian' },
       { name: 'Add / remove staking booster', detail: 'multiplier for locking tokens a minimum duration', status: 'documented', where: 'not wired up yet' },
       { name: 'Activate staking', detail: 'turns on staking for an empire\'s token, auto-creates a stakers leaderboard', status: 'documented', where: 'not wired up yet' },
     ] },
@@ -1019,7 +1020,8 @@
     const mineLine = d.empire?.mine
       ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
       : ''
-    const empLbBtn = d.empire?.topLeaderboardId ? ` <span class="chip" data-act="viewemplb" data-lbid="${esc(d.empire.topLeaderboardId)}">view leaderboard</span>` : ''
+    const empLbBtn = (d.empire?.topLeaderboardId ? ` <span class="chip" data-act="viewemplb" data-lbid="${esc(d.empire.topLeaderboardId)}">view leaderboard</span>` : '')
+      + (d.empire && !d.empire.error ? ' <span class="chip" data-act="addbooster">+ add booster</span>' : '')
     const rw = d.empire?.rewards
     const rewardsLine = rw && (rw.distributedCount || rw.burnedCount || rw.airdropCount)
       ? `<div class="ub" style="margin-top:4px">${rw.distributedCount} distribution${rw.distributedCount === 1 ? '' : 's'}${rw.mostRecentDistribution?.amount ? ` (latest ${rw.mostRecentDistribution.amount})` : ''} - ${rw.burnedCount} burn${rw.burnedCount === 1 ? '' : 's'} - ${rw.airdropCount} airdrop${rw.airdropCount === 1 ? '' : 's'}</div>`
@@ -1383,11 +1385,16 @@
     return null
   }
 
+  // Which overlay's renderer to call back after a wallet connect - the
+  // create-empire and add-booster forms share the connect button + the
+  // connected address (empireDeploy.address is the single wallet slot).
+  let walletRerender = () => renderCreateEmpire()
   async function connectEmpireWallet() {
     const provider = await getEthProvider()
     if (!provider) { toast('no wallet found - open this in a wallet app browser, or install MetaMask/Coinbase Wallet'); return }
     empireSaveDraftInputs()
-    empireDeploy.connecting = true; renderCreateEmpire()
+    boosterSaveDraftInputs()
+    empireDeploy.connecting = true; walletRerender()
     try {
       const accounts = await provider.request({ method: 'eth_requestAccounts' })
       empireDeploy.address = accounts && accounts[0] ? accounts[0] : null
@@ -1395,7 +1402,7 @@
     } catch (e) {
       toast('wallet connect failed: ' + (e && e.message ? e.message : 'unknown error'))
     } finally {
-      empireDeploy.connecting = false; renderCreateEmpire()
+      empireDeploy.connecting = false; walletRerender()
     }
   }
 
@@ -1461,8 +1468,106 @@
 
   function openCreateEmpire() {
     empireDeploy.mode = 'custom'; empireDeploy.result = null; empireDeploy.err = null
+    walletRerender = () => renderCreateEmpire()
     openOverlay('Create empire', '')
     renderCreateEmpire()
+  }
+
+  // ===== Add a booster (Empire Builder write slice 2, doc 1094a) =====
+  // ERC20 / NFT / QUOTIENT score multipliers. Same trust model as
+  // create-empire: the owner wallet signs the docs' exact message
+  // ("Add booster for empire id <id>"), the server only relays.
+  // remove-booster is deliberately NOT built - its message contract is
+  // undocumented, pending Adrian's confirmation.
+  const boosterForm = { type: 'ERC20', contract: '', amount: '', decimals: '18', tokenId: '', name: '', symbol: '', logo: '', busy: false, err: null, done: false }
+  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+  function boosterSaveDraftInputs() {
+    for (const [id, key] of [['bf_contract', 'contract'], ['bf_amount', 'amount'], ['bf_decimals', 'decimals'], ['bf_tokenid', 'tokenId'], ['bf_name', 'name'], ['bf_symbol', 'symbol'], ['bf_logo', 'logo']]) {
+      const el = document.getElementById(id)
+      if (el) boosterForm[key] = el.value
+    }
+    const m = document.getElementById('bf_mult')
+    if (m) boosterForm.multiplier = m.value
+  }
+  // "1.5" tokens at 18 decimals -> "1500000000000000000", pure string/BigInt
+  // math so no float precision loss on big amounts.
+  function toRawUnits(amountStr, decimals) {
+    const s = String(amountStr).trim()
+    if (!/^\d+(\.\d+)?$/.test(s)) return null
+    const d = Number(decimals)
+    if (!Number.isInteger(d) || d < 0 || d > 36) return null
+    const [whole, frac = ''] = s.split('.')
+    if (frac.length > d) return null
+    try { return (BigInt(whole) * (10n ** BigInt(d)) + BigInt(frac.padEnd(d, '0') || '0')).toString() } catch { return null }
+  }
+  async function signAndAddBooster() {
+    boosterSaveDraftInputs()
+    const empireId = st.grow.data?.empire?.id
+    if (!empireId) { toast('no empire loaded'); return }
+    if (!empireDeploy.address) { toast('connect a wallet first'); return }
+    const isQuotient = boosterForm.type === 'QUOTIENT'
+    const contract = isQuotient ? ZERO_ADDRESS : (boosterForm.contract || '').trim()
+    if (!/^0x[a-fA-F0-9]{40}$/.test(contract)) { toast('contract address required'); return }
+    const multiplier = Number(boosterForm.multiplier)
+    if (!Number.isFinite(multiplier) || multiplier < 1.1 || multiplier > 5) { toast('multiplier must be between 1.1 and 5.0'); return }
+    const minAmount = toRawUnits(boosterForm.amount, isQuotient ? 0 : boosterForm.decimals)
+    if (!minAmount) { toast('min amount must be a number (check decimals)'); return }
+    const name = (boosterForm.name || '').trim(), symbol = (boosterForm.symbol || '').trim()
+    if (!name || !symbol) { toast('token name + symbol required (for display on Empire Builder)'); return }
+    const message = `Add booster for empire id ${empireId}`
+
+    if (!window.confirm(`Your wallet will sign:\n\n"${message}"\n\nThen add a ${boosterForm.type} booster (${multiplier}x, min ${boosterForm.amount}${isQuotient ? '' : ' ' + symbol}). Continue?`)) return
+    const provider = await getEthProvider()
+    if (!provider) { toast('no wallet found'); return }
+
+    boosterForm.busy = true; boosterForm.err = null; renderAddBooster()
+    try {
+      const signature = await provider.request({ method: 'personal_sign', params: [message, empireDeploy.address] })
+      const body = {
+        action: 'add_booster', empireId,
+        booster: { type: boosterForm.type, contractAddress: contract, multiplier, requirement: { minAmount }, chainId: 8453, tokenId: (boosterForm.type === 'NFT' && boosterForm.tokenId.trim()) ? boosterForm.tokenId.trim() : null },
+        tokenInfo: { name, symbol, ...(boosterForm.logo.trim() ? { logoURI: boosterForm.logo.trim() } : {}) },
+        signer: empireDeploy.address, signature, message,
+      }
+      const r = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const d = await r.json()
+      if (!r.ok || !d.ok) throw new Error(d.error || 'add booster failed')
+      boosterForm.done = true
+      toast('booster added')
+    } catch (e) {
+      boosterForm.err = e && e.message ? e.message : 'add booster failed'
+    } finally {
+      boosterForm.busy = false; renderAddBooster()
+    }
+  }
+  function renderAddBooster() {
+    const ob = document.getElementById('obody')
+    if (!ob) return
+    if (boosterForm.done) {
+      ob.innerHTML = '<div class="digest"><div class="t"><b>Booster added</b></div><div class="ub" style="margin-top:6px">It will show on the Empire tab within a minute (reads are cached 60s).</div></div>'
+      return
+    }
+    const isQ = boosterForm.type === 'QUOTIENT'
+    const short = empireDeploy.address ? `${empireDeploy.address.slice(0, 6)}...${empireDeploy.address.slice(-4)}` : null
+    const walletLine = empireDeploy.address ? `<div class="ub">connected: ${esc(short)}</div>` : `<span class="chip" data-act="connectwallet">${empireDeploy.connecting ? 'connecting...' : 'connect wallet'}</span>`
+    const typeChips = ['ERC20', 'NFT', 'QUOTIENT'].map((t) => `<span class="chip ${boosterForm.type === t ? 'on' : ''}" data-act="btype" data-type="${t}">${t === 'QUOTIENT' ? 'reputation (QUOTIENT)' : t}</span>`).join('')
+    ob.innerHTML = `<div class="ps" style="margin-bottom:8px">Adds a score multiplier to your empire's leaderboards: hold the token/NFT (or clear the reputation score) and your points get boosted. You sign in your own wallet.</div>
+      <div class="subbar" style="padding-top:0">${typeChips}</div>
+      ${isQ ? '' : `<div class="urow" style="cursor:default;margin-top:8px"><input class="sfin" id="bf_contract" value="${esc(boosterForm.contract)}" placeholder="${boosterForm.type === 'NFT' ? 'NFT contract address' : 'token contract address'}" style="flex:1;margin:0"></div>`}
+      <div class="urow" style="cursor:default"><input class="sfin" id="bf_mult" value="${esc(boosterForm.multiplier || '')}" placeholder="multiplier (1.1 - 5.0)" style="flex:1;margin:0"></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="bf_amount" value="${esc(boosterForm.amount)}" placeholder="${isQ ? 'min reputation score' : 'min amount to qualify (in tokens)'}" style="flex:1;margin:0">${isQ ? '' : `<input class="sfin" id="bf_decimals" value="${esc(boosterForm.decimals)}" placeholder="decimals" title="token decimals - 18 for most ERC20s, 0 for NFT count" style="width:80px;margin:0">`}</div>
+      ${boosterForm.type === 'NFT' ? `<div class="urow" style="cursor:default"><input class="sfin" id="bf_tokenid" value="${esc(boosterForm.tokenId)}" placeholder="token id (ERC-1155 only, else leave blank)" style="flex:1;margin:0"></div>` : ''}
+      <div class="urow" style="cursor:default"><input class="sfin" id="bf_name" value="${esc(boosterForm.name)}" placeholder="token/NFT display name" style="flex:1;margin:0"><input class="sfin" id="bf_symbol" value="${esc(boosterForm.symbol)}" placeholder="symbol" style="width:100px;margin:0"></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="bf_logo" value="${esc(boosterForm.logo)}" placeholder="logo URL (optional)" style="flex:1;margin:0"></div>
+      <div class="subbar" style="margin-top:8px">${walletLine}</div>
+      ${boosterForm.err ? `<div class="err" style="margin-top:6px">${esc(boosterForm.err)}</div>` : ''}
+      <div class="subbar" style="margin-top:10px"><span class="chip" data-act="bsubmit">${boosterForm.busy ? 'adding...' : 'sign & add booster'}</span></div>`
+  }
+  function openAddBooster() {
+    boosterForm.busy = false; boosterForm.err = null; boosterForm.done = false
+    walletRerender = () => renderAddBooster()
+    openOverlay('Add booster', '')
+    renderAddBooster()
   }
 
   async function openEmpireLeaderboard(leaderboardId) {
@@ -1664,6 +1769,8 @@
     const ep = e.target.closest('[data-act="editprofile"]'); if (ep) { openEditProfile(); return }
     const pfs = e.target.closest('[data-act="pfsave"]'); if (pfs) { saveProfile(pfs); return }
     const empc = e.target.closest('[data-act="connectwallet"]'); if (empc) { connectEmpireWallet(); return }
+    const bty = e.target.closest('[data-act="btype"]'); if (bty) { boosterSaveDraftInputs(); boosterForm.type = bty.dataset.type; renderAddBooster(); return }
+    const bsub = e.target.closest('[data-act="bsubmit"]'); if (bsub) { if (!boosterForm.busy) signAndAddBooster(); return }
     const empd = e.target.closest('[data-act="deployempire"]'); if (empd) { signAndDeployEmpire(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
@@ -1822,6 +1929,7 @@
     if (act === 'createempire') { openCreateEmpire(); return }
     if (act === 'viewemplb') { openEmpireLeaderboard(btn.dataset.lbid); return }
     if (act === 'lookupdist') { lookupDistribution(); return }
+    if (act === 'addbooster') { openAddBooster(); return }
     if (act === 'poidhbounty') { loadPoidh(btn.dataset.id); return }
     if (act === 'poidhlookup') { const v = (document.getElementById('poidh_id').value || '').trim(); if (v) loadPoidh(v); else toast('enter a bounty id'); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }

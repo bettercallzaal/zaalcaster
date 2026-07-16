@@ -3,7 +3,7 @@
 
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
-import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, isValidWalletAddress } from '../empire.js'
+import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
 import { getCoin } from '../zora.js'
 import { config } from '../config.js'
 
@@ -35,6 +35,29 @@ function validateDeployPayload(body) {
   if (typeof body.signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(body.signature)) return 'signature must be a 0x hex string'
   const expectedMessage = tokenlessEmpireMessage({ mode: body.mode, name: body.name, fid: body.fid })
   if (body.message !== expectedMessage) return `message does not match the expected text for this name/mode (expected: "${expectedMessage}")`
+  return null
+}
+
+// Same discipline for add-booster (spec: research doc 1094a). minAmount is a
+// raw-units integer string (wei-style) - the client converts from human
+// amounts, the server only accepts digits.
+function validateBoosterPayload(body) {
+  if (!isValidEmpireId(body.empireId)) return 'empireId must be a Base token address or tokenless empire id'
+  const b = body.booster
+  if (!b || typeof b !== 'object') return 'booster object required'
+  if (!['ERC20', 'NFT', 'QUOTIENT'].includes(b.type)) return 'booster.type must be ERC20, NFT, or QUOTIENT'
+  if (typeof b.contractAddress !== 'string' || !isValidWalletAddress(b.contractAddress)) return 'booster.contractAddress must be a contract address (the zero address for QUOTIENT)'
+  if (typeof b.multiplier !== 'number' || !Number.isFinite(b.multiplier) || b.multiplier < 1.1 || b.multiplier > 5) return 'booster.multiplier must be a number between 1.1 and 5.0'
+  if (typeof b.requirement?.minAmount !== 'string' || !/^\d{1,78}$/.test(b.requirement.minAmount)) return 'booster.requirement.minAmount must be a raw-units integer string'
+  if (b.chainId != null && (!Number.isInteger(b.chainId) || b.chainId <= 0)) return 'booster.chainId must be a positive integer'
+  if (b.tokenId != null && !/^\d{1,78}$/.test(String(b.tokenId))) return 'booster.tokenId must be a numeric token id or null'
+  const t = body.tokenInfo
+  if (!t || typeof t.name !== 'string' || !t.name.trim() || t.name.length > 100) return 'tokenInfo.name required, max 100 chars'
+  if (typeof t.symbol !== 'string' || !t.symbol.trim() || t.symbol.length > 20) return 'tokenInfo.symbol required, max 20 chars'
+  if (t.logoURI != null && !/^https?:\/\//.test(String(t.logoURI))) return 'tokenInfo.logoURI must be an http(s) url'
+  if (typeof body.signer !== 'string' || !isValidWalletAddress(body.signer)) return 'signer must be a wallet address'
+  if (typeof body.signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(body.signature)) return 'signature must be a 0x hex string'
+  if (body.message !== addBoosterMessage(body.empireId)) return `message does not match the expected text (expected: "${addBoosterMessage(body.empireId)}")`
   return null
 }
 
@@ -164,6 +187,31 @@ export default async function handler(req, res) {
   // same as every other write route in this app.
   if (req.method === 'POST') {
     const body = await readJsonBody(req)
+
+    // add a booster to an existing empire (same wallet-signed relay model
+    // as deploy below - the browser signed, this only forwards)
+    if (body.action === 'add_booster') {
+      const berr = validateBoosterPayload(body)
+      if (berr) { res.status(400).json({ error: berr }); return }
+      const result = await addBooster(body.empireId, {
+        booster: {
+          type: body.booster.type,
+          contractAddress: body.booster.contractAddress,
+          multiplier: body.booster.multiplier,
+          requirement: { minAmount: body.booster.requirement.minAmount },
+          chainId: body.booster.chainId ?? 8453,
+          tokenId: body.booster.tokenId ?? null,
+        },
+        signer: body.signer,
+        signature: body.signature,
+        message: body.message,
+        tokenInfo: { name: body.tokenInfo.name.trim(), symbol: body.tokenInfo.symbol.trim(), ...(body.tokenInfo.logoURI ? { logoURI: body.tokenInfo.logoURI } : {}) },
+      })
+      if (!result.ok) { res.status(502).json({ error: result.error }); return }
+      res.status(200).json({ ok: true, boosters: result.data?.boosters || [] })
+      return
+    }
+
     const err = validateDeployPayload(body)
     if (err) { res.status(400).json({ error: err }); return }
 

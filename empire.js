@@ -240,3 +240,47 @@ export async function deployTokenlessEmpire(payload) {
 
   return { ok: true, data }
 }
+
+// The docs' recommended message for add-booster (doc 1094a). remove-booster's
+// message format is NOT pinned down in their docs - that call is deliberately
+// not implemented until Adrian confirms the contract.
+export function addBoosterMessage(empireId) {
+  return `Add booster for empire id ${empireId}`
+}
+
+// POST /api/boosters/[empire_id] - add a score-multiplier booster (ERC20 /
+// NFT / QUOTIENT). Same trust model as deployTokenlessEmpire above: `payload`
+// must already carry the owner wallet's EIP-191 signature over
+// addBoosterMessage(empireId); this function only relays.
+export async function addBooster(empireId, payload) {
+  if (!isValidEmpireId(empireId)) return { ok: false, status: 400, error: 'Invalid empire id' }
+  const key = loadEmpireBuilderKey()
+  if (!key) return { ok: false, status: 401, error: 'EMPIRE_BUILDER_API_KEY not set (env or ~/.zao/private/farcaster-zaal.env)' }
+
+  let res
+  try {
+    res = await fetch(`${API_ORIGIN}/boosters/${empireId}`, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'TimeoutError'
+    return { ok: false, status: 502, error: timedOut ? 'Empire Builder API timed out' : 'Could not reach the Empire Builder API' }
+  }
+
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    data = null
+  }
+
+  if (!res.ok) {
+    const detail = data?.error || data?.message || JSON.stringify(data || {}).slice(0, 300)
+    return { ok: false, status: res.status, error: `Empire Builder add-booster failed (${res.status}): ${detail}` }
+  }
+
+  return { ok: true, data }
+}
