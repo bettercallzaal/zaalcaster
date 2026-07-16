@@ -1069,7 +1069,7 @@
       ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
       : ''
     const empLbBtn = (d.empire?.topLeaderboardId ? ` <span class="chip" data-act="viewemplb" data-lbid="${esc(d.empire.topLeaderboardId)}">view leaderboard</span>` : '')
-      + (d.empire && !d.empire.error ? ' <span class="chip" data-act="addbooster">+ add booster</span> <span class="chip" data-act="openstaking">staking</span>' : '')
+      + (d.empire && !d.empire.error ? ' <span class="chip" data-act="addbooster">+ add booster</span> <span class="chip" data-act="openstaking">staking</span> <span class="chip" data-act="openlaunchprep">launch prep</span>' : '')
     const rw = d.empire?.rewards
     const rewardsLine = rw && (rw.distributedCount || rw.burnedCount || rw.airdropCount)
       ? `<div class="ub" style="margin-top:4px">${rw.distributedCount} distribution${rw.distributedCount === 1 ? '' : 's'}${rw.mostRecentDistribution?.amount ? ` (latest ${rw.mostRecentDistribution.amount})` : ''} - ${rw.burnedCount} burn${rw.burnedCount === 1 ? '' : 's'} - ${rw.airdropCount} airdrop${rw.airdropCount === 1 ? '' : 's'}</div>`
@@ -1807,6 +1807,59 @@
     renderStaking()
   }
 
+  // ===== Clanker launch prep (doc 988 / 1094b) - BUILD-ONLY tooling.
+  // Composes the exact @clanker launch cast and pre-fills the Post tab,
+  // which has its own full preview + confirm. This overlay can never send
+  // anything - launching a token is Zaal's trigger, always. Facts baked into
+  // the checklist come from verified research: Clanker v4 mechanics (doc
+  // 646/1094b), fee-recipient rules from Adrian (doc 1092), v5 status (doc
+  // 1094b: in audit, not live - launch on v4, don't wait).
+  const launchForm = { name: '', ticker: '', purpose: '', imageUrl: '' }
+  function launchSaveDraftInputs() {
+    for (const [id, key] of [['lp_name', 'name'], ['lp_ticker', 'ticker'], ['lp_purpose', 'purpose'], ['lp_image', 'imageUrl']]) {
+      const el = document.getElementById(id)
+      if (el) launchForm[key] = el.value
+    }
+  }
+  function launchCastText() {
+    const name = (launchForm.name || '').trim()
+    const ticker = (launchForm.ticker || '').trim().replace(/^\$/, '').toUpperCase()
+    const purpose = (launchForm.purpose || '').trim()
+    if (!name || !ticker) return null
+    return `@clanker launch ${name} $${ticker}${purpose ? ` - ${purpose}` : ''}`
+  }
+  function renderLaunchPrep() {
+    const ob = document.getElementById('obody')
+    if (!ob) return
+    const cast = launchCastText()
+    ob.innerHTML = `<div class="ps" style="margin-bottom:8px">Prep only - nothing here sends. This composes the launch cast and hands it to the Post tab, where you still preview and confirm like any cast. Launching is your trigger.</div>
+      <div class="digest" style="margin-bottom:8px"><div class="ub"><b style="color:#e9e9ee">the checklist (from the research)</b></div>
+        <div class="ub" style="margin-top:4px">1. Energy first: leaderboard active, booster queue warm - the token amplifies what exists, it is not the start.</div>
+        <div class="ub">2. Clanker v4 mechanics: 100B fixed supply, LP locked to 2100, 0.2% protocol fee, 100% of creator fees to you. v5 is in audit, not live - launch on v4, don't wait.</div>
+        <div class="ub">3. Fee recipients: decide the COUNT at launch (up to 7) - the wallets are admin-changeable later, the count is not. Plan slots for the agent + community fund now even if they all start as you.</div>
+        <div class="ub">4. After launch: attach the token to the empire (Adrian's endpoint, pending) and add it as a booster so holders get leaderboard weight.</div></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="lp_name" value="${esc(launchForm.name)}" placeholder="token name" style="flex:1;margin:0"><input class="sfin" id="lp_ticker" value="${esc(launchForm.ticker)}" placeholder="TICKER" style="width:110px;margin:0"></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="lp_purpose" value="${esc(launchForm.purpose)}" placeholder="one line on what it funds (optional)" style="flex:1;margin:0"></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="lp_image" value="${esc(launchForm.imageUrl)}" placeholder="image URL (optional - attaches as the embed)" style="flex:1;margin:0"></div>
+      <div class="digest" style="margin-top:8px"><div class="ub">the cast:</div><div class="t" id="lp_preview" style="margin-top:4px">${cast ? esc(cast) : 'name + ticker fill in the cast preview.'}</div></div>
+      <div class="subbar" style="margin-top:10px"><span class="chip" data-act="lpprefill">${cast ? 'prefill the Post tab (you still confirm there)' : 'fill name + ticker first'}</span></div>`
+  }
+  function openLaunchPrep() {
+    openOverlay('Clanker launch prep', '')
+    renderLaunchPrep()
+  }
+  function launchPrefill() {
+    launchSaveDraftInputs()
+    const cast = launchCastText()
+    if (!cast) { toast('name + ticker first'); return }
+    compose.text = cast
+    compose.embedUrl = (launchForm.imageUrl || '').trim()
+    compose.channel = ''
+    closeOverlay()
+    switchTab('compose')
+    toast('launch cast prefilled - preview and confirm on your own time')
+  }
+
   async function openEmpireLeaderboard(leaderboardId) {
     openOverlay('Leaderboard', '<div class="loading">loading leaderboard...</div>')
     try {
@@ -2010,6 +2063,7 @@
     const bsub = e.target.closest('[data-act="bsubmit"]'); if (bsub) { if (!boosterForm.busy) signAndAddBooster(); return }
     const ssub = e.target.closest('[data-act="stakesubmit"]'); if (ssub) { if (!stakingForm.busy) signAndAddStakingBooster(); return }
     const sact = e.target.closest('[data-act="stakeactivate"]'); if (sact) { if (!stakingForm.busy) signAndActivateStaking(); return }
+    const lpp = e.target.closest('[data-act="lpprefill"]'); if (lpp) { launchPrefill(); return }
     const empd = e.target.closest('[data-act="deployempire"]'); if (empd) { signAndDeployEmpire(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
@@ -2027,7 +2081,19 @@
     if (act === 'snapopen') { window.open(snapUrl(buildSnapDoc()), '_blank', 'noopener'); return }
     if (act === 'snapsave') { const doc = buildSnapDoc(); const name = (window.prompt('name this template', doc.title || 'my snap') || '').trim(); if (name) { savedSnaps.push({ name, doc }); persist(); snapSel = snapList().length - 1; document.getElementById('obody').innerHTML = snapBuilderHtml(); toast('template saved') } return }
   })
-  document.getElementById('obody').addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('sfin')) refreshSnapPreview() })
+  document.getElementById('obody').addEventListener('input', (e) => {
+    if (!e.target.classList || !e.target.classList.contains('sfin')) return
+    // launch-prep fields: update just the cast-preview line in place -
+    // a full re-render would destroy the input focus mid-keystroke.
+    if ((e.target.id || '').startsWith('lp_')) {
+      launchSaveDraftInputs()
+      const prev = document.getElementById('lp_preview')
+      const cast = launchCastText()
+      if (prev) prev.textContent = cast || 'name + ticker fill in the cast preview.'
+      return
+    }
+    refreshSnapPreview()
+  })
   function toggleListMember(listId, fid, uname) {
     const lst = lists.find((l) => l.id === listId); if (!lst) return
     lst.fids = lst.fids || []; lst.members = lst.members || []
@@ -2170,6 +2236,7 @@
     if (act === 'lookupdist') { lookupDistribution(); return }
     if (act === 'addbooster') { openAddBooster(); return }
     if (act === 'openstaking') { openStaking(); return }
+    if (act === 'openlaunchprep') { openLaunchPrep(); return }
     if (act === 'loadbooster') { if (!st.booster.loading) loadBoosterQueue(); return }
     if (act === 'zoedone') { zoeMarkDone(btn.dataset.id, btn); return }
     if (act === 'zoedecadd') { zoeLogDecision(); return }
