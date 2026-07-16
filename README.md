@@ -253,6 +253,12 @@ Push to Vercel. Set the env vars in the Vercel project:
 - Drafts + digest: `OPENROUTER_API_KEY`
 - Lock the site: `SESSION_SECRET` + `NEYNAR_CLIENT_ID` (Sign In With Farcaster via Neynar's SIWN - see `auth.js`) and/or Vercel Deployment Protection. Anyone can sign in as themselves and gets a read-only view; only the fid in `USER_FID` gets write access. **The deployed site can post as you, so never leave it ungated.**
 - Sync + scheduled posts (optional): a Vercel KV store + `CRON_SECRET`.
+- Empire Builder (optional): `EMPIRE_BUILDER_API_KEY` enables the create-a-tokenless-empire flow on the Empire tab (the key alone can't deploy anything - your wallet still signs every deploy in the browser). Set `empireOwnerWallet` in `config.js` to show your empire's card.
+- Zora (optional): set `zoraCoinAddress` in `config.js` to show your Creator Coin's price on the Grow tab. No key needed.
+
+### Web app tabs
+
+Daily, Feed, Inbox, Channels, Search, Post, Grow (your Farcaster stats), Empire (Empire Builder: your empire, leaderboards, rewards, create a tokenless empire), POIDH (bounty reader). Keys 1-9. Signed-in guests see the read-only public surface (Feed, Channels, Search, POIDH); everything else is owner-only.
 
 That's it - `<username>caster` is yours.
 
