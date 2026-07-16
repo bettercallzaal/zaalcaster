@@ -33,6 +33,12 @@ export const config = {
   // reason as empireOwnerWallet above, it's Zaal's call to set it.
   zoraCoinAddress: '',
 
+  // ZOE / cowork tracker: which team_members.name owns the tasks shown on
+  // the Daily tab's ZOE card. Needs ZAO_TRACKER_URL + ZAO_TRACKER_KEY env
+  // vars (or the local ~/.zao/cowork-tracker.env) - card hides itself when
+  // they're unset.
+  trackerOwner: 'Zaal',
+
   // Your brands - each gets a page (channel feed + links) in the Brands hub.
   brands: [
     { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },

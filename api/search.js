@@ -1,7 +1,8 @@
 // GET /api/search?q=... - search users + casts for the web client. Read-only.
 
 import { searchCasts, searchUsers } from '../lib.js'
-import { blockedByGuestAuth } from '../auth.js'
+import { blockedByGuestAuth, getSession } from '../auth.js'
+import { delve } from '../zoe.js'
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -21,6 +22,24 @@ export default async function handler(req, res) {
   try {
     const q = (req.query.q || '').trim()
     if (!q) { res.status(400).json({ error: 'empty query' }); return }
+
+    // Ask ZAO: search the Bonfire knowledge graph (Zaal-only - internal
+    // institutional memory, not public data like the cast search below).
+    if (req.query.zao === '1') {
+      const session = getSession(req)
+      if (!session || session.role !== 'zaal') { res.status(403).json({ error: 'zaal only' }); return }
+      const r = await delve(q)
+      res.setHeader('Cache-Control', 'no-store')
+      if (!r.ok) { res.status(r.status === 501 ? 501 : 502).json({ error: r.error }); return }
+      const episodes = (r.data.episodes || []).slice(0, 10).map((e) => ({
+        name: e.name || null,
+        content: (e.content || '').slice(0, 600),
+        source: e.source_description || null,
+        at: e.valid_at || null,
+      }))
+      res.status(200).json({ q, results: r.data.num_results ?? episodes.length, episodes })
+      return
+    }
     const channel = (req.query.channel || '').replace(/[^a-zA-Z0-9_-]/g, '') || null
 
     const [users, casts] = await Promise.all([
