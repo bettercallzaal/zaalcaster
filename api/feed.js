@@ -1,10 +1,20 @@
-// GET /api/feed - reading feeds for the web client (following, trending,
-// channel). Consolidated to stay under Vercel Hobby's 12-function limit.
-//   ?type=following|trending       following / trending casts
-//   ?type=channel&id=zao,wavewarz  a channel feed
-//   ?trending=1                    list of hot channels (chip row)
-//   ?limit=25 ?cursor=...
-// Read-only, compact safe cast shape.
+// GET /api/feed - every FEED-SHAPED read: following/for-you/trending/channel
+// casts, trending channels, frames, notifications, own-activity, best
+// friends, Empire top-list, ZOE tasks. Consolidated under the 12-function
+// cap.
+//   ?type=following|trending|foryou|channel|list   cast feeds
+//   ?trending=1 | ?frames=1 | ?notifs=1 | ?myactivity=1 | ?bestfriends=1
+//   ?empire=1 | ?zoe=1
+//
+// WHY THIS FILE HAS TWO AUTH TIERS INSIDE ONE HANDLER: it is guest-readable
+// at the top (blockedByGuestAuth) because public feeds/channels/frames are
+// exactly what guests are for - but notifications, own-activity, best
+// friends, custom lists, and ZOE tasks are the owner's private data, so
+// those branches re-check with blockedByOwner. Splitting into two files
+// would spend a function slot to express what four inline checks express
+// here. The compact() mappers exist so responses carry a stable, minimal
+// cast shape - the frontend never sees raw Neynar objects, which is what
+// made the API-drift fallbacks a server-side-only concern.
 
 import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday, getFrameCatalog, searchFrames } from '../lib.js'
 import { blockedByGuestAuth, getSession } from '../auth.js'

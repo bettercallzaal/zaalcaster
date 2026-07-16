@@ -1,9 +1,19 @@
 // /api/state - cross-device sync for the Daily dashboard, bookmarks, muted
-// words, and the scheduled-post queue.
+// words, lists, saved searches, and the scheduled-post queue.
 //   GET  -> { enabled, state }
 //   POST { state } -> saves it (whole blob), returns { ok }
-// Behind the password gate. Falls back to localStorage on the client when the
-// store is disabled (no KV env).
+//
+// WHY ONE WHOLE-BLOB, LAST-WRITE-WINS: this is a single-user app - the only
+// concurrent writers are Zaal's own devices, and the client both debounces
+// writes and pulls fresh state on every boot, so the realistic conflict
+// window is near zero. Per-key merging would add real complexity to protect
+// against a conflict pattern this app can't meaningfully have. If it ever
+// goes multi-user (explicitly declined 2026-07-06, see CLAUDE.md), this is
+// the first thing to revisit.
+//
+// Owner-only via blockedByAuth (the blob contains the private daily/inbox
+// state). Client falls back to localStorage when the store is off (no KV
+// env) - sync is an upgrade, never a requirement.
 
 import { blockedByAuth } from '../auth.js'
 import { storeEnabled, kvGet, kvSet } from '../store.js'

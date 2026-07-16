@@ -1,16 +1,21 @@
-// GET /api/view - detail overlays for the web client. Consolidated (thread +
-// profile + reactions + social graph + channel + link preview) to stay under
-// Vercel Hobby's 12-function limit.
-//   ?kind=thread&hash=<hash>                   conversation (ancestors + cast + replies)
-//   ?kind=profile&user=<fid|username>          profile + recent casts
-//   ?kind=summary&hash=<hash>                  AI thread summary
-//   ?kind=reactions&hash=<hash>&type=like|recast  who reacted to a cast
-//   ?kind=followers&fid=<fid>&cursor=<c>       paginated followers list
-//   ?kind=following&fid=<fid>&cursor=<c>       paginated following list
-//   ?kind=channel_search&q=<query>             channel search results
-//   ?kind=channel_info&id=<channelId>          single channel + viewer follow status
-//   ?kind=link_preview&url=<url>               OpenGraph metadata for a URL
-// Read-only.
+// GET /api/view - every DETAIL-OVERLAY read: the "tap a thing, see more"
+// route. Consolidated under the 12-function cap; grouped because everything
+// here answers one tap on one entity and is public-shaped data.
+//   ?kind=thread&hash=            conversation (ancestors + cast + replies)
+//   ?kind=profile&user=           profile + recent casts + holdings
+//   ?kind=summary&hash=           AI thread summary
+//   ?kind=reactions&hash=&type=   who liked/recast a cast
+//   ?kind=followers|following&fid=&cursor=
+//   ?kind=channel_search&q= / ?kind=channel_info&id=
+//   ?kind=link_preview&url=       OpenGraph via Neynar's crawler
+//   ?kind=empire_leaderboard&id= / ?kind=empire_distribution&hash=
+//   ?kind=poidh_bounty&id=&chain=
+//
+// Read-only, guest-readable (blockedByGuestAuth): threads, profiles,
+// leaderboards, and bounties are public network data - the same things any
+// Farcaster client shows anyone. Note link_preview never fetches the URL
+// from OUR server (Neynar's crawler does), which is why it needs no
+// SSRF/private-IP guarding here - deliberate, audited 2026-07-15.
 
 import {
   getConversation, getUser, getUserCasts, getRelevantFollowers, getConversationSummary,

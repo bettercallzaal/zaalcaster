@@ -1,5 +1,17 @@
-// GET /api/stats - the "what's working" growth view: your best casts, who
-// engages you most, and follower count. Read-only.
+// /api/stats - the OWNER DASHBOARD route: GET is the "what's working" growth
+// view (best casts, top engagers, followers, storage, Empire card, Zora
+// coin); POST hosts the owner-only write actions that need a server-side
+// key or tracker access (deploy tokenless empire, add booster, ZOE task
+// done / decision log).
+//
+// WHY GET AND WRITES SHARE A FILE: 12-function cap, grouped by trust - this
+// whole file is blockedByAuth (owner-only), so the private dashboard reads
+// and the key-relaying writes belong behind the same gate. The wallet-signed
+// Empire writes ADDITIONALLY re-derive the exact message server-side (see
+// validate*Payload below) so a tampered client can't smuggle a different
+// signed message through our relay - the server never trusts the browser's
+// word for what was signed. (Header used to say "Read-only" - stale since
+// the Empire write slice landed; fixed in the 2026-07-16 docs pass.)
 
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
