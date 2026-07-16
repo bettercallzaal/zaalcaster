@@ -274,6 +274,72 @@ export function addBoosterMessage(empireId) {
   return `Add booster for empire id ${empireId}`
 }
 
+// Staking messages, exact per doc 1094a. Note activate-staking is the ONE
+// Empire Builder write whose signed message embeds a millisecond timestamp
+// (server rejects >5 min old) - their own replay-protection pattern, worth
+// copying if we ever design our own signed flows.
+export function addStakingBoosterMessage(empireId) {
+  return `Add staking booster for empire id ${empireId}`
+}
+export function activateStakingMessage(empireId, timestampMs) {
+  return `Activate staking for empire ${String(empireId).toLowerCase()} at ${timestampMs}`
+}
+
+// Shared relay for the Empire Builder authenticated writes - same contract
+// as deployTokenlessEmpire/addBooster: the payload already carries the owner
+// wallet's signature, this only forwards it with the server-side key.
+async function postAuthed(path, payload) {
+  const key = loadEmpireBuilderKey()
+  if (!key) return { ok: false, status: 401, error: 'EMPIRE_BUILDER_API_KEY not set (env or ~/.zao/private/farcaster-zaal.env)' }
+
+  let res
+  try {
+    res = await fetch(`${API_ORIGIN}${path}`, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'TimeoutError'
+    return { ok: false, status: 502, error: timedOut ? 'Empire Builder API timed out' : 'Could not reach the Empire Builder API' }
+  }
+
+  let data
+  try { data = await res.json() } catch { data = null }
+  if (!res.ok) {
+    const detail = data?.error || data?.message || JSON.stringify(data || {}).slice(0, 300)
+    return { ok: false, status: res.status, error: `Empire Builder write failed (${res.status}): ${detail}` }
+  }
+  return { ok: true, data }
+}
+
+// POST /api/staking-boosters/[empire_id] - a multiplier for LOCKING tokens a
+// minimum duration (vs add-booster's hold-only check). minStake is a raw
+// wei-style integer string; minLockupSeconds 0..315,360,000 (10 years) per
+// the docs' documented bounds.
+export async function addStakingBooster(empireId, payload) {
+  if (!isValidEmpireId(empireId)) return { ok: false, status: 400, error: 'Invalid empire id' }
+  return postAuthed(`/staking-boosters/${empireId}`, payload)
+}
+
+// POST /api/empires/activate-staking - turns staking on for an empire and
+// auto-creates a stakers leaderboard (the response's leaderboardId). Their
+// docs show it deploying/returning a stakingToken - which implies it expects
+// a TOKEN empire; behavior on a tokenless empire is undocumented, so the UI
+// labels this as a token-empire feature and surfaces whatever error comes
+// back rather than guessing.
+export async function activateStaking(payload) {
+  return postAuthed('/empires/activate-staking', payload)
+}
+
+// GET /api/empires/activate-staking?tokenAddress= - staking status read
+// (documented alongside the POST as its public companion).
+export async function getStakingStatus(empireId) {
+  if (!isValidEmpireId(empireId)) return { ok: false, status: 400, error: 'Invalid empire id' }
+  return getJson(`/empires/activate-staking?tokenAddress=${empireId}`)
+}
+
 // POST /api/boosters/[empire_id] - add a score-multiplier booster (ERC20 /
 // NFT / QUOTIENT). Same trust model as deployTokenlessEmpire above: `payload`
 // must already carry the owner wallet's EIP-191 signature over

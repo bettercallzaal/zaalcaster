@@ -15,7 +15,7 @@
 
 import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
-import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
+import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, getStakingStatus, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, addStakingBooster, addStakingBoosterMessage, activateStaking, activateStakingMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
 import { getCoin } from '../zora.js'
 import { markTaskDone, logDecision } from '../zoe.js'
 import { config } from '../config.js'
@@ -74,6 +74,34 @@ function validateBoosterPayload(body) {
   return null
 }
 
+// Staking-booster validation (doc 1094a): minStake is wei-style digits,
+// lockup 0..315,360,000s (their documented 10-year bound), multiplier
+// 1.1-5.0 with AT MOST ONE DECIMAL (their documented constraint - stricter
+// than regular boosters).
+function validateStakingBoosterPayload(body) {
+  if (!isValidEmpireId(body.empireId)) return 'empireId required'
+  if (typeof body.minStake !== 'string' || !/^\d{1,78}$/.test(body.minStake)) return 'minStake must be a raw-units integer string'
+  if (!Number.isInteger(body.minLockupSeconds) || body.minLockupSeconds < 0 || body.minLockupSeconds > 315360000) return 'minLockupSeconds must be 0..315360000'
+  if (typeof body.multiplier !== 'number' || body.multiplier < 1.1 || body.multiplier > 5 || Math.round(body.multiplier * 10) !== body.multiplier * 10) return 'multiplier must be 1.1-5.0 with at most one decimal'
+  if (typeof body.signer !== 'string' || !isValidWalletAddress(body.signer)) return 'signer must be a wallet address'
+  if (typeof body.signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(body.signature)) return 'signature must be a 0x hex string'
+  if (body.message !== addStakingBoosterMessage(body.empireId)) return `message does not match (expected: "${addStakingBoosterMessage(body.empireId)}")`
+  return null
+}
+
+// Activate-staking validation: the message embeds a ms timestamp and Empire
+// Builder rejects >5 min old - pre-flight the same window here so a stale
+// signature fails fast with a clear error instead of burning a relay call.
+function validateActivateStakingPayload(body) {
+  if (!isValidEmpireId(body.empireId)) return 'empireId required'
+  if (!Number.isInteger(body.timestamp)) return 'timestamp (ms) required'
+  if (Math.abs(Date.now() - body.timestamp) > 5 * 60 * 1000) return 'timestamp is stale - re-sign (5 minute window)'
+  if (typeof body.signer !== 'string' || !isValidWalletAddress(body.signer)) return 'signer must be a wallet address'
+  if (typeof body.signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(body.signature)) return 'signature must be a 0x hex string'
+  if (body.message !== activateStakingMessage(body.empireId, body.timestamp)) return 'message does not match the expected activate-staking text'
+  return null
+}
+
 // engagement weight: replies + recasts count more than likes (they spread you)
 function score(c) {
   return (c.reactions?.likes_count || 0) + 2 * (c.reactions?.recasts_count || 0) + 1.5 * (c.replies?.count || 0)
@@ -109,10 +137,11 @@ async function empireSummary() {
   const empireId = empire.base_token || empire.token_address || empire.address
   if (!empireId) return { name: empire.name || null, error: 'empire found but had no usable id' }
 
-  const [boards, boosters, rewards] = await Promise.all([
+  const [boards, boosters, rewards, staking] = await Promise.all([
     getEmpireLeaderboards(empireId),
     getEmpireBoosters(empireId),
     getEmpireRewardsSummary(empireId),
+    getStakingStatus(empireId),
   ])
 
   const slots = boards.ok ? (boards.data?.leaderboards || (Array.isArray(boards.data) ? boards.data : [])) : []
@@ -155,6 +184,7 @@ async function empireSummary() {
     topLeaderboardId,
     boosters: boosters.ok ? (boosters.data?.boosters || boosters.data || []).slice(0, 8) : [],
     rewards: rewardsSummary,
+    staking: staking.ok ? { activated: !!staking.data?.staking_activated, token: staking.data?.stakingToken || null } : null,
     mine,
   }
 }
@@ -213,6 +243,34 @@ export default async function handler(req, res) {
       const r = await logDecision(String(body.text || ''), config.trackerOwner || 'Zaal')
       if (!r.ok) { res.status(r.status === 400 ? 400 : 502).json({ error: r.error }); return }
       res.status(200).json({ ok: true })
+      return
+    }
+
+    // staking booster - same wallet-signed relay model
+    if (body.action === 'add_staking_booster') {
+      const serr = validateStakingBoosterPayload(body)
+      if (serr) { res.status(400).json({ error: serr }); return }
+      const result = await addStakingBooster(body.empireId, {
+        minStake: body.minStake,
+        minLockupSeconds: body.minLockupSeconds,
+        multiplier: body.multiplier,
+        signer: body.signer, signature: body.signature, message: body.message,
+      })
+      if (!result.ok) { res.status(502).json({ error: result.error }); return }
+      res.status(200).json({ ok: true, stakingBoosters: result.data?.stakingBoosters || [] })
+      return
+    }
+
+    // activate staking - the one Empire write with a timestamped message
+    if (body.action === 'activate_staking') {
+      const aerr = validateActivateStakingPayload(body)
+      if (aerr) { res.status(400).json({ error: aerr }); return }
+      const result = await activateStaking({
+        tokenAddress: body.empireId,
+        signer: body.signer, signature: body.signature, timestamp: body.timestamp,
+      })
+      if (!result.ok) { res.status(502).json({ error: result.error }); return }
+      res.status(200).json({ ok: true, staking: result.data })
       return
     }
 

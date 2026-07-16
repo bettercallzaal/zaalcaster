@@ -1041,8 +1041,9 @@
     { group: 'Boosters + staking (write)', items: [
       { name: 'Add booster', detail: 'NFT, ERC20, or reputation (QUOTIENT) score multiplier', status: 'built', where: '"+ add booster" on your empire card above' },
       { name: 'Remove booster', detail: 'delete a booster by id', status: 'documented', where: 'held - its signed-message contract is undocumented, pending Adrian' },
-      { name: 'Add / remove staking booster', detail: 'multiplier for locking tokens a minimum duration', status: 'documented', where: 'not wired up yet' },
-      { name: 'Activate staking', detail: 'turns on staking for an empire\'s token, auto-creates a stakers leaderboard', status: 'documented', where: 'not wired up yet' },
+      { name: 'Add staking booster', detail: 'multiplier for locking tokens a minimum duration', status: 'built', where: '"staking" on your empire card above' },
+      { name: 'Remove staking booster', detail: 'delete a staking booster by id', status: 'documented', where: 'held - same undocumented message contract as remove-booster' },
+      { name: 'Activate staking', detail: 'turns on staking, auto-creates a stakers leaderboard (documented for token empires)', status: 'built', where: '"staking" on your empire card above' },
     ] },
     { group: 'Leaderboards + distributions (write)', items: [
       { name: 'Create / delete / refresh leaderboard', detail: '9 source types: token holders, stakers, NFT holders, custom API, CSV, Farcaster casts/channel/interactions, another empire\'s token', status: 'documented', where: 'not wired up yet' },
@@ -1067,7 +1068,7 @@
       ? ` - your rank <b>${d.empire.mine.rank ?? '?'}</b>${d.empire.mine.points != null ? ` (${d.empire.mine.points} pts)` : ''}${d.empire.mine.totalRewards ? `, ${Math.round(d.empire.mine.totalRewards)} lifetime` : ''}`
       : ''
     const empLbBtn = (d.empire?.topLeaderboardId ? ` <span class="chip" data-act="viewemplb" data-lbid="${esc(d.empire.topLeaderboardId)}">view leaderboard</span>` : '')
-      + (d.empire && !d.empire.error ? ' <span class="chip" data-act="addbooster">+ add booster</span>' : '')
+      + (d.empire && !d.empire.error ? ' <span class="chip" data-act="addbooster">+ add booster</span> <span class="chip" data-act="openstaking">staking</span>' : '')
     const rw = d.empire?.rewards
     const rewardsLine = rw && (rw.distributedCount || rw.burnedCount || rw.airdropCount)
       ? `<div class="ub" style="margin-top:4px">${rw.distributedCount} distribution${rw.distributedCount === 1 ? '' : 's'}${rw.mostRecentDistribution?.amount ? ` (latest ${rw.mostRecentDistribution.amount})` : ''} - ${rw.burnedCount} burn${rw.burnedCount === 1 ? '' : 's'} - ${rw.airdropCount} airdrop${rw.airdropCount === 1 ? '' : 's'}</div>`
@@ -1498,6 +1499,7 @@
     if (!provider) { toast('no wallet found - open this in a wallet app browser, or install MetaMask/Coinbase Wallet'); return }
     empireSaveDraftInputs()
     boosterSaveDraftInputs()
+    stakingSaveDraftInputs()
     empireDeploy.connecting = true; walletRerender()
     try {
       const accounts = await provider.request({ method: 'eth_requestAccounts' })
@@ -1672,6 +1674,101 @@
     walletRerender = () => renderAddBooster()
     openOverlay('Add booster', '')
     renderAddBooster()
+  }
+
+  // ===== Staking (Empire Builder write slice 3, doc 1094a) =====
+  // Two flows sharing one overlay: add a staking booster (multiplier for
+  // LOCKING tokens a minimum duration - vs a regular booster's hold-only
+  // check) and activate staking (turns staking on + auto-creates a stakers
+  // leaderboard). Same wallet-sign relay trust model as the other Empire
+  // writes. Activate's message embeds a ms timestamp (5-min validity) -
+  // Empire Builder's own replay protection, unique to this endpoint.
+  const stakingForm = { minStake: '', decimals: '18', lockupDays: '', multiplier: '', busy: false, err: null, done: false }
+  function stakingSaveDraftInputs() {
+    for (const [id, key] of [['sf_amount', 'minStake'], ['sf_decimals', 'decimals'], ['sf_lockup', 'lockupDays'], ['sf_mult', 'multiplier']]) {
+      const el = document.getElementById(id)
+      if (el) stakingForm[key] = el.value
+    }
+  }
+  async function signAndAddStakingBooster() {
+    stakingSaveDraftInputs()
+    const empireId = st.grow.data?.empire?.id
+    if (!empireId) { toast('no empire loaded'); return }
+    if (!empireDeploy.address) { toast('connect a wallet first'); return }
+    const minStake = toRawUnits(stakingForm.minStake, stakingForm.decimals)
+    if (!minStake) { toast('min stake must be a number (check decimals)'); return }
+    const days = Number(stakingForm.lockupDays)
+    if (!Number.isFinite(days) || days < 0 || days > 3650) { toast('lockup must be 0-3650 days'); return }
+    const minLockupSeconds = Math.round(days * 86400)
+    const multiplier = Number(stakingForm.multiplier)
+    if (!Number.isFinite(multiplier) || multiplier < 1.1 || multiplier > 5 || Math.round(multiplier * 10) !== multiplier * 10) { toast('multiplier must be 1.1-5.0, one decimal max'); return }
+    const message = `Add staking booster for empire id ${empireId}`
+    if (!window.confirm(`Your wallet will sign:\n\n"${message}"\n\nThen add a staking booster (${multiplier}x for locking ${stakingForm.minStake} tokens ${days} day${days === 1 ? '' : 's'}+). Continue?`)) return
+    const provider = await getEthProvider()
+    if (!provider) { toast('no wallet found'); return }
+    stakingForm.busy = true; stakingForm.err = null; renderStaking()
+    try {
+      const signature = await provider.request({ method: 'personal_sign', params: [message, empireDeploy.address] })
+      const r = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_staking_booster', empireId, minStake, minLockupSeconds, multiplier, signer: empireDeploy.address, signature, message }) })
+      const d = await r.json()
+      if (!r.ok || !d.ok) throw new Error(d.error || 'add staking booster failed')
+      stakingForm.done = true
+      toast('staking booster added')
+    } catch (e) {
+      stakingForm.err = e && e.message ? e.message : 'failed'
+    } finally {
+      stakingForm.busy = false; renderStaking()
+    }
+  }
+  async function signAndActivateStaking() {
+    const empireId = st.grow.data?.empire?.id
+    if (!empireId) { toast('no empire loaded'); return }
+    if (!empireDeploy.address) { toast('connect a wallet first'); return }
+    const timestamp = Date.now()
+    const message = `Activate staking for empire ${String(empireId).toLowerCase()} at ${timestamp}`
+    if (!window.confirm(`Your wallet will sign:\n\n"${message}"\n\nThen activate staking for this empire (auto-creates a stakers leaderboard). The signature is only valid for 5 minutes. Continue?`)) return
+    const provider = await getEthProvider()
+    if (!provider) { toast('no wallet found'); return }
+    stakingForm.busy = true; stakingForm.err = null; renderStaking()
+    try {
+      const signature = await provider.request({ method: 'personal_sign', params: [message, empireDeploy.address] })
+      const r = await fetch('/api/stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'activate_staking', empireId, timestamp, signer: empireDeploy.address, signature, message }) })
+      const d = await r.json()
+      if (!r.ok || !d.ok) throw new Error(d.error || 'activate staking failed')
+      stakingForm.done = true
+      toast(d.staking?.alreadyActive ? 'staking was already active' : 'staking activated')
+    } catch (e) {
+      stakingForm.err = e && e.message ? e.message : 'failed'
+    } finally {
+      stakingForm.busy = false; renderStaking()
+    }
+  }
+  function renderStaking() {
+    const ob = document.getElementById('obody')
+    if (!ob) return
+    if (stakingForm.done) {
+      ob.innerHTML = '<div class="digest"><div class="t"><b>Done</b></div><div class="ub" style="margin-top:6px">Staking changes show on the Empire tab within a minute (reads are cached 60s).</div></div>'
+      return
+    }
+    const activated = !!st.grow.data?.empire?.staking?.activated
+    const short = empireDeploy.address ? `${empireDeploy.address.slice(0, 6)}...${empireDeploy.address.slice(-4)}` : null
+    const walletLine = empireDeploy.address ? `<div class="ub">connected: ${esc(short)}</div>` : `<span class="chip" data-act="connectwallet">${empireDeploy.connecting ? 'connecting...' : 'connect wallet'}</span>`
+    ob.innerHTML = `<div class="ps" style="margin-bottom:8px">Staking rewards people who LOCK tokens, not just hold them. Two moves here: activate staking for the empire (once), then add staking boosters (multiplier for a minimum lock).</div>
+      <div class="digest" style="margin-bottom:8px"><div class="ub">staking status: <b style="color:${activated ? '#3fbf7f' : '#8a8a99'}">${activated ? 'active' : 'not activated'}</b>${activated ? '' : ' - note: Empire Builder documents this for token empires; on a tokenless empire the API may reject it'}</div>
+      ${activated ? '' : `<div style="margin-top:6px"><span class="chip" data-act="stakeactivate">${stakingForm.busy ? 'working...' : 'sign & activate staking'}</span></div>`}</div>
+      <div class="subbar" style="padding-top:0"><b style="color:#8a8a99;font-size:13px">add a staking booster</b></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="sf_amount" value="${esc(stakingForm.minStake)}" placeholder="min stake (in tokens)" style="flex:1;margin:0"><input class="sfin" id="sf_decimals" value="${esc(stakingForm.decimals)}" placeholder="decimals" style="width:80px;margin:0"></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="sf_lockup" value="${esc(stakingForm.lockupDays)}" placeholder="min lockup (days, 0 = none)" style="flex:1;margin:0"></div>
+      <div class="urow" style="cursor:default"><input class="sfin" id="sf_mult" value="${esc(stakingForm.multiplier)}" placeholder="multiplier (1.1 - 5.0, one decimal)" style="flex:1;margin:0"></div>
+      <div class="subbar" style="margin-top:8px">${walletLine}</div>
+      ${stakingForm.err ? `<div class="err" style="margin-top:6px">${esc(stakingForm.err)}</div>` : ''}
+      <div class="subbar" style="margin-top:10px"><span class="chip" data-act="stakesubmit">${stakingForm.busy ? 'working...' : 'sign & add staking booster'}</span></div>`
+  }
+  function openStaking() {
+    stakingForm.busy = false; stakingForm.err = null; stakingForm.done = false
+    walletRerender = () => renderStaking()
+    openOverlay('Staking', '')
+    renderStaking()
   }
 
   async function openEmpireLeaderboard(leaderboardId) {
@@ -1875,6 +1972,8 @@
     const empc = e.target.closest('[data-act="connectwallet"]'); if (empc) { connectEmpireWallet(); return }
     const bty = e.target.closest('[data-act="btype"]'); if (bty) { boosterSaveDraftInputs(); boosterForm.type = bty.dataset.type; renderAddBooster(); return }
     const bsub = e.target.closest('[data-act="bsubmit"]'); if (bsub) { if (!boosterForm.busy) signAndAddBooster(); return }
+    const ssub = e.target.closest('[data-act="stakesubmit"]'); if (ssub) { if (!stakingForm.busy) signAndAddStakingBooster(); return }
+    const sact = e.target.closest('[data-act="stakeactivate"]'); if (sact) { if (!stakingForm.busy) signAndActivateStaking(); return }
     const empd = e.target.closest('[data-act="deployempire"]'); if (empd) { signAndDeployEmpire(); return }
     const al = e.target.closest('[data-act="addtolist"]')
     if (al) { toggleListMember(al.dataset.list, Number(al.dataset.fid), al.dataset.uname); al.classList.toggle('on'); return }
@@ -2034,6 +2133,7 @@
     if (act === 'viewemplb') { openEmpireLeaderboard(btn.dataset.lbid); return }
     if (act === 'lookupdist') { lookupDistribution(); return }
     if (act === 'addbooster') { openAddBooster(); return }
+    if (act === 'openstaking') { openStaking(); return }
     if (act === 'zoedone') { zoeMarkDone(btn.dataset.id, btn); return }
     if (act === 'zoedecadd') { zoeLogDecision(); return }
     if (act === 'poidhbounty') { loadPoidh(btn.dataset.id); return }
