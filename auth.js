@@ -29,6 +29,16 @@ export function authEnabled() {
   return !!process.env.SESSION_SECRET
 }
 
+// The one dangerous config: NEYNAR_CLIENT_ID set (guest sign-in advertised to
+// the world) but SESSION_SECRET unset. Without this check, the gate-off
+// escape hatch below would treat EVERY visitor - including signed-in guests -
+// as the owner with full write access, and any cookie issued would be signed
+// with an empty key (forgeable). Fail closed instead: nobody gets a session
+// until SESSION_SECRET is set. (Security audit finding, 2026-07-15.)
+export function misconfigured() {
+  return !!process.env.NEYNAR_CLIENT_ID && !process.env.SESSION_SECRET
+}
+
 export function ownerFid() {
   return Number(process.env.USER_FID || process.env.ZAAL_FID || config.fid)
 }
@@ -67,6 +77,7 @@ export function clearSessionCookie() {
 
 // null (no/invalid/expired session) | { fid, role: 'zaal' | 'guest' }
 export function getSession(req) {
+  if (misconfigured()) return null // fail closed - see misconfigured() above
   if (!authEnabled()) return { fid: ownerFid(), role: 'zaal' } // gate off = full local access
   const raw = readCookie(req, COOKIE)
   if (!raw) return null

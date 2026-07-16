@@ -20,11 +20,19 @@ export function isValidCoinAddress(value) {
 
 const cache = new Map() // url -> { at, payload }
 
+// Sweep expired entries so the map can't grow unboundedly across warm
+// serverless invocations (same fix as empire.js).
+function sweepCache() {
+  const now = Date.now()
+  for (const [k, v] of cache) if (now - v.at >= CACHE_TTL_MS) cache.delete(k)
+}
+
 // GET /coin?address=&chain= -> { zora20Token: {...} }
 export async function getCoin(address, chainId = 8453) {
   if (!isValidCoinAddress(address)) return { ok: false, status: 400, error: 'Invalid coin contract address' }
 
   const url = `${API_ORIGIN}/coin?address=${address}&chain=${chainId}`
+  sweepCache()
   const hit = cache.get(url)
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.payload
 
