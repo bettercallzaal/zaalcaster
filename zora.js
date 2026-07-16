@@ -1,12 +1,18 @@
-// zora.js - Zora Creator Coin read client, dependency-free ESM, mirrors
-// empire.js/poidh.js's never-throws { ok, ... } style.
+// zora.js - Zora Creator Coin read client, dependency-free ESM. Follows the
+// shared client pattern - see empire.js's "THE CLIENT PATTERN" header.
 //
-// Public REST endpoint (docs.zora.co/coins/sdk/public-rest-api), no auth
-// needed, no npm SDK required - confirmed live 2026-07-15 against Zaal's
-// own Creator Coin (found via an Empire Builder booster entry on the ZABAL
-// leaderboard: contractAddress 0x2275c5e507f1d01a0c043a4f888ec58f8215c285,
-// Base). An optional API key exists for higher rate limits but reads work
-// fine without one.
+// WHY Zora's own API and not a DEX/price aggregator: the coin trades on a
+// Uniswap V4 pool, but 0x/1inch/the Uniswap subgraph don't index it (checked
+// 2026-07-15) - and Zora's endpoint returns the creator/social metadata a
+// price API never would. docs.zora.co/coins/sdk/public-rest-api documents
+// api-sdk.zora.engineering as public: no auth needed for reads (an optional
+// key exists for rate-limit headroom; not worth a secret until reads fail).
+// The @zoralabs/coins-sdk npm package is just typed sugar over this same
+// endpoint - which is exactly why it isn't a dependency here.
+//
+// Confirmed live 2026-07-15 against Zaal's real Creator Coin, which was
+// discovered organically as a booster entry on the ZABAL Empire leaderboard
+// (contractAddress 0x2275c5e507f1d01a0c043a4f888ec58f8215c285, Base).
 
 const API_ORIGIN = 'https://api-sdk.zora.engineering'
 const REQUEST_TIMEOUT_MS = 10_000

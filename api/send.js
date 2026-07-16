@@ -1,12 +1,24 @@
-// POST /api/send - post a cast from the web cockpit. Reply or top-level.
-// Body: { text, parentHash?, parentFid?, channelId? }
-//   parentHash present -> reply; absent -> new top-level cast.
-//   channelId optional -> post into a channel.
-// Returns: { ok, hash, link } or { error }.
+// POST /api/send - THE "speak as Zaal" route: casting (reply / quote /
+// top-level / thread), delete, profile edit, image upload, and X + Bluesky
+// cross-posting all live in this one file.
 //
-// Behind Vercel deployment protection (only Zaal's login reaches it). Still,
-// the UI must show exact text + an explicit confirm before calling this - the
-// confirm click is the yes. Needs ZAAL_SIGNER_UUID (clean 500 if unset).
+// WHY ONE FILE: Vercel Hobby caps the repo at 12 serverless functions, so
+// routes are grouped by TRUST LEVEL, not by feature. Everything here can
+// publish or mutate as Zaal, so it all sits behind the same blockedByAuth
+// gate (owner-only via the SIWF session; guests can never reach any branch)
+// and shares one signer requirement.
+//
+// THE UI CONTRACT (the confirm rule): the server can verify a session but
+// cannot verify a human read the text - so the non-negotiable rule that
+// exact text is shown + explicitly confirmed before this route is called
+// lives in the frontends (two-step confirm everywhere) and in CLAUDE.md.
+// Cross-posts additionally require their toggle ON at confirm time, and a
+// cross-post failure never fails the cast (the cast is the primary act).
+//
+// Body: { text, parentHash?, parentFid?, channelId?, ... } - parentHash
+// present -> reply; quoteHash -> quote; casts[] -> thread; action ->
+// profile/delete. Needs the signer (clean 500 with a friendly message if
+// unset - reads elsewhere work without one by design).
 
 import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast, updateProfile } from '../lib.js'
 import { postToX, postThreadToX, xEnabled } from '../xpost.js'

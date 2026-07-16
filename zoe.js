@@ -1,17 +1,29 @@
 // zoe.js - ZOE ecosystem client: the unified cowork tracker (Supabase REST)
-// + the ZABAL Bonfire knowledge graph. Dependency-free ESM, never-throws
-// { ok, ... } style like empire.js/poidh.js/zora.js.
+// + the ZABAL Bonfire knowledge graph. Dependency-free ESM, shared client
+// pattern - see empire.js's "THE CLIENT PATTERN" header.
 //
-// ZOE itself (the assistant agent) is a Telegram bot with NO HTTP API - per
-// the hub-and-spoke architecture (ZAOOS research doc 989) you integrate the
-// HUB, not the bot: the tracker's tasks table is where ZOE's work lives, and
-// Bonfire is its institutional memory. Both surfaces live-verified
-// 2026-07-15 against real data (Zaal's open tasks; a delve query returning
-// 41 real episodes).
+// WHY THIS TALKS TO A DATABASE AND A KNOWLEDGE GRAPH, NOT TO ZOE:
+// ZOE (the ZAO's assistant agent) is a Telegram polling bot with NO HTTP
+// API - "chat with ZOE from zaalcaster" would require building an HTTP
+// bridge on the VPS first (researched 2026-07-15, deferred as VPS-side
+// work). But the hub-and-spoke architecture (ZAOOS research doc 989) makes
+// that mostly unnecessary: ZOE's actual working state IS the tracker's
+// tasks table, and its memory IS Bonfire. Integrating those two surfaces
+// means zaalcaster and ZOE stay in sync through shared state, work when
+// ZOE is down, and require zero changes on ZOE's side. The /delve call
+// below is the SAME call ZOE's own recall loop makes - so "Ask ZAO" in
+// zaalcaster reads from exactly the memory ZOE answers from on Telegram.
 //
-// Writes here are TRACKER writes (mark a task done, log a decision) - plain
-// database rows Zaal already owns, not on-chain actions and not posts. They
-// are still gated Zaal-only at the API layer (blockedByAuth).
+// WHY logDecision writes a status:'done' row: a decision is a record, not a
+// todo - done-status keeps it off everyone's kanban board while still being
+// a tracker row that ZOE's existing tracker->Bonfire mirror loop picks up.
+// Cheaper and more durable than posting to Bonfire directly (one write
+// surface, ZOE's loop owns the mirroring).
+//
+// Both surfaces live-verified 2026-07-15 against real data (Zaal's open
+// tasks; a delve query returning 41 real episodes). Writes here are TRACKER
+// writes (plain database rows Zaal already owns) - not on-chain actions,
+// not posts - and still gated owner-only at the API layer (blockedByAuth).
 
 import fs from 'fs'
 import path from 'path'

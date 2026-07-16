@@ -1,7 +1,14 @@
-// POST /api/react - like or recast from the web client.
-// Body: { type: 'like'|'recast'|'follow'|'unfollow'|'mute'|'unmute'|'block'|'unblock'|'channel_follow'|'channel_unfollow', targetHash?, targetFid?, channelId? }
-// Behind Vercel login. A like/recast is a low-stakes, reversible signal, so
-// the UI fires it on click (no confirm) - but it still needs the signer.
+// POST /api/react - every RELATIONSHIP/SIGNAL write: like, recast, follow/
+// unfollow, mute/unmute, block/unblock, channel follow/unfollow.
+// Body: { type, targetHash?, targetFid?, channelId? }
+//
+// WHY THESE ARE FOLDED TOGETHER (and kept separate from api/send.js): same
+// 12-function-cap grouping-by-trust as send.js, but this file is the
+// REVERSIBLE tier - everything here can be undone with the opposite call,
+// and nothing publishes words as Zaal. That's also why the UI fires likes/
+// recasts on a single click with no confirm (reversible = low ceremony)
+// while block keeps a two-step confirm in the UI (reversible, but loud).
+// Owner-only via blockedByAuth; needs the signer like any protocol write.
 
 import { postReaction, setFollow, setMuteBlock, setChannelFollow, friendlyPostError } from '../lib.js'
 import { blockedByAuth } from '../auth.js'

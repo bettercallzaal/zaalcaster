@@ -14,6 +14,32 @@
 // already-signed payload - it has no way to sign anything and never holds a
 // private key, so it cannot deploy an empire on its own. The human always
 // pulls the trigger by signing in their wallet app.
+//
+// ========================= THE CLIENT PATTERN (why) =========================
+// Every external-API client in this repo (juke.js first, then this file,
+// poidh.js, zora.js, zoe.js) follows the same four rules:
+//
+// 1. NEVER THROWS - always returns { ok, status, error } or { ok, data }.
+//    These run inside Vercel serverless handlers where an uncaught throw is
+//    an opaque 500 with no useful message. Returning a shaped error lets the
+//    handler pick the right HTTP status and lets the UI say what actually
+//    happened ("Empire Builder API timed out" vs a blank card).
+// 2. VALIDATE BEFORE FETCH - every id/address that gets interpolated into a
+//    URL path is regex-constrained first. This is simultaneously the
+//    path-injection guard (a crafted id can't smuggle "../" or a query
+//    string), the quota-saver (garbage never spends an API call), and the
+//    fast client-side 400.
+// 3. CACHE 60s + SWEEP - none of these APIs document rate limits, so we cache
+//    politely rather than guess a budget. Module-level Map survives warm
+//    serverless invocations (that's the point), and sweepCache() deletes
+//    expired entries because skip-on-read alone grows the map forever
+//    (2026-07-15 audit finding). Only 2xx responses are cached - errors must
+//    stay retryable.
+// 4. NO SDKs - the repo is dependency-free (Node builtins only). Every one of
+//    these APIs turned out to be callable with plain fetch(); when one isn't
+//    (0xSplits needs their SDK + an API key), the verdict is skip, not "add
+//    the dependency" - see CLAUDE.md's integration decisions.
+// ============================================================================
 
 import fs from 'fs'
 import path from 'path'

@@ -1,4 +1,8 @@
-// GET /api/search?q=... - search users + casts for the web client. Read-only.
+// GET /api/search?q=... - search users + casts (guest-readable, public
+// network data), plus ?zao=1 for "Ask ZAO" - the Bonfire knowledge-graph
+// search (owner-only: the graph is the ZAO's internal memory of meetings
+// and decisions, not public data - which is why one file carries two auth
+// tiers, same pattern as api/feed.js). Read-only.
 
 import { searchCasts, searchUsers } from '../lib.js'
 import { blockedByGuestAuth, getSession } from '../auth.js'

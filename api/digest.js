@@ -1,5 +1,15 @@
-// GET /api/digest - "what I missed": an AI summary of the recent following feed.
-// Read-only. Needs OPENROUTER_API_KEY on Vercel (claude CLI locally).
+// /api/digest - every AI-GENERATION surface: the "what I missed" feed digest
+// (GET), batch reply drafts, user research briefs, and LinkedIn post drafts
+// (POST modes).
+//
+// WHY drafts live here and not in their own api/draft.js: they used to -
+// api/draft.js was consolidated INTO this file (2026-07-07) to free a slot
+// under the 12-function cap when the webhook receiver needed one. The
+// grouping still holds by trust level: everything here CALLS A MODEL and
+// RETURNS TEXT, never posts - generation and sending are different tiers
+// (sending is api/send.js, with its own confirm contract).
+// Owner-only (drafts/digest read the private inbox + feed). Needs
+// OPENROUTER_API_KEY on Vercel (falls back to the local claude CLI on mac).
 
 import { getFollowingFeed } from '../lib.js'
 import { blockedByAuth } from '../auth.js'

@@ -1,3 +1,43 @@
+// lib.js - the Neynar v2 wrapper everything else builds on: env loading, one
+// authenticated fetch, and every Farcaster read/write the CLI + web app use.
+//
+// ============================== WHY THIS DESIGN ==============================
+//
+// ONE FILE, NOT A src/ TREE: this repo is a personal client whose whole
+// backend must fit Vercel Hobby's 12-serverless-function cap. Keeping every
+// Neynar call in one flat module means api/*.js files stay thin route
+// handlers, and the CLI (bin/*) imports the exact same functions - one
+// implementation, two frontends.
+//
+// ENV RESOLUTION ORDER (process.env first, then ~/.zao/private/...): Vercel
+// sets real env vars, the local CLI reads the creds file - checking
+// process.env first means a deploy can never be shadowed by a stale local
+// file, and the same code path serves both. loadEnv() THROWS instead of
+// process.exit() so a serverless handler can catch and return a proper 500
+// (exit() would kill the lambda with an empty response). Generic names
+// (USER_FID/SIGNER_UUID) are canonical with ZAAL_* kept as fallbacks so
+// pre-rename deploys keep working - same convention as auth.js/ownerFid.
+//
+// READS vs WRITES: reads need only the API key; the signer is required
+// lazily, at write time (requireSigner). This is deliberate - a fork can
+// browse Farcaster the minute they have a key, and the expensive/scary part
+// (minting a posting signer) can wait. It also means a leaked deploy without
+// a signer physically cannot post.
+//
+// WHY fetchNeynar RETRIES ONLY 429: rate limits are the one transient
+// failure with an honest signal (Retry-After). Retrying 5xx would double
+// WRITE requests - a retried cast could double-post. Reads that fail
+// non-429 surface immediately and the caller decides.
+//
+// THE ACTION LEDGER (logAction): every write this tool fires is appended to
+// KV, best-effort. The point is auditability independent of Farcaster -
+// "did I really delete that cast?" gets answered from our own record even
+// if the network's view changed. Best-effort BY DESIGN: a logging failure
+// must never block or break a real post (the post matters more than the
+// receipt), which is why it swallows errors - the known cost is silent gaps
+// in the ledger when KV is down (documented tradeoff, 2026-07-15 audit).
+// =============================================================================
+
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -837,8 +877,12 @@ export async function getLinkPreview(url) {
   }
 }
 
+// CLI display shape for a cast. FIXED 2026-07-16: recasts read
+// cast.recasts?.count, a field that does not exist in Neynar's cast shape
+// (the real one is cast.reactions.recasts_count, as every api/*.js compact()
+// already used) - so every CLI listing had shown "recasts 0" since day one.
 export function formatCast(cast) {
-  const author = cast.author.display_name || cast.author.username
+  const author = cast.author?.display_name || cast.author?.username || '?'
   const timestamp = new Date(cast.timestamp).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -856,12 +900,12 @@ export function formatCast(cast) {
 
   return {
     hash: cast.hash,
-    fid: cast.author.fid,
+    fid: cast.author?.fid ?? null,
     author,
     timestamp,
     text,
     replies: cast.replies?.count || 0,
-    recasts: cast.recasts?.count || 0,
+    recasts: cast.reactions?.recasts_count || 0,
     likes: cast.reactions?.likes_count || 0,
   }
 }

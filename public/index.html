@@ -298,6 +298,42 @@
 <button id="fab" title="leave feedback">feedback</button>
 
 <script>
+  // ========================= FRONTEND ARCHITECTURE (why) =========================
+  // ONE FILE, VANILLA JS, ZERO DEPENDENCIES - deliberate, not lazy:
+  //   - No framework means no build step: git push IS the deploy, and a fork
+  //     can read/edit every line without tooling. For a single-user client
+  //     whose whole UI is lists + overlays, a framework buys nothing.
+  //   - The only external script is the Farcaster mini-app SDK (bottom of the
+  //     file), loaded from a CDN in a try/catch so the app works identically
+  //     when it fails or when running outside a Farcaster host.
+  //
+  // THE RENDER MODEL - render-from-state, innerHTML, no vDOM:
+  //   All UI state lives in `st` (per-tab) + a few globals. render() rebuilds
+  //   the active tab's HTML from state on every change. Rebuilding a few
+  //   hundred rows of HTML is microseconds - correct-by-construction beats
+  //   clever DOM diffing at this scale. Inputs the user may be mid-typing in
+  //   are the one exception: their values are saved to state BEFORE any
+  //   re-render that would destroy them (see *SaveDraftInputs helpers).
+  //
+  // THE EVENT MODEL - two delegated click listeners (main + overlay body),
+  //   dispatching on data-act attributes. Rebuilt HTML never needs listeners
+  //   re-attached, and every clickable behavior is greppable by its data-act
+  //   name. Never attach per-element handlers to rendered content.
+  //
+  // XSS RULE: every interpolated value that originated outside this file
+  //   (API responses, user input) goes through esc(). External APIs (Neynar,
+  //   Empire Builder, POIDH, Zora) are untrusted input like any other.
+  //
+  // ROLE UX vs SECURITY: ROLE ('zaal'|'guest') hides owner-only tabs and is
+  //   enforced again in switchTab - but that is UX, not the boundary. Every
+  //   API route re-checks the session server-side; a guest editing the DOM
+  //   gets 401/403s, not access.
+  //
+  // ASYNC RULE (from the 2026-07-15 audit): any await inside a load function
+  //   must either re-check that its context is still current (loadPoidh drops
+  //   stale responses) or null-guard its DOM targets (lookupDistribution) -
+  //   the user can switch tabs while a fetch is in flight.
+  // ==============================================================================
   const main = document.getElementById('main')
   const meta = document.getElementById('meta')
   const ANSWERABLE = new Set(['reply', 'mention', 'quote'])
@@ -342,6 +378,15 @@
   // one persist path: write localStorage (offline cache) + push to the server
   // store (debounced) so daily/bookmarks/muted/scheduled sync across devices.
   let pushT = null
+  // THE SYNC MODEL: localStorage is the always-on truth (works with zero
+  // infra); the KV store is an optional mirror layered on top. persist()
+  // writes localStorage synchronously (never lose an edit), then debounces a
+  // whole-blob push to /api/state 800ms later - rapid edits (checklist
+  // ticking, list building) collapse into one write. Last-write-wins across
+  // devices is fine because the only writers are Zaal's own devices and
+  // pullState() re-reads on every boot. The .catch(()=>{}) is deliberate:
+  // sync failing must never break the local edit that just happened -
+  // localStorage already has it, and the next successful push carries it.
   function persist() {
     lsSet('zc_bookmarks', bookmarks); lsSet('zc_muted', muted); lsSet('zc_scheduled', scheduled); lsSet('zc_lists', lists); lsSet('zc_searches', savedSearches); lsSet('zc_statshist', statsHistory); lsSet('zc_snaps', savedSnaps); lsSet('zc_feedback', feedback); if (socials) lsSet('zc_socials', socials)
     if (typeof daily !== 'undefined') lsSet('zc_daily', daily)
