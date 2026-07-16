@@ -782,6 +782,83 @@ export async function getUnansweredInbound(options = {}) {
   return items
 }
 
+// ===== The booster engagement queue (research doc 1088, Phase 2b) =====
+// Find the people currently giving the project energy - anyone who liked
+// Zaal's recent casts, or casted mentioning the booster phrases (default
+// "zabal gamez") - and pair each with a cast of THEIRS to engage back on.
+//
+// WHY THIS IS DETECTION-ONLY: doc 1088 called this the "auto-engage" booster,
+// but auto-engagement collides head-on with the repo's non-negotiable rule
+// (never post/reply/like without Zaal's explicit yes). So the engine finds
+// and ranks; every actual engagement goes through the UI's existing
+// affordances - one-tap likes (the reversible tier) and reply-with-confirm.
+// Energy compounds because Zaal engages back in seconds, not because a bot
+// engages for him.
+export async function getBoosterCandidates(options = {}) {
+  const { phrases = ['zabal gamez'], castScan = 5, limit = 12 } = options
+  const env = loadEnv()
+  const myFid = String(env.FID)
+  const spam = loadSpamSet()
+
+  // Source 1: who liked my recent top-level casts
+  const mine = await getUserCasts({ limit: 10, includeReplies: false }).catch(() => ({ casts: [] }))
+  const recent = (mine.casts || []).slice(0, castScan)
+  const likersPerCast = await Promise.all(recent.map((c) =>
+    getCastReactions(c.hash, 'like', 25).then((r) => ({ cast: c, users: (r.reactions || []).map((x) => x.user).filter(Boolean) })).catch(() => ({ cast: c, users: [] }))
+  ))
+
+  // Source 2: who casted the booster phrases (their cast = the engage-back target)
+  const mentionsPerPhrase = await Promise.all(phrases.map((p) =>
+    searchCasts(`"${p}"`, { limit: 25 }).then((r) => (r.result?.casts || r.casts || [])).catch(() => [])
+  ))
+
+  const candidates = new Map() // fid -> candidate
+  const skip = (u) => !u?.fid || String(u.fid) === myFid || spam.has((u.username || '').toLowerCase()) || spam.has(String(u.fid))
+
+  for (const casts of mentionsPerPhrase) {
+    for (const c of casts) {
+      const u = c.author || {}
+      if (skip(u)) continue
+      const cur = candidates.get(u.fid) || { fid: u.fid, username: u.username, display: u.display_name || u.username, pfp: u.pfp_url || null, score: u.experimental?.neynar_user_score ?? null, reasons: [], cast: null }
+      if (!cur.reasons.includes('casted about it')) cur.reasons.push('casted about it')
+      // prefer their mention cast as the engage-back target (freshest wins)
+      if (!cur.cast || (c.timestamp || '') > (cur.cast.timestamp || '')) cur.cast = c
+      candidates.set(u.fid, cur)
+    }
+  }
+  for (const { cast, users } of likersPerCast) {
+    const snippet = (cast.text || '').replace(/\s+/g, ' ').slice(0, 40)
+    for (const u of users) {
+      if (skip(u)) continue
+      const cur = candidates.get(u.fid) || { fid: u.fid, username: u.username, display: u.display_name || u.username, pfp: u.pfp_url || null, score: u.experimental?.neynar_user_score ?? null, reasons: [], cast: null }
+      const reason = `liked "${snippet}"`
+      if (!cur.reasons.some((r) => r.startsWith('liked'))) cur.reasons.push(reason)
+      candidates.set(u.fid, cur)
+    }
+  }
+
+  // Rank: phrase-casters first (they made content to engage on), then by
+  // neynar score. Cap BEFORE fetching latest casts so likers-only candidates
+  // cost at most `limit` extra reads.
+  const ranked = [...candidates.values()].sort((a, b) => {
+    const am = a.cast ? 1 : 0, bm = b.cast ? 1 : 0
+    if (am !== bm) return bm - am
+    return (b.score || 0) - (a.score || 0)
+  }).slice(0, limit)
+
+  // For likers with no cast of their own yet, fetch their latest top-level
+  // cast as the engage-back target.
+  await Promise.all(ranked.map(async (cand) => {
+    if (cand.cast) return
+    try {
+      const r = await getUserCasts({ fid: cand.fid, limit: 1, includeReplies: false })
+      cand.cast = (r.casts || [])[0] || null
+    } catch { /* no cast - candidate still shows, just without a target */ }
+  }))
+
+  return ranked
+}
+
 // Full conversation around a cast (hash or farcaster.xyz URL): ancestors + replies
 export async function getConversation(hashOrUrl, options = {}) {
   const { replyDepth = 2, limit = 20 } = options
