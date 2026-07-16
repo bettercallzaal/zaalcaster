@@ -5,6 +5,7 @@ import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage } from '../lib.js'
 import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
 import { getCoin } from '../zora.js'
+import { markTaskDone, logDecision } from '../zoe.js'
 import { config } from '../config.js'
 
 async function readJsonBody(req) {
@@ -187,6 +188,21 @@ export default async function handler(req, res) {
   // same as every other write route in this app.
   if (req.method === 'POST') {
     const body = await readJsonBody(req)
+
+    // ZOE tracker writes (Zaal-only via blockedByAuth above). Plain database
+    // rows in the cowork tracker - not on-chain, not posts.
+    if (body.action === 'zoe_done') {
+      const r = await markTaskDone(String(body.taskId || ''), config.trackerOwner || 'Zaal')
+      if (!r.ok) { res.status(r.status === 400 ? 400 : 502).json({ error: r.error }); return }
+      res.status(200).json({ ok: true })
+      return
+    }
+    if (body.action === 'zoe_decision') {
+      const r = await logDecision(String(body.text || ''), config.trackerOwner || 'Zaal')
+      if (!r.ok) { res.status(r.status === 400 ? 400 : 502).json({ error: r.error }); return }
+      res.status(200).json({ ok: true })
+      return
+    }
 
     // add a booster to an existing empire (same wallet-signed relay model
     // as deploy below - the browser signed, this only forwards)

@@ -9,6 +9,8 @@
 import { getFollowingFeed, getForYouFeed, getTrendingFeed, getChannelFeed, getTrendingChannels, getFeedByFids, getBestFriends, getNotifications, getChannelNotifications, getMyActivityToday, getFrameCatalog, searchFrames } from '../lib.js'
 import { blockedByGuestAuth, getSession } from '../auth.js'
 import { getEmpires } from '../empire.js'
+import { getOpenTasks } from '../zoe.js'
+import { config } from '../config.js'
 
 // modes below that are Zaal-only even though this route is otherwise guest-
 // readable (own activity, own notifications, own close-friends seed, a
@@ -143,6 +145,21 @@ export default async function handler(req, res) {
       const friends = await getBestFriends({ limit: 20 })
       res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ friends })
+      return
+    }
+
+    // ZOE: open tasks from the unified cowork tracker (Zaal-only - private
+    // team data). Returns enabled:false when the tracker creds aren't set so
+    // the Daily card hides itself instead of erroring.
+    if (req.query.zoe === '1') {
+      if (blockedByOwner(session, res)) return
+      const r = await getOpenTasks(config.trackerOwner || 'Zaal', 8)
+      res.setHeader('Cache-Control', 'no-store')
+      if (!r.ok) {
+        res.status(200).json({ enabled: r.status !== 501, error: r.status === 501 ? null : r.error, tasks: [] })
+        return
+      }
+      res.status(200).json({ enabled: true, error: null, tasks: r.data || [] })
       return
     }
 
