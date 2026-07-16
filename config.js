@@ -88,13 +88,19 @@ export const config = {
 
   // Daily dashboard seed (also editable live in the app + synced).
   daily: {
+    // Seeds the Daily checklist to match the guide's daily loop (/guide.html)
+    // so the app itself walks you through the day. SEED ONLY: an existing
+    // deploy's live checklist is synced state and is never overwritten by
+    // editing this - it applies to fresh installs and forks.
     tasks: [
       { t: 'post a GM', done: false },
-      { t: 'clear inbox - reply or skip', done: false },
-      { t: 'catch GM Farcaster', done: false },
+      { t: 'clear ZOE tasks (card below)', done: false },
+      { t: 'inbox zero - draft all, send or skip', done: false },
+      { t: 'skim channels - boost 1 good cast each', done: false },
       { t: 'engage 3 new people (Grow tab)', done: false },
-      { t: 'check /zao + /wavewarz', done: false },
-      { t: 'quote or boost 1 good cast', done: false },
+      { t: 'post the day\'s cast (schedule the 2nd)', done: false },
+      { t: 'reply to top fans (Grow tab)', done: false },
+      { t: 'log today\'s decisions (ZOE card)', done: false },
     ],
     apps: [
       { label: 'GM Farcaster', url: 'https://gmfarcaster.com' },
