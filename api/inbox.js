@@ -6,7 +6,7 @@
 
 import { getUnansweredInbound, getUsersByFids, markNotificationsSeen } from '../lib.js'
 import { blockedByAuth } from '../auth.js'
-import { storeEnabled, kvList } from '../store.js'
+import { storeEnabled, kvList, kvGet } from '../store.js'
 
 // Real-time mentions/replies captured by the Neynar webhook (api/webhook.js).
 // Merge the last day's worth in by hash so they show up instantly, before the
@@ -24,8 +24,28 @@ async function realtimeItems() {
   } catch { return [] }
 }
 
+// Fetch tip stats for all hashes (if KV store is enabled)
+async function attachTips(items) {
+  if (!storeEnabled()) return new Map()
+  const tipsByHash = new Map()
+  try {
+    for (const item of items) {
+      if (!item.hash) continue
+      const stats = await kvGet(`tips:stats:${item.hash}`)
+      if (stats) {
+        tipsByHash.set(item.hash, {
+          totalTipped: BigInt(stats.totalTipped || '0'),
+          count: stats.count || 0,
+        })
+      }
+    }
+  } catch { /* no tips available - fall back to normal ranking */ }
+  return tipsByHash
+}
+
 // Rank inbound by how much it deserves Zaal's attention: intent (mentions +
-// quotes over generic replies), the sender's neynar score, and mutual-follow.
+// quotes over generic replies), the sender's neynar score, mutual-follow, and tips.
+// Tip weight: 40% of the ranking (after intent, score, and follow signals).
 async function attachPriority(items) {
   const fids = [...new Set(items.map((i) => i.fid).filter(Boolean))]
   let byFid = new Map()
@@ -33,13 +53,30 @@ async function attachPriority(items) {
     const users = await getUsersByFids(fids)
     byFid = new Map(users.map((u) => [u.fid, u]))
   } catch { /* no scores - fall back to intent only */ }
+
+  // Fetch all tip stats
+  const tipsByHash = await attachTips(items)
+
+  // Normalize tip amounts to 0-100 scale (max observed tip * 10 for headroom)
+  let maxTip = 0n
+  for (const stats of tipsByHash.values()) {
+    if (stats.totalTipped > maxTip) maxTip = stats.totalTipped
+  }
+  const tipScale = maxTip > 0n ? maxTip * 10n : 1n
+
   const intent = (t) => (t === 'mention' || t === 'quote') ? 2 : 0
   for (const it of items) {
     const u = byFid.get(it.fid)
     const score = u?.experimental?.neynar_user_score ?? 0
     const vc = u?.viewer_context || {}
     const mutual = (vc.following && vc.followed_by) ? 2 : (vc.followed_by ? 1 : 0)
-    it.priority = intent(it.type) + score * 3 + mutual
+
+    // Tip contribution: 40% weight (max +40 to priority)
+    const tipStats = tipsByHash.get(it.hash)
+    const tipScore = tipStats ? Number((tipStats.totalTipped * 40n) / tipScale) : 0
+
+    it.priority = intent(it.type) + score * 3 + mutual + tipScore
+    it.tips = tipStats ? { count: tipStats.count, totalTipped: tipStats.totalTipped.toString() } : null
   }
   items.sort((a, b) => b.priority - a.priority)
 }
@@ -82,6 +119,7 @@ export default async function handler(req, res) {
       thread: it.thread || [],
       parent: it.parent,
       priority: it.priority ?? null,
+      tips: it.tips ?? null,
     }))
 
     res.setHeader('Cache-Control', 'no-store')

@@ -629,6 +629,13 @@
     let draft = ''
     if (item.draft === 'SKIP') draft = `<div class="draft skip"><div class="lab">draft</div><div class="t">no reply needed</div></div>`
     else if (item.draft) draft = `<div class="draft"><div class="lab">draft in your voice</div><div class="t">${esc(item.draft)}</div></div>`
+
+    // Tip badge
+    let tipBadge = ''
+    if (item.tips && item.tips.count > 0) {
+      tipBadge = `<span class="badge tips" title="${item.tips.count} tip(s), ${item.tips.totalTipped} wei total">${item.tips.count} tip${item.tips.count !== 1 ? 's' : ''}</span>`
+    }
+
     let reply = ''
     if (item.sent) reply = `<div class="sent">sent - <a href="${esc(item.sentLink)}" target="_blank" rel="noopener">${esc(item.sentLink)}</a></div>`
     else if (ANSWERABLE.has(item.type)) {
@@ -638,11 +645,13 @@
              <button class="ibtn primary" data-act="iconfirm" data-hash="${esc(item.hash)}">${item.sending ? 'sending...' : 'yes, send'}</button>
              <button class="ibtn" data-act="icancel" data-hash="${esc(item.hash)}">cancel</button></div></div>`
         : `<div class="reply">${quickRow(item.hash)}<textarea data-ihash="${esc(item.hash)}" placeholder="reply, or draft above...">${esc(val)}</textarea>
-             <div class="btns"><button class="ibtn" data-act="iarm" data-hash="${esc(item.hash)}">send reply</button></div></div>`
+             <div class="btns"><button class="ibtn" data-act="iarm" data-hash="${esc(item.hash)}">send reply</button>
+             <button class="ibtn" data-act="tipthis" data-hash="${esc(item.hash)}" title="tip to boost this reply's priority">tip</button></div></div>`
     }
     return `<div class="card" data-hash="${esc(item.hash)}">
       <div class="top"><div class="who">
         <div class="name"><span class="tag">${esc(item.type)}</span> <a href="${esc(item.link)}" target="_blank" rel="noopener">@${esc(item.user)}</a>
+          ${tipBadge}
           <a class="open" href="${esc(item.link)}" target="_blank" rel="noopener">open</a></div>
         ${thread}
         <div class="body">${esc(item.text) || '<i>(no text)</i>'}</div>
@@ -2590,6 +2599,22 @@
       try { await fireReply(hash, it.fid, it.replyText, (link) => { it.sent = true; it.sentLink = link; it.armed = false; it.sending = false }) }
       catch (err) { it.sending = false; it.armed = false; meta.textContent = 'send error: ' + err.message }
       render(); return
+    }
+    if (act === 'tipthis') {
+      const it = findInbox(hash); if (!hash) { meta.textContent = 'no cast hash'; return }
+      const amt = window.prompt('tip amount (in wei, e.g. 100000000000000000 = 0.1 ZAALCASTER)'); if (!amt) return
+      btn.textContent = 'tipping...'; btn.disabled = true
+      try {
+        const r = await fetch('/api/tips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hash, amount: amt })
+        })
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || 'tip failed')
+        meta.textContent = 'tip sent - thanks for boosting this reply'; loadInbox(); return
+      } catch (err) { meta.textContent = 'tip error: ' + err.message }
+      finally { btn.textContent = 'tip'; btn.disabled = false }
+      return
     }
 
     // compose
