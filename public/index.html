@@ -584,7 +584,7 @@
     // Tip badge
     let tipBadge = ''
     if (item.tips && item.tips.count > 0) {
-      tipBadge = `<span class="badge tips" title="${item.tips.count} tip(s), ${item.tips.totalTipped} wei total">💰 ${item.tips.count}</span>`
+      tipBadge = `<span class="badge tips" title="${item.tips.count} tip(s), ${item.tips.totalTipped} wei total">${item.tips.count} tip${item.tips.count !== 1 ? 's' : ''}</span>`
     }
 
     let reply = ''
