@@ -355,7 +355,7 @@
     channels: { id: 'zao', casts: [], loaded: false, trending: [], chanInfo: null, searching: false, searchResults: [] },
     search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
     grow: { loaded: false, data: null, empires: [] },
-    poidh: { loaded: false, bountyId: '1249', bounty: null, claims: [], claimsError: null, err: null },
+    poidh: { loaded: false, bountyId: '1249', chainId: 8453, bounty: null, claims: [], claimsCount: 0, claimsError: null, err: null },
     zoe: { loaded: false, enabled: true, tasks: [], err: null },
     booster: { loaded: false, loading: false, candidates: [], err: null },
     manager: { submitting: false, msg: null, msgErr: false },
@@ -1214,54 +1214,85 @@
   // bettercallzaal/zpoidh's working refresh script), never guesses at
   // undocumented internals. Read-only - claiming/creating a bounty is an
   // on-chain tx via the PoidhV2 contract, a future slice, not this one.
+  // The ZABAL round bounties all live on Base, so the chips pin chain 8453
+  // no matter which chain the selector is on.
   const POIDH_KNOWN_BOUNTIES = [
     { id: '1151', label: 'R1' }, { id: '1166', label: 'R2' },
     { id: '1180', label: 'R3' }, { id: '1249', label: 'R4 (open pot)' },
   ]
-  async function loadPoidh(bountyId) {
+  // Chains POIDH is deployed on. Labels double as poidh.xyz URL segments
+  // server-side; the server owns that mapping, this list only drives the
+  // selector chips. Bounty ids are PER-CHAIN (base 1249 != degen 1249).
+  const POIDH_CHAINS = [
+    { id: 8453, label: 'base' }, { id: 666666666, label: 'degen' },
+    { id: 42161, label: 'arbitrum' }, { id: 1, label: 'mainnet' },
+  ]
+  async function loadPoidh(bountyId, chainId) {
     bountyId = String(bountyId)
+    chainId = Number(chainId || st.poidh.chainId)
     st.poidh.bountyId = bountyId
+    st.poidh.chainId = chainId
     st.poidh.loaded = false; st.poidh.err = null
     if (tab === 'poidh') render()
+    // the stale-response guard must key on chain TOO - same bounty id on a
+    // different chain is a different bounty
+    const current = () => st.poidh.bountyId === bountyId && st.poidh.chainId === chainId
     try {
-      const r = await fetch(`/api/view?kind=poidh_bounty&id=${encodeURIComponent(bountyId)}`)
+      const r = await fetch(`/api/view?kind=poidh_bounty&id=${encodeURIComponent(bountyId)}&chain=${chainId}`)
       const d = await r.json()
       // a newer click superseded this request - drop the stale response
-      if (st.poidh.bountyId !== bountyId) return
+      if (!current()) return
       if (!r.ok) throw new Error(r.status === 401 ? 'session expired - refresh and sign in again' : (d.error || 'bounty lookup failed'))
-      st.poidh.bounty = d.bounty; st.poidh.claims = d.claims || []; st.poidh.claimsError = d.claimsError || null
+      st.poidh.bounty = d.bounty; st.poidh.claims = d.claims || []
+      st.poidh.claimsCount = d.claimsCount ?? (d.claims || []).length
+      st.poidh.claimsError = d.claimsError || null
     } catch (e) {
-      if (st.poidh.bountyId !== bountyId) return
-      st.poidh.err = e.message; st.poidh.bounty = null; st.poidh.claims = []
+      if (!current()) return
+      st.poidh.err = e.message; st.poidh.bounty = null; st.poidh.claims = []; st.poidh.claimsCount = 0
     } finally {
-      if (st.poidh.bountyId === bountyId) {
+      if (current()) {
         st.poidh.loaded = true
         if (tab === 'poidh') render()
       }
     }
   }
+  // Pot sizes span 9 orders of magnitude (gwei test bounties to whole-token
+  // DEGEN pots), so fixed-4 alone rendered dust as "0.0000 ETH" - lie-shaped.
+  function fmtPoidhAmount(amount, currency) {
+    if (!amount) return 'no pot'
+    if (amount < 0.0001) return `under 0.0001 ${currency}`
+    const digits = amount >= 1000 ? 0 : 4
+    return `${amount.toLocaleString('en-US', { maximumFractionDigits: digits })} ${currency}`
+  }
   function renderPoidh() {
-    const chips = POIDH_KNOWN_BOUNTIES.map((b) => `<span class="chip ${st.poidh.bountyId === b.id ? 'on' : ''}" data-act="poidhbounty" data-id="${b.id}">${esc(b.label)}</span>`).join('')
+    const chips = POIDH_KNOWN_BOUNTIES.map((b) => `<span class="chip ${st.poidh.bountyId === b.id && st.poidh.chainId === 8453 ? 'on' : ''}" data-act="poidhbounty" data-id="${b.id}">${esc(b.label)}</span>`).join('')
+    const chainChips = POIDH_CHAINS.map((c) => `<span class="chip ${st.poidh.chainId === c.id ? 'on' : ''}" data-act="poidhchain" data-id="${c.id}">${esc(c.label)}</span>`).join('')
     const header = `<div class="ps" style="margin-bottom:8px">Reads live bounty + claim data from poidh.xyz. Read-only - claiming a bounty is an on-chain wallet action, done on poidh.xyz directly for now.</div>
       <div class="subbar" style="padding-top:0">${chips}</div>
+      <div class="subbar" style="padding-top:4px"><span class="ub" style="font-size:12px;margin-right:2px">chain</span>${chainChips}</div>
       <div class="urow" style="cursor:default;margin-top:6px"><input class="sfin" id="poidh_id" value="${esc(st.poidh.bountyId)}" placeholder="or any bounty id" style="flex:1;margin:0"><span class="chip" data-act="poidhlookup">look up</span></div>`
     if (!st.poidh.loaded) return header + '<div class="loading">loading bounty...</div>'
     if (st.poidh.err) return header + `<div class="err" style="margin-top:8px">${esc(st.poidh.err)}</div>`
     const b = st.poidh.bounty
     if (!b) return header + '<div class="empty">no bounty found.</div>'
     const statusLine = b.isCanceled ? 'canceled' : b.isVoting ? 'voting' : b.inProgress ? 'open' : 'closed'
+    // when the claims fetch failed, saying "0 claims" here would contradict
+    // the failure banner below - omit the count instead
+    const countText = st.poidh.claimsError ? '' : ` - ${st.poidh.claimsCount} claim${st.poidh.claimsCount === 1 ? '' : 's'}`
     const bountyCard = `<div class="digest" style="background:#151529;border-color:#24242f;margin-top:8px">
       <div class="t" style="color:#a99cff;font-size:15px">${esc(b.title)}</div>
-      <div class="ub" style="margin-top:4px">${b.amountEth ? b.amountEth.toFixed(4) + ' ETH' : 'no pot'} - ${esc(statusLine)} - ${st.poidh.claims.length} claim${st.poidh.claims.length === 1 ? '' : 's'}</div>
+      <div class="ub" style="margin-top:4px">${esc(fmtPoidhAmount(b.amount, b.currency || 'ETH'))} - ${esc(statusLine)}${countText}</div>
       <div class="ub" style="margin-top:4px;white-space:pre-wrap">${esc((b.description || '').slice(0, 400))}${(b.description || '').length > 400 ? '...' : ''}</div>
       <div style="margin-top:6px"><a class="open" href="${esc(b.url)}" target="_blank" rel="noopener">open on poidh.xyz</a></div></div>`
     const claims = st.poidh.claims.map((c) => `<div class="lbrow">
       ${c.imageUrl ? `<img class="lbpfp" src="${esc(c.imageUrl)}" alt="">` : '<span class="lbpfp"></span>'}
       <span class="lbname">${esc(c.title || 'untitled claim')}${c.isAccepted ? ' <span class="qs">accepted</span>' : ''}</span>
       <span class="ub" style="font-size:12px">${esc((c.issuer || '').slice(0, 6))}...${esc((c.issuer || '').slice(-4))}</span></div>`).join('')
+    const truncNote = st.poidh.claimsCount > st.poidh.claims.length
+      ? `<div class="subbar"><span class="ub">showing first ${st.poidh.claims.length} of ${st.poidh.claimsCount}</span></div>` : ''
     const claimsSec = st.poidh.claimsError
       ? `<div class="subbar" style="margin-top:8px"><span class="ub" style="color:#e0a955">claims failed to load: ${esc(st.poidh.claimsError)}</span></div>`
-      : claims ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">claims</b></div>' + claims : '<div class="subbar"><span class="ub">no claims yet</span></div>'
+      : claims ? '<div class="subbar" style="margin-top:8px"><b style="color:#8a8a99;font-size:13px">claims</b></div>' + claims + truncNote : '<div class="subbar"><span class="ub">no claims yet</span></div>'
     return header + bountyCard + claimsSec
   }
 
@@ -2463,7 +2494,8 @@
     if (act === 'mgrenqueue') { managerEnqueue(); return }
     if (act === 'zoedone') { zoeMarkDone(btn.dataset.id, btn); return }
     if (act === 'zoedecadd') { zoeLogDecision(); return }
-    if (act === 'poidhbounty') { loadPoidh(btn.dataset.id); return }
+    if (act === 'poidhbounty') { loadPoidh(btn.dataset.id, 8453); return }
+    if (act === 'poidhchain') { loadPoidh(st.poidh.bountyId, btn.dataset.id); return }
     if (act === 'poidhlookup') { const v = (document.getElementById('poidh_id').value || '').trim(); if (v) loadPoidh(v); else toast('enter a bounty id'); return }
     if (act === 'dtoggle') { const i = +btn.dataset.i; daily.tasks[i].done = !daily.tasks[i].done; saveDaily(); render(); return }
     if (act === 'dtaskrm') { daily.tasks.splice(+btn.dataset.i, 1); saveDaily(); render(); return }
