@@ -13,6 +13,9 @@ make it a better base for everyone are welcome.
 - **Improve forkability** - anything still hardcoded that should read from
   `config.js` or an env var.
 - **Docs** - clearer setup, screenshots, a better fork walkthrough.
+- **Token features** - reply-list ranking, booster UI, leaderboard integration.
+  Earn $zaalcaster tokens for merged PRs that add real value. See doc 988 for
+  the token launch plan.
 
 ## Ground rules
 
