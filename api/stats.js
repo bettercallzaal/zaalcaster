@@ -18,7 +18,7 @@ import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage, getSystemHealth } from '../lib.js'
 import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, getStakingStatus, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, addStakingBooster, addStakingBoosterMessage, activateStaking, activateStakingMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
 import { getCoin } from '../zora.js'
-import { markTaskDone, logDecision } from '../zoe.js'
+import { markTaskDone, logDecision, getFleetStatus } from '../zoe.js'
 import { config } from '../config.js'
 import { storeEnabled, kvList, kvPush } from '../store.js'
 
@@ -261,6 +261,15 @@ export default async function handler(req, res) {
   // signs anything, it only relays the already-signed payload to Empire
   // Builder with the server-side API key. Zaal-only (blockedByAuth above),
   // same as every other write route in this app.
+  // Fleet status: fast path, no Neynar/Empire calls needed.
+  if (req.method === 'GET' && req.query?.kind === 'fleet') {
+    const r = await getFleetStatus().catch((e) => ({ ok: false, error: e instanceof Error ? e.message : 'fleet fetch failed' }))
+    res.setHeader('Cache-Control', 'no-store')
+    if (!r.ok) { res.status(502).json({ error: r.error }); return }
+    res.status(200).json({ loops: r.data || [] })
+    return
+  }
+
   if (req.method === 'POST') {
     const body = await readJsonBody(req)
 

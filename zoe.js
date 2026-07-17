@@ -151,6 +151,14 @@ export async function logDecision(text, ownerName) {
   })
 }
 
+// Live status of the tmux loop fleet from the fleet_status Supabase table.
+// loops-keepalive.sh upserts every ~10s; returns [] when unconfigured.
+export async function getFleetStatus() {
+  return trackerFetch(
+    'fleet_status?select=session,state,last_line,updated_at&order=session',
+  )
+}
+
 // Search the Bonfire knowledge graph ("what did we decide about X?").
 // Same POST /delve call ZOE's own recall loop uses - live-verified.
 export async function delve(query) {
