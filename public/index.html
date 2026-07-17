@@ -995,8 +995,23 @@
       const delta = num(z.marketCapDelta24h) != null ? `${z.marketCapDelta24h > 0 ? '+' : ''}${z.marketCapDelta24h.toFixed(2)}%` : ''
       zoraLine = `<div class="t" style="color:#a99cff;font-size:14px;margin-top:8px"><a class="open" href="${esc(z.url)}" target="_blank" rel="noopener">$${esc(z.symbol)}</a> Zora coin - ${num(z.marketCap) != null ? '$' + z.marketCap.toLocaleString() : '?'} mcap${delta ? ` (${delta})` : ''}</div>`
     }
+    // WaveWarZ analytics card - baked snapshot, always present.
+    let wwLine = ''
+    if (d.wavewarz && d.wavewarz.ok) {
+      const ww = d.wavewarz
+      const p = ww.platform
+      const z = ww.zaalTrader
+      const pnlColor = z.netSol >= 0 ? '#3fbf7f' : '#e0555f'
+      const pnlSign = z.netSol >= 0 ? '+' : ''
+      wwLine = `<div style="margin-top:10px;padding:8px 10px;background:#0f1a1a;border:1px solid #1e3333;border-radius:6px">` +
+        `<div style="color:#4ecdc4;font-size:13px;font-weight:600;margin-bottom:6px"><a class="open" href="${esc(ww.liveUrl)}" target="_blank" rel="noopener" style="color:#4ecdc4">WaveWarZ</a> - snapshot ${esc(ww.snapshotAt)}</div>` +
+        `<div class="ub" style="margin-bottom:2px">${p.battles.toLocaleString()} battles &middot; ${p.uniqueTraders} traders &middot; ${p.buyVolumeSol} SOL volume</div>` +
+        `<div class="ub" style="margin-bottom:2px">artists paid ${p.artistPayoutsSol} SOL &middot; platform ${p.platformRevenueSol} SOL &middot; treasury net +${p.treasuryNetSol} SOL</div>` +
+        `<div class="ub" style="color:${pnlColor}">you: ${pnlSign}${z.netSol} SOL &middot; ${Math.round(z.winRate * 100)}% win rate &middot; ${z.txs} trades</div>` +
+        `</div>`
+    }
     const hdr = `<div class="digest" style="background:#151529;border-color:#24242f">
-      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${histLine}${storageLine}${zoraLine}</div>`
+      <div class="t" style="color:#e9e9ee;font-size:16px"><b>${d.followers ?? '?'}</b> followers - <b>${d.following ?? '?'}</b> following${d.score != null ? ` - neynar score <b>${d.score}</b>` : ''}</div>${histLine}${storageLine}${zoraLine}${wwLine}</div>`
     const casts = (d.topCasts || []).map((c) => `<div class="card"><div class="who">
       <div class="body tappable" data-act="thread" data-hash="${esc(c.hash)}">${esc(c.text) || '<i>(media/no text)</i>'}</div>
       <div class="stats"><span>&#9829; ${c.likes}</span><span>&#8635; ${c.recasts}</span><span>&#128172; ${c.replies}</span>

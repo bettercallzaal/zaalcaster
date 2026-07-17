@@ -18,6 +18,7 @@ import { blockedByAuth } from '../auth.js'
 import { getUserCasts, getNotifications, getUser, getFollowSuggestions, getStorageUsage, getSystemHealth } from '../lib.js'
 import { getEmpiresByOwner, getEmpireLeaderboards, getEmpireBoosters, getEmpireRewardsSummary, getLeaderboardAddressStats, getStakingStatus, deployTokenlessEmpire, tokenlessEmpireMessage, addBooster, addBoosterMessage, addStakingBooster, addStakingBoosterMessage, activateStaking, activateStakingMessage, isValidEmpireId, isValidWalletAddress } from '../empire.js'
 import { getCoin } from '../zora.js'
+import { getSnapshotStats } from '../wavewarz.js'
 import { markTaskDone, logDecision } from '../zoe.js'
 import { config } from '../config.js'
 import { storeEnabled, kvList, kvPush } from '../store.js'
@@ -222,6 +223,13 @@ async function empireSummary() {
   }
 }
 
+// WaveWarZ analytics card. Always returns baked snapshot data (no live API
+// needed - Helius key is not in the Vercel deploy). snapshotAt is explicit so
+// the UI can show "snapshot from YYYY-MM-DD" rather than implying it is live.
+function waveWarzSummary() {
+  return getSnapshotStats()
+}
+
 // Zora Creator Coin card. Inert until config.zoraCoinAddress is set.
 async function zoraSummary() {
   const address = config.zoraCoinAddress
@@ -364,7 +372,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [castsRes, notifs, me, suggestions, storage, empire, zora, manager] = await Promise.all([
+    const [castsRes, notifs, me, suggestions, storage, empire, zora, wavewarz, manager] = await Promise.all([
       getUserCasts({ limit: 50, includeReplies: false }).catch(() => ({ casts: [] })),
       recentNotifications(4),
       getUser(process.env.FID || '19640').catch(() => null),
@@ -372,6 +380,7 @@ export default async function handler(req, res) {
       getStorageUsage().catch(() => null),
       empireSummary().catch(() => null),
       zoraSummary().catch(() => null),
+      Promise.resolve(waveWarzSummary()),
       managerSummary().catch(() => ({ enabled: false })),
     ])
 
@@ -404,7 +413,7 @@ export default async function handler(req, res) {
       followers: me?.follower_count ?? null,
       following: me?.following_count ?? null,
       score: me?.experimental?.neynar_user_score ?? null,
-      topCasts, topEngagers, suggest, storage, empire, zora, manager,
+      topCasts, topEngagers, suggest, storage, empire, zora, wavewarz, manager,
     })
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'stats failed' })
