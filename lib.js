@@ -726,10 +726,23 @@ export async function addSnooze(hash, hours = 0) {
 }
 const snoozedActive = (hash, s) => { const v = s[hash]; return v !== undefined && (v === 0 || v > Date.now()) }
 
+// Simple in-memory cache for getUnansweredInbound with 60s TTL. Reduces redundant
+// Neynar calls when the same command runs 2x in a minute (engage/cockpit/web).
+const inboxCache = new Map() // key -> { data, at }
+const CACHE_TTL_MS = 60000
+
 export async function getUnansweredInbound(options = {}) {
   const { limit = 15, includeAll = false, withContext = true } = options
   const answerable = new Set(['reply', 'mention', 'quote'])
   const spam = loadSpamSet()
+
+  // Check cache: key is deterministic (options) + incl hash of spam list (since it
+  // affects the result). If cache is fresh, return it.
+  const cacheKey = `inbox:${JSON.stringify({ limit, includeAll, withContext })}`
+  const cached = inboxCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.data
+  }
 
   const [notifs, answered, snoozes] = await Promise.all([
     getNotifications({ limit }),
@@ -779,6 +792,8 @@ export async function getUnansweredInbound(options = {}) {
     }))
   }
 
+  // Cache the result before returning (TTL guards staleness).
+  inboxCache.set(cacheKey, { data: items, at: Date.now() })
   return items
 }
 
