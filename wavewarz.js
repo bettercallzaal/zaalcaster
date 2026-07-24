@@ -25,18 +25,19 @@ export const FEE_MODEL = {
   atSettlement: { winTraders: 0.40, loseTraders: 0.50, winArtist: 0.05, loseArtist: 0.02, platform: 0.03 },
 }
 
-// Baked Dune snapshot (generated 2026-06-14T20:56Z by scripts/ww-gen.py).
-// wavewarz.info is the live dashboard for fresher data.
-const SNAPSHOT_AT = '2026-06-14'
+// Baked from wavewarz.info/api/public/stats (2026-07-24T04:37Z).
+// trades/uniqueTraders/treasuryNetSol from Jun 14 Dune snapshot (no public endpoint).
+// wavewarz.info is the live dashboard for anything fresher.
+const SNAPSHOT_AT = '2026-07-24'
 
 const PLATFORM = {
-  battles: 1200,
-  trades: 9045,
-  uniqueTraders: 122,
-  buyVolumeSol: 498.88,
-  treasuryNetSol: 3.51,
-  artistPayoutsSol: 8.82,
-  platformRevenueSol: 16.81,
+  battles: 1289,
+  trades: 9045,         // Dune snapshot Jun 14 — no public endpoint for live value
+  uniqueTraders: 122,   // Dune snapshot Jun 14
+  buyVolumeSol: 878.30,
+  treasuryNetSol: 3.51, // Dune snapshot Jun 14
+  artistPayoutsSol: 13.40,
+  platformRevenueSol: 20.04,
 }
 
 // Zaal's personal trader stats (FID 19640, Solana wallet via Dialect).
