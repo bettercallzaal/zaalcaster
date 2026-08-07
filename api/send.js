@@ -27,6 +27,70 @@ import { postToTelegram, postToDiscord, telegramEnabled, discordEnabled } from '
 import { blockedByAuth } from '../auth.js'
 import { storeEnabled, kvGet } from '../store.js'
 
+// The agent SKILL doc - Austin Griffith's ethskills pattern (publish fetchable
+// docs so an agent learns the API at runtime instead of hallucinating it).
+// Served from this route because it documents WRITE endpoints, so it sits
+// behind the same owner gate as everything else here. Kept next to the code it
+// describes so it cannot drift.
+const SKILL_DOC = `# zaalcaster - agent skill
+
+Zaal's personal Farcaster cockpit (@zaal, fid 19640). Casts as Zaal, cross-posts
+to X / Bluesky / Telegram / Discord, and can cast as other configured accounts.
+
+## THE CONFIRM RULE (non-negotiable)
+
+NEVER post, reply, or react without showing Zaal the EXACT text first and getting
+an explicit yes. No exceptions, no "I assumed", no posting a paraphrase of what he
+approved. If you are an agent driving this API: draft, show, wait, then send.
+The UI enforces a two-step confirm for the same reason - do not route around it.
+
+## Know the state before you act
+
+GET /api/send
+  -> { ready, fid, rails: {x, bluesky, telegram, discord}, accounts: [keys],
+       scheduled: {store, pending, nextAt}, summary, checkedAt }
+  \`summary\` is a plain-English line - read it instead of guessing what is wired.
+  A rail that is false is NOT configured: do not offer it.
+  scheduled.pending === null means UNKNOWN (a read failed), not zero.
+
+## Send (owner only)
+
+POST /api/send
+  { text, channelId?, embedUrl?, account?, alsoX?, alsoBsky?, alsoTelegram?, alsoDiscord? }
+    top-level cast. \`account\` is a KEY from GET /api/send accounts (omit = cast
+    as Zaal). Cross-post flags only apply to top-level casts.
+  { text, parentHash, parentFid }        reply
+  { text, quoteHash, quoteFid }          quote cast
+  { casts: [ ... ] }                     thread (each cast replies to the previous)
+  { action: 'delete', hash }             delete a cast
+  { upload: '<data url>' }               upload an image, returns a URL for embedUrl
+  -> { ok, hash, link, x, bsky, telegram, discord }
+  A cross-post failure NEVER fails the cast - the cast is the primary act.
+
+## Read
+
+GET /api/feed?mode=zaal|trending|foryou|channel|list
+GET /api/view?kind=profile|thread|summary|reactions|followers|following|channel_info|channel_search|link_preview|poidh_bounty|empire_leaderboard|empire_distribution
+GET /api/inbox            unanswered inbound (replies, mentions, quotes)
+GET /api/state            synced client state (bookmarks, scheduled queue, lists)
+
+## Auth
+
+Sign In With Farcaster (Neynar SIWN) sets a signed session cookie.
+  role owner (fid 19640) - everything, including every write above
+  role guest             - public reads only; inbox/send/state/daily are refused
+Writes are owner-only server-side. The client is never trusted with a signer:
+you send an account KEY, the server maps it to a signer it holds.
+
+## Example agent turn
+
+  1. GET /api/send                       -> read summary, confirm casting is ready
+  2. draft the text, SHOW IT TO ZAAL     -> wait for an explicit yes
+  3. POST /api/send { text, alsoX: true } -> only after the yes
+  4. report back the returned link
+`
+
+
 // MULTI-ACCOUNT: cast as another ZAO account without ever trusting the client.
 // The browser sends a short account KEY ("thezao"); the server maps it to a
 // signer from env - SIGNER_UUID_<KEY uppercased>. A raw signer_uuid from the
@@ -71,6 +135,13 @@ export default async function handler(req, res) {
   if (blockedByAuth(req, res)) return
   // GET -> posting health check (is the signer wired up under the key?)
   if (req.method === 'GET') {
+    // ?skill=1 -> the agent-facing API doc (owner-gated with the rest of this route)
+    if (req.query?.skill || (req.url || '').includes('skill=1')) {
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).send(SKILL_DOC)
+      return
+    }
     const h = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
     const rails = {
       x: xEnabled(),
