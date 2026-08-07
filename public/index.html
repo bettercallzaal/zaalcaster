@@ -750,6 +750,7 @@
   }
 
   // ================= COMPOSE =================
+  let busState = { loaded: false, configured: null, count: 0, messages: [], error: null }
   const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, sentX: null, sentBsky: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false, toX: false, toBsky: false, toTg: false, toDc: false, account: 'me', sentTg: null, sentDc: null, linkPreview: null }
   async function uploadImage(file) {
     if (!file) return
@@ -1496,7 +1497,7 @@
       ['compose', 'Post', 'new cast'],
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
-      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div><div class="launch" data-openurl="/guide.html"><div class="ll">Guide</div><div class="ls">how it all works</div></div>`
+      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div><div class="launch" data-act="busopen"><div class="ll">Bus${busState.count ? ' (' + busState.count + ')' : ''}</div><div class="ls">${busState.configured === false ? 'not connected' : (busState.error ? 'unreachable' : (busState.count ? esc(String(busState.messages[0] && busState.messages[0].subject || 'new message')).slice(0, 28) : 'partner messages'))}</div></div><div class="launch" data-openurl="/guide.html"><div class="ll">Guide</div><div class="ls">how it all works</div></div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
@@ -2687,6 +2688,23 @@
       scheduled.push(item); persist(); compose.text = ''; compose.quote = null; meta.textContent = 'scheduled'; render(); return
     }
     if (act === 'schedrm') { scheduled = scheduled.filter((s) => s.id !== btn.dataset.id); persist(); render(); return }
+    if (act === 'busopen') {
+      openOverlay('bus', '<div class="loading">loading partner bus...</div>')
+      try {
+        const r = await fetch('/api/view?kind=bus'); const d = await r.json()
+        busState = { loaded: true, configured: d.configured !== false, count: d.count || 0, messages: d.messages || [], error: d.error || null }
+        const body = !busState.configured
+          ? '<div class="ub">bus not connected - set TASERN_BUS_TOKEN in the env</div>'
+          : busState.error
+            ? '<div class="ub">bus ' + esc(busState.error) + '</div>'
+            : (busState.messages.length
+                ? busState.messages.map((m) => '<div class="card" style="margin-bottom:10px"><div class="ll">' + esc(m.from || '?') + ' - ' + esc(m.subject || '(no subject)') + '</div><div class="ls" style="margin:4px 0">' + esc(String(m.created).slice(0, 16).replace('T', ' ')) + ' - id ' + esc(m.shortId) + '</div><div style="white-space:pre-wrap">' + esc(m.body || '') + '</div></div>').join('')
+                : '<div class="ub">no new messages</div>')
+        openOverlay('bus', body + '<div class="ub" style="margin-top:10px">read-only here - reply from ZOE/Telegram</div>')
+        render()
+      } catch (e) { openOverlay('bus', '<div class="ub">bus error: ' + esc(e.message) + '</div>') }
+      return
+    }
     if (act === 'composemic') { dictate('composeText', btn); return }
     if (act === 'snapbuild') { const ta = document.getElementById('composeText'); if (ta) compose.text = ta.value; openSnapBuilder(); return }
     if (act === 'snapclear') { compose.embedUrl = ''; compose.linkPreview = null; render(); return }
