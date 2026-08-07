@@ -562,6 +562,10 @@ export async function postCast(text, options = {}) {
   await logAction(parentHash ? 'reply' : (quoteHash ? 'quote' : 'cast'), {
     hash: response?.cast?.hash || null, text: (text || '').slice(0, 100), channel: channelId || null,
   })
+  // A reply is what marks its parent answered, so the cached inbox is now wrong.
+  // A top-level cast changes nothing about what is unanswered, so it does not
+  // pay the cost of a refetch.
+  if (parentHash) bustInboxCache()
   return response
 }
 
@@ -763,15 +767,50 @@ export async function addSnooze(hash, hours = 0) {
     const s = (await kvGet('zc:snoozed')) || {}
     s[hash] = hours > 0 ? Date.now() + hours * 36e5 : 0
     const now = Date.now(); for (const k of Object.keys(s)) if (s[k] && s[k] < now) delete s[k]
-    await kvSet('zc:snoozed', s); return true
+    await kvSet('zc:snoozed', s)
+    bustInboxCache() // the snoozed item must vanish from the next read, not in 60s
+    return true
   } catch { return false }
 }
 const snoozedActive = (hash, s) => { const v = s[hash]; return v !== undefined && (v === 0 || v > Date.now()) }
+
+// Simple in-memory cache for getUnansweredInbound with 60s TTL. Reduces redundant
+// Neynar calls when the same command runs 2x in a minute (engage/cockpit/web).
+//
+// A TTL alone is NOT enough here, and the difference is the whole point of the
+// inbox: the thing you do with it is answer something and watch it disappear.
+// With only a 60s TTL, you reply to a cast, refresh, and it is still sitting
+// there - which reads as "the reply failed" and makes you send it twice. So the
+// cache is BUSTED on the two actions that change the answer set: posting a
+// reply, and snoozing. Staleness is acceptable for a background refresh and
+// never acceptable immediately after the user acted.
+//
+// The key covers only `options` deliberately. An earlier version's comment
+// claimed it hashed the spam list too - it did not, and a comment describing
+// code that does not exist is worse than no comment. The spam list is edited by
+// hand and rarely, so a stale-by-up-to-60s spam filter is a real but tiny cost;
+// bustInboxCache() is exported so an editor can clear it explicitly.
+const inboxCache = new Map() // key -> { data, at }
+const CACHE_TTL_MS = 60000
+
+/** Drop every cached inbox response. Called after any action that changes which
+ *  items count as unanswered. Cheap - the map holds a handful of entries. */
+export function bustInboxCache() {
+  inboxCache.clear()
+}
 
 export async function getUnansweredInbound(options = {}) {
   const { limit = 15, includeAll = false, withContext = true } = options
   const answerable = new Set(['reply', 'mention', 'quote'])
   const spam = loadSpamSet()
+
+  // Key is the options only. It does NOT include the spam list - an earlier
+  // comment here claimed it did, which was never true. See bustInboxCache above.
+  const cacheKey = `inbox:${JSON.stringify({ limit, includeAll, withContext })}`
+  const cached = inboxCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return cached.data
+  }
 
   const [notifs, answered, snoozes] = await Promise.all([
     getNotifications({ limit }),
@@ -821,6 +860,8 @@ export async function getUnansweredInbound(options = {}) {
     }))
   }
 
+  // Cache the result before returning (TTL guards staleness).
+  inboxCache.set(cacheKey, { data: items, at: Date.now() })
   return items
 }
 
