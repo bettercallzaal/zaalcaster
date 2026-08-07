@@ -220,6 +220,8 @@
   footer { text-align: center; color: #4a4a58; font-size: 11px; padding: 6px 0 30px; }
   #fab { position: fixed; right: 16px; bottom: 22px; z-index: 40; background: var(--accent2); color: #fff; border: none; border-radius: 22px; padding: 10px 16px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(109,74,255,.4); }
   @media (max-width: 720px) { #fab { bottom: calc(76px + env(safe-area-inset-bottom, 0)); right: 12px; padding: 9px 14px; } }
+  #fabPost { position: fixed; right: 16px; bottom: 66px; z-index: 40; background: var(--accent); color: #fff; border: none; border-radius: 22px; padding: 10px 18px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px rgba(133,93,205,.45); }
+  @media (max-width: 720px) { #fabPost { bottom: calc(120px + env(safe-area-inset-bottom, 0)); right: 12px; padding: 9px 16px; } }
   #fbmodal { position: fixed; inset: 0; z-index: 10001; background: rgba(8,8,14,.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
   #fbmodal .fbcard { background: linear-gradient(180deg, #17122b, #0e0e15); border: 1px solid var(--accent); border-radius: 18px; padding: 20px; max-width: 440px; width: 100%; max-height: 86vh; overflow-y: auto; }
   #fbmodal textarea { width: 100%; min-height: 84px; margin-top: 10px; background: #0e0e15; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font: inherit; font-size: 15px; resize: vertical; }
@@ -297,6 +299,7 @@
   </div>
 </div>
 <footer>your farcaster - reads are free, nothing is sent without your confirm - <a href="/guide.html" style="color:#8a8a99">guide</a></footer>
+<button id="fabPost" title="new cast (n)">post</button>
 <button id="fab" title="leave feedback">feedback</button>
 
 <script>
@@ -2789,6 +2792,8 @@
     }
     const fabEl = document.getElementById('fab')
     if (fabEl) fabEl.style.display = ROLE === 'zaal' ? '' : 'none'
+    const fabPostEl = document.getElementById('fabPost')
+    if (fabPostEl) fabPostEl.style.display = ROLE === 'zaal' ? '' : 'none'
   }
   async function startApp() {
     gate.style.display = 'none'
@@ -2974,6 +2979,12 @@
     try { fbRec.start(); btn.textContent = 'stop'; btn.classList.add('on'); toast('listening - speak now') } catch { fbRec = null }
   }
   const fabEl = document.getElementById('fab'); if (fabEl) fabEl.addEventListener('click', openFeedback)
+  // post fab - jump to compose from any tab and put the cursor in the box
+  const fabPostEl = document.getElementById('fabPost')
+  if (fabPostEl) fabPostEl.addEventListener('click', () => {
+    switchTab('compose')
+    setTimeout(() => { const ta = document.getElementById('composeText'); if (ta) ta.focus() }, 60)
+  })
 
   // shared voice-to-text: dictate into a textarea (composer, etc). Returns text,
   // user reviews + posts - never auto-sends. Chrome/Safari (Web Speech API).
