@@ -106,6 +106,44 @@ export function loadEnv() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// HEADROOM (clawd-harness pattern: know the constraint BEFORE committing).
+// Neynar does not promise rate-limit headers on every response, so this records
+// whatever it DOES send plus any 429 we actually hit. Unknown stays null - an
+// absent header must never read as "plenty of room left".
+let lastRateSignal = { remaining: null, limit: null, resetAt: null, lastLimitedAt: null, seenAt: null }
+
+export function rateHeadroom() {
+  return { ...lastRateSignal }
+}
+
+function recordRateSignal(res) {
+  try {
+    // Number(null) === 0, so an ABSENT header would read as "0 remaining" and
+    // make the app believe it is rate limited when it simply was not told.
+    // Guard the empty cases before converting.
+    const num = (v) => {
+      if (v === null || v === undefined || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    }
+    const remaining = num(res.headers.get('x-ratelimit-remaining'))
+    const limit = num(res.headers.get('x-ratelimit-limit'))
+    const reset = res.headers.get('x-ratelimit-reset')
+    if (remaining !== null) lastRateSignal.remaining = remaining
+    if (limit !== null) lastRateSignal.limit = limit
+    if (reset) {
+      const n = Number(reset)
+      lastRateSignal.resetAt = Number.isFinite(n)
+        ? new Date(n > 1e12 ? n : n * 1000).toISOString()
+        : String(reset)
+    }
+    if (res.status === 429) lastRateSignal.lastLimitedAt = new Date().toISOString()
+    if (remaining !== null || limit !== null || res.status === 429) {
+      lastRateSignal.seenAt = new Date().toISOString()
+    }
+  } catch { /* never let bookkeeping break a real call */ }
+}
+
 async function fetchNeynar(endpoint, options = {}) {
   const env = loadEnv()
   const url = `${NEYNAR_BASE_URL}${endpoint}`
@@ -120,6 +158,7 @@ async function fetchNeynar(endpoint, options = {}) {
   let res
   for (let attempt = 0; attempt < 3; attempt++) {
     res = await fetch(url, { ...options, headers })
+    recordRateSignal(res)
     if (res.status !== 429) break
     const ra = Number(res.headers.get('retry-after'))
     const wait = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 400 * (attempt + 1)

@@ -20,7 +20,7 @@
 // profile/delete. Needs the signer (clean 500 with a friendly message if
 // unset - reads elsewhere work without one by design).
 
-import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast, updateProfile } from '../lib.js'
+import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast, updateProfile, rateHeadroom } from '../lib.js'
 import { postToX, postThreadToX, xEnabled } from '../xpost.js'
 import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
 import { postToTelegram, postToDiscord, telegramEnabled, discordEnabled } from '../chat.js'
@@ -184,9 +184,18 @@ export default async function handler(req, res) {
       parts.push(`${scheduled.pending} scheduled cast(s) pending${scheduled.nextAt ? `, next ${scheduled.nextAt}` : ''}`)
     }
 
+    const headroom = rateHeadroom()
+    // Only speak up when there is something to say. "unknown" is silent rather
+    // than reassuring - an absent header is not the same as room to spare.
+    if (headroom.remaining !== null && headroom.limit !== null) {
+      parts.push(`api headroom ${headroom.remaining}/${headroom.limit}`)
+    }
+    if (headroom.lastLimitedAt) parts.push(`rate limited at ${headroom.lastLimitedAt}`)
+
     res.setHeader('Cache-Control', 'no-store')
     res.status(200).json({
       ...h,
+      headroom,
       // kept flat for the existing UI (postingHealth.xEnabled etc)
       xEnabled: rails.x,
       bskyEnabled: rails.bluesky,
