@@ -25,6 +25,7 @@ import { postToX, postThreadToX, xEnabled } from '../xpost.js'
 import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
 import { postToTelegram, postToDiscord, telegramEnabled, discordEnabled } from '../chat.js'
 import { blockedByAuth } from '../auth.js'
+import { storeEnabled, kvGet } from '../store.js'
 
 // MULTI-ACCOUNT: cast as another ZAO account without ever trusting the client.
 // The browser sends a short account KEY ("thezao"); the server maps it to a
@@ -71,14 +72,61 @@ export default async function handler(req, res) {
   // GET -> posting health check (is the signer wired up under the key?)
   if (req.method === 'GET') {
     const h = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
+    const rails = {
+      x: xEnabled(),
+      bluesky: bskyEnabled(),
+      telegram: telegramEnabled(),
+      discord: discordEnabled(),
+    }
+    const accounts = accountKeys()
+
+    // scheduled-queue depth - best effort, never fails the health read
+    let scheduled = { store: storeEnabled(), pending: null, nextAt: null }
+    if (storeEnabled()) {
+      try {
+        const state = (await kvGet('zc:state')) || {}
+        const q = Array.isArray(state.scheduled) ? state.scheduled : []
+        const pending = q.filter((s) => !s.sent && s.at)
+        scheduled.pending = pending.length
+        scheduled.nextAt = pending
+          .map((s) => s.at)
+          .sort()
+          .find(Boolean) || null
+      } catch {
+        scheduled.pending = null // unknown, not zero - never claim empty on a read failure
+      }
+    }
+
+    // A plain-language line an AGENT can read without parsing the object.
+    // This is clawd's tools/self ("know yourself by reading, not remembering")
+    // applied to a web cockpit: the app reports its own capability so a caller
+    // never has to guess what will work.
+    const live = Object.entries(rails).filter(([, on]) => on).map(([k]) => k)
+    const off = Object.entries(rails).filter(([, on]) => !on).map(([k]) => k)
+    const parts = [
+      h.ready ? `casting is ready as fid ${h.fid}` : `casting NOT ready (${h.reason})`,
+      live.length ? `cross-post live: ${live.join(', ')}` : 'no cross-post rails configured',
+    ]
+    if (off.length) parts.push(`not configured: ${off.join(', ')}`)
+    if (accounts.length) parts.push(`extra accounts: ${accounts.join(', ')}`)
+    if (scheduled.pending !== null && scheduled.pending > 0) {
+      parts.push(`${scheduled.pending} scheduled cast(s) pending${scheduled.nextAt ? `, next ${scheduled.nextAt}` : ''}`)
+    }
+
     res.setHeader('Cache-Control', 'no-store')
     res.status(200).json({
       ...h,
-      xEnabled: xEnabled(),
-      bskyEnabled: bskyEnabled(),
-      telegramEnabled: telegramEnabled(),
-      discordEnabled: discordEnabled(),
-      accounts: accountKeys(),
+      // kept flat for the existing UI (postingHealth.xEnabled etc)
+      xEnabled: rails.x,
+      bskyEnabled: rails.bluesky,
+      telegramEnabled: rails.telegram,
+      discordEnabled: rails.discord,
+      accounts,
+      // self-state additions
+      rails,
+      scheduled,
+      summary: parts.join('; '),
+      checkedAt: new Date().toISOString(),
     })
     return
   }
