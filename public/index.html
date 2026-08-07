@@ -751,6 +751,23 @@
 
   // ================= COMPOSE =================
   let busState = { loaded: false, configured: null, count: 0, messages: [], error: null }
+  // Fill the Daily card's unread count WITHOUT opening it - a card that only
+  // learns its count after you tap it cannot do the one job it exists for
+  // (telling you at a glance that a partner wrote). Owner-only route, so guests
+  // never call it. Failure leaves the card reading "partner messages" rather
+  // than inventing a zero.
+  async function loadBus() {
+    if (busState.loaded || ROLE !== 'zaal') return
+    try {
+      const r = await fetch('/api/view?kind=bus')
+      const d = await r.json()
+      busState = { loaded: true, configured: d.configured !== false, count: d.count || 0, messages: d.messages || [], error: d.error || null }
+    } catch {
+      busState.loaded = true
+      busState.error = 'unreachable'
+    }
+    if (tab === 'daily') render()
+  }
   const compose = { text: '', channel: '', armed: false, sending: false, sentLink: null, sentX: null, sentBsky: null, quote: null, thread: false, parts: [], embedUrl: '', uploading: false, toX: false, toBsky: false, toTg: false, toDc: false, account: 'me', sentTg: null, sentDc: null, linkPreview: null }
   async function uploadImage(file) {
     if (!file) return
@@ -1571,6 +1588,7 @@
     if (t === 'manager' && !st.grow.loaded) loadGrow()
     if (t === 'fleet' && !st.fleet.loaded) loadFleet()
     if (t === 'daily' && !st.zoe.loaded && ROLE === 'zaal') loadZoe()
+    if (t === 'daily') loadBus()
     if (t === 'daily') checkAutoQuests()
     if (t === 'search') { const i = document.getElementById('searchInput'); if (i) i.focus() }
   }
