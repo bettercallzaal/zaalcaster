@@ -489,11 +489,14 @@ export function friendlyPostError(err) {
 
 export async function postCast(text, options = {}) {
   const { embedUrl = null, parentHash = null, parentFid = null, channelId = null,
-    quoteHash = null, quoteFid = null } = options
+    quoteHash = null, quoteFid = null, signerUuid = null } = options
   const env = loadEnv()
 
   const payload = {
-    signer_uuid: requireSigner(env),
+    // signerUuid lets a caller cast as a DIFFERENT account (multi-account) -
+    // the route resolves it from env and never accepts a raw uuid from the
+    // client, so a browser can never smuggle in an arbitrary signer.
+    signer_uuid: signerUuid || requireSigner(env),
     text,
   }
 
