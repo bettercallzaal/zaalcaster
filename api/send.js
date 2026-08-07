@@ -26,6 +26,37 @@ import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
 import { postToTelegram, postToDiscord, telegramEnabled, discordEnabled } from '../chat.js'
 import { blockedByAuth } from '../auth.js'
 
+// MULTI-ACCOUNT: cast as another ZAO account without ever trusting the client.
+// The browser sends a short account KEY ("thezao"); the server maps it to a
+// signer from env - SIGNER_UUID_<KEY uppercased>. A raw signer_uuid from the
+// client is never honoured, so a tampered page cannot cast as an account the
+// server has no key for. Discovery mirrors the bus's BUS_GUEST_TOKEN_<NAME>
+// pattern: scan env, A-Z0-9 only.
+function accountSigners() {
+  const out = {}
+  for (const [k, v] of Object.entries(process.env)) {
+    const m = /^SIGNER_UUID_([A-Z0-9]+)$/.exec(k)
+    if (m && v) out[m[1].toLowerCase()] = v
+  }
+  return out
+}
+
+// Public list for the UI - KEYS ONLY, never the uuids.
+export function accountKeys() {
+  return Object.keys(accountSigners())
+}
+
+// null = post as Zaal (the default signer). A key with no env entry is an
+// explicit error, never a silent fallback to Zaal's account - casting as the
+// wrong identity is exactly the failure worth being loud about.
+function resolveSigner(accountKey) {
+  if (!accountKey || accountKey === 'me') return { ok: true, signerUuid: null }
+  const key = String(accountKey).toLowerCase()
+  const found = accountSigners()[key]
+  if (!found) return { ok: false, error: `unknown account "${key}" - set SIGNER_UUID_${key.toUpperCase()} in the env` }
+  return { ok: true, signerUuid: found }
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body
   const chunks = []
@@ -47,6 +78,7 @@ export default async function handler(req, res) {
       bskyEnabled: bskyEnabled(),
       telegramEnabled: telegramEnabled(),
       discordEnabled: discordEnabled(),
+      accounts: accountKeys(),
     })
     return
   }
@@ -136,7 +168,9 @@ export default async function handler(req, res) {
     if (text.length > 1024) { res.status(400).json({ error: 'text too long' }); return }
 
     // parentHash -> reply; quoteHash -> quote cast; else top-level (Compose)
-    const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid, embedUrl })
+    const acct = resolveSigner(body.account)
+    if (!acct.ok) { res.status(400).json({ error: acct.error }); return }
+    const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid, embedUrl, signerUuid: acct.signerUuid })
     const cast = response.cast
 
     // optional cross-post to X / Bluesky / Telegram / Discord - only when toggled
