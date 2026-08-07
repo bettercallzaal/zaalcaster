@@ -23,6 +23,7 @@
 import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast, updateProfile } from '../lib.js'
 import { postToX, postThreadToX, xEnabled } from '../xpost.js'
 import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
+import { postToTelegram, postToDiscord, telegramEnabled, discordEnabled } from '../chat.js'
 import { blockedByAuth } from '../auth.js'
 
 async function readJsonBody(req) {
@@ -40,7 +41,13 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const h = await getPostingHealth().catch(() => ({ ready: false, reason: 'error' }))
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200).json({ ...h, xEnabled: xEnabled(), bskyEnabled: bskyEnabled() })
+    res.status(200).json({
+      ...h,
+      xEnabled: xEnabled(),
+      bskyEnabled: bskyEnabled(),
+      telegramEnabled: telegramEnabled(),
+      discordEnabled: discordEnabled(),
+    })
     return
   }
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
@@ -103,11 +110,16 @@ export default async function handler(req, res) {
         parentHash = cast.hash; posted++
         if (i === 0) firstLink = `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`
       }
-      // optional cross-post of the whole thread to X / Bluesky (toggled + confirmed)
-      let x = null, bsky = null
+      // optional cross-post of the whole thread (toggled + confirmed). X and
+      // Bluesky get a real thread; the chat rooms get the joined text as ONE
+      // message - a 12-message burst in a chat room is spam, not a thread.
+      let x = null, bsky = null, telegram = null, discord = null
       if (body.alsoX) x = await postThreadToX(parts).catch((e) => ({ ok: false, reason: e?.message || 'x failed' }))
       if (body.alsoBsky) bsky = await postThreadToBluesky(parts).catch((e) => ({ ok: false, reason: e?.message || 'bsky failed' }))
-      res.status(200).json({ ok: true, link: firstLink, count: posted, x, bsky })
+      const joined = parts.join('\n\n')
+      if (body.alsoTelegram) telegram = await postToTelegram(joined, { castUrl: firstLink }).catch((e) => ({ ok: false, reason: e?.message || 'telegram failed' }))
+      if (body.alsoDiscord) discord = await postToDiscord(joined, { castUrl: firstLink }).catch((e) => ({ ok: false, reason: e?.message || 'discord failed' }))
+      res.status(200).json({ ok: true, link: firstLink, count: posted, x, bsky, telegram, discord })
       return
     }
 
@@ -127,20 +139,24 @@ export default async function handler(req, res) {
     const response = await postCast(text, { parentHash, parentFid, channelId, quoteHash, quoteFid, embedUrl })
     const cast = response.cast
 
-    // optional cross-post to X / Bluesky - only when toggled on (confirm is the
-    // yes) and only for top-level casts. Never blocks the cast: a cross-post
-    // failure still returns the successful cast.
-    let x = null, bsky = null
+    // optional cross-post to X / Bluesky / Telegram / Discord - only when toggled
+    // on (confirm is the yes) and only for top-level casts. Never blocks the cast:
+    // a cross-post failure still returns the successful cast.
+    const castLink = `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`
+    let x = null, bsky = null, telegram = null, discord = null
     if (!parentHash) {
       if (body.alsoX) x = await postToX(text).catch((e) => ({ ok: false, reason: e?.message || 'x failed' }))
       if (body.alsoBsky) bsky = await postToBluesky(text).catch((e) => ({ ok: false, reason: e?.message || 'bsky failed' }))
+      // chat rooms get the cast link appended so readers can jump to the original
+      if (body.alsoTelegram) telegram = await postToTelegram(text, { castUrl: castLink }).catch((e) => ({ ok: false, reason: e?.message || 'telegram failed' }))
+      if (body.alsoDiscord) discord = await postToDiscord(text, { castUrl: castLink }).catch((e) => ({ ok: false, reason: e?.message || 'discord failed' }))
     }
 
     res.status(200).json({
       ok: true,
       hash: cast.hash,
-      link: `https://farcaster.xyz/${cast.author.username}/${cast.hash.slice(0, 10)}`,
-      x, bsky,
+      link: castLink,
+      x, bsky, telegram, discord,
     })
   } catch (err) {
     // lib throws a clear message when ZAAL_SIGNER_UUID is missing
