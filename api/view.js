@@ -22,9 +22,45 @@ import {
   getUserPopular, getTokenBalances, getCastReactions, getUserFollowers, getUserFollowing,
   searchChannels, getChannelDetails, getLinkPreview,
 } from '../lib.js'
-import { blockedByGuestAuth } from '../auth.js'
+import { blockedByGuestAuth, getSession } from '../auth.js'
 import { getLeaderboardEntries, getDistributionRecipients } from '../empire.js'
 import { getBountyWithClaims } from '../poidh.js'
+
+
+// Partner bus (tasern / Jim at Meme for Trees) - read-only, OWNER ONLY.
+// These are private partner comms, so unlike the rest of this file they are NOT
+// guest-readable. Zaal was checking Telegram for these; the cockpit is the one
+// surface now. Sending on the bus stays out of here on purpose: that is a write
+// to an external party and wants Zaal's explicit yes, not a button he can brush.
+async function partnerBus(res) {
+  const base = (process.env.TASERN_BUS_URL || 'https://tasern.quest/bus').replace(/\/$/, '')
+  const token = process.env.TASERN_BUS_TOKEN || ''
+  // Unset env is NOT an error - the cockpit just reports it is not wired.
+  if (!token) { res.status(200).json({ ok: true, configured: false, messages: [] }); return }
+  try {
+    const r = await fetch(`${base}/messages?status=new`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(12000),
+    })
+    if (!r.ok) {
+      // Loud but harmless: never leak the token or the raw upstream body.
+      res.status(200).json({ ok: false, configured: true, error: `bus ${r.status}`, messages: [] })
+      return
+    }
+    const d = await r.json().catch(() => ({}))
+    const messages = (Array.isArray(d.messages) ? d.messages : []).map((m) => ({
+      id: m.id,
+      shortId: String(m.id || '').replace(/-/g, '').slice(0, 6),
+      from: m.from,
+      subject: m.subject || '',
+      body: m.body || '',
+      created: m.created || '',
+    }))
+    res.status(200).json({ ok: true, configured: true, count: messages.length, messages })
+  } catch (e) {
+    res.status(200).json({ ok: false, configured: true, error: 'bus unreachable', messages: [] })
+  }
+}
 
 function compactCast(cast) {
   const a = cast.author || {}
@@ -227,6 +263,13 @@ export default async function handler(req, res) {
         // "0 claims" and "claims fetch failed" must render differently.
         claimsError: claims.ok ? null : claims.error,
       })
+      return
+    }
+
+    if (kind === 'bus') {
+      const session = getSession(req)
+      if (!session || session.role !== 'zaal') { res.status(403).json({ error: 'zaal only' }); return }
+      await partnerBus(res)
       return
     }
 
