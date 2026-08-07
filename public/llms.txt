@@ -1,0 +1,64 @@
+# Zaalcaster
+
+> Personal Farcaster client and multi-platform content broadcaster for Zaal Panthaki (@zaal, FID 19640). View + post Farcaster casts, draft in Zaal's voice, cross-post to LinkedIn, X, and Bluesky, with $zaalcaster token-ranked reply inbox. Open source.
+
+## Overview
+
+Zaalcaster is Zaal's daily content cockpit. It's a read/write Farcaster client layered with AI-assisted drafting (Zaal's voice, never posts without approval), cross-platform distribution, and a token-based reply-ranking inbox ($zaalcaster on Base).
+
+Only Zaal posts through zaalcaster. Everyone else reads.
+
+## Features
+
+- **Unanswered inbox** — replies, mentions, and quotes Zaal hasn't answered yet (daily driver)
+- **Channel feeds** — /zao, /wavewarz, /zabal channels without main-feed noise
+- **Thread view** — full conversation before replying
+- **Reply drafts** — AI suggestions in Zaal's voice (hold-to-approve, never auto-posts)
+- **LinkedIn drafter** — `POST /api/digest` with `{mode: "linkedin", topic, facts}` returns a 600–1200 char post in Zaal's voice (no emojis, no hashtags, hook in line 1)
+- **$zaalcaster token** — stake (hold) to signal reply importance, tip to spend; two dials keeping human judgment in the loop
+- **Fleet tab** — live status of ZAL agent fleet (Supabase fleet_state relay)
+- **Empire Builder tab** — SPARKZ tokenomics wizard; ideate a creator token (Clanker v4 + 0xSplits-first rail)
+- **POIDH tab** — post POIDH bounties from zaalcaster
+- **Tip inbox** — `GET /api/inbox` returns reply queue ranked by tip size and stake
+
+## API Endpoints
+
+- `POST /api/digest` — generate a post in Zaal's voice. Body: `{mode: "linkedin"|"farcaster"|"x", topic: string, facts: string}`. Returns drafted text.
+- `GET /api/stats` — platform stats (cast counts, token metrics, fleet heartbeat)
+- `GET /api/inbox` — ranked reply inbox (tips descending)
+- `POST /api/tips` — register a tip to boost a reply's rank
+- `GET /api/view` — read a cast thread by hash
+
+## $zaalcaster Token
+
+$zaalcaster is a Base token that powers the reply-ranking mechanic:
+- **Stake (hold)** — long-term signal: "I think this reply deserves Zaal's attention"
+- **Tip (spend)** — immediate signal: "Read this now"
+- Token created via Clanker on Base. 0xSplits is the fee recipient (adjustable split inside).
+
+## Stack
+
+- Node.js server with Vercel serverless functions
+- [Neynar](https://neynar.com): Farcaster API
+- [Base](https://base.org): $zaalcaster token + WaveWarZ contracts
+- [Empire Builder](https://empirebuilder.xyz): SPARKZ tokenomics + creator economy integrations
+- [Clanker](https://clanker.world): token deployment
+- [0xSplits](https://splits.org): fee-split rail
+
+## Identity
+
+Zaal Panthaki is the Director of Ecosystem Strategy at WaveWarZ and founder of The ZAO. Key credentials:
+- @zaal on Farcaster, FID 19640
+- @bettercallzaal on X
+- WaveWarZ: 1,245+ battles, 524 SOL (~$39k) volume since May 2025
+- The ZAO: 100+ Fractal governance sessions, 157 unique on-chain Respect holders
+- ZABAL Games: 28 June 2026 workshops
+- COC Concertz: 7 virtual concert shows
+- ZLANK: FarHack 2026 Snaps category winner
+
+## Links
+
+- Live: [zaalcaster.vercel.app](https://zaalcaster.vercel.app)
+- GitHub: [github.com/bettercallzaal/zaalcaster](https://github.com/bettercallzaal/zaalcaster)
+- ZAO ecosystem: [thezao.xyz](https://thezao.xyz)
+- WaveWarZ: [wavewarz.io](https://wavewarz.io)
