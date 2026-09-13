@@ -24,6 +24,7 @@ import { postCast, friendlyPostError, getPostingHealth, loadEnv, deleteCast, upd
 import { postToX, postThreadToX, xEnabled } from '../xpost.js'
 import { postToBluesky, postThreadToBluesky, bskyEnabled } from '../bsky.js'
 import { postToTelegram, postToDiscord, telegramEnabled, discordEnabled } from '../chat.js'
+import { previewSend } from '../publish-preview.js'
 import { blockedByAuth } from '../auth.js'
 import { storeEnabled, kvGet } from '../store.js'
 
@@ -52,6 +53,14 @@ GET /api/send
   \`summary\` is a plain-English line - read it instead of guessing what is wired.
   A rail that is false is NOT configured: do not offer it.
   scheduled.pending === null means UNKNOWN (a read failed), not zero.
+
+## Preview first (dry run, sends nothing)
+
+POST /api/send { action: 'preview', ...the exact body you would send }
+  -> { ok, dryRun: true, kind, account, channelId, castBlocked,
+       rails: [{ rail, selected, configured, willSend, limit, items: [{ text, chars, truncated, overLimit }], note }] }
+  Show Zaal what each rail will actually get. X is not trimmed (over 280 = rejected);
+  Bluesky trims to 300; Telegram/Discord get the cast link appended.
 
 ## Send (owner only)
 
@@ -213,6 +222,20 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   try {
     const body = await readJsonBody(req)
+
+    // DRY RUN: { action: 'preview', ...the exact body you would send } returns
+    // what each rail would receive (normalized text, limits, trims, rejects)
+    // and SENDS NOTHING - publish-preview.js has no fetch in it. The ZAOOS
+    // compose contract (dryRun first), on zaalcaster's own rails.
+    if (body.action === 'preview') {
+      const rails = { x: xEnabled(), bluesky: bskyEnabled(), telegram: telegramEnabled(), discord: discordEnabled() }
+      const acct = resolveSigner(body.account)
+      if (!acct.ok) { res.status(400).json({ error: acct.error }); return }
+      const p = previewSend(body, rails)
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(p.ok ? 200 : 400).json(p)
+      return
+    }
 
     // update your own profile (bio / display / pfp / url). Public change - the
     // UI shows the diff and confirms before calling this.
