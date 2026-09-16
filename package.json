@@ -24,6 +24,7 @@
     "zaalcaster-empire": "./bin/empire.js"
   },
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "empire": "node bin/empire.js",
     "cockpit": "node bin/cockpit.js",
     "spaces": "node bin/spaces.js",
