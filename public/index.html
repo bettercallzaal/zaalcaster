@@ -3260,6 +3260,13 @@
       NEYNAR_CLIENT_ID = d.neynarClientId || null
       applyConfig(d.config)
       maybeWelcome() // owner+viewer known now; no-op if SDK context not ready (fc-ready will retry)
+      if (d.writesLocked) {
+        // Vercel with no SESSION_SECRET: the server refuses every write until
+        // the env vars are set (auth.js writesLocked). Say so where it is seen.
+        const b = document.createElement('div'); b.className = 'err'; b.style.cssText = 'margin:8px 12px'
+        b.textContent = 'writes are locked on this deployment - anyone could post as you until SESSION_SECRET and NEYNAR_CLIENT_ID are set in Vercel. reads still work.'
+        document.body.insertBefore(b, document.getElementById('main'))
+      }
       if (d.enabled && !d.authed) showGate()
       else startApp()
     } catch { ROLE = 'zaal'; startApp() } // auth endpoint unreachable - fail open, same as gate-off before

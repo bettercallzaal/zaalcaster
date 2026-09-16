@@ -143,7 +143,25 @@ export function getSession(req) {
 // function name + contract on purpose: when the password gate was replaced
 // (2026-07-14), every existing write route stayed correct with ZERO edits
 // because this signature didn't change. Returns true if it already sent 401.
+// FAIL CLOSED FOR WRITES ON A DEPLOYMENT WITH NO GATE (2026-09-15). The
+// gate-off escape hatch above exists for the local CLI. On Vercel it meant
+// something else: measured on z.thezao.xyz, an anonymous POST to /api/send,
+// /api/react and /api/state got 400 (validation), not 401 - anyone on the
+// internet could cast, like, follow, mute or overwrite synced state as the
+// owner. Vercel sets VERCEL=1 on every function, so on Vercel without
+// SESSION_SECRET every non-GET owner route is refused with a message that
+// says what to set. Reads keep the old behaviour so the app stays usable
+// while the two env vars get set; the fix is the env vars, not this guard.
+export function writesLocked() {
+  return !!process.env.VERCEL && !authEnabled()
+}
+export const WRITES_LOCKED_MESSAGE = 'writes are locked on this deployment: set SESSION_SECRET and NEYNAR_CLIENT_ID in Vercel, then sign in'
+
 export function blockedByAuth(req, res) {
+  if (writesLocked() && String(req.method || 'GET').toUpperCase() !== 'GET') {
+    res.status(401).json({ error: WRITES_LOCKED_MESSAGE })
+    return true
+  }
   const session = getSession(req)
   if (session && session.role === 'zaal') return false
   res.status(401).json({ error: 'unauthorized' })
