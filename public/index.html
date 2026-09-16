@@ -358,7 +358,7 @@
     feed: { type: 'following', casts: [], frames: [], loaded: false, digest: null, digesting: false },
     inbox: { items: [], loaded: false, showAll: false, priority: false, view: 'reply', notifs: [], notifChannel: '' },
     channels: { id: 'zao', casts: [], loaded: false, trending: [], chanInfo: null, searching: false, searchResults: [] },
-    search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false },
+    search: { q: '', channel: '', users: [], casts: [], loaded: true, searching: false, scope: 'farcaster', docs: [], repos: [], total: 0 },
     grow: { loaded: false, data: null, empires: [] },
     poidh: { loaded: false, bountyId: '1249', chainId: 8453, bounty: null, claims: [], claimsCount: 0, claimsError: null, err: null },
     zoe: { loaded: false, enabled: true, tasks: [], err: null },
@@ -560,10 +560,20 @@
     const q = st.search.q.trim(); if (!q) return
     st.search.searching = true; render()
     try {
-      const cq = st.search.channel ? '&channel=' + encodeURIComponent(st.search.channel) : ''
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}${cq}`); const d = await r.json()
-      if (!r.ok) throw new Error(d.error || 'search failed')
-      st.search.users = d.users; st.search.casts = d.casts; st.search.err = null
+      if (st.search.scope === 'library') {
+        const r = await fetch(`/api/view?kind=research_index&limit=60&q=${encodeURIComponent(q)}`); const d = await r.json()
+        if (!r.ok) throw new Error(d.error || 'library search failed')
+        st.search.docs = d.docs || []; st.search.total = d.total || 0; st.search.users = []; st.search.casts = []; st.search.repos = []; st.search.err = null
+      } else if (st.search.scope === 'repos') {
+        const r = await fetch(`/api/view?kind=repos&limit=60&q=${encodeURIComponent(q)}`); const d = await r.json()
+        if (!r.ok) throw new Error(d.error || 'repo search failed')
+        st.search.repos = d.repos || []; st.search.total = d.count || 0; st.search.users = []; st.search.casts = []; st.search.docs = []; st.search.err = null
+      } else {
+        const cq = st.search.channel ? '&channel=' + encodeURIComponent(st.search.channel) : ''
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}${cq}`); const d = await r.json()
+        if (!r.ok) throw new Error(d.error || 'search failed')
+        st.search.users = d.users; st.search.casts = d.casts; st.search.docs = []; st.search.repos = []; st.search.err = null
+      }
     } catch (e) { st.search.err = e.message }
     st.search.searching = false; render()
   }
@@ -572,9 +582,13 @@
     const isSaved = savedSearches.some((s) => s.q === st.search.q.trim() && (s.channel || '') === st.search.channel)
     const saveBtn = st.search.q.trim() ? `<span class="chip" data-act="savesearch">${isSaved ? 'saved' : '+ save search'}</span>` : ''
     const saved = savedSearches.length ? `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">saved:</span> ${savedSearches.map((s, i) => `<span class="chip" data-savedsearch="${i}">${esc(s.q)}${s.channel ? ' /' + esc(s.channel) : ''} <span data-act="rmsearch" data-i="${i}" style="cursor:pointer;color:#ff8a6a">x</span></span>`).join(' ')}</div>` : ''
-    const bar = `<div class="searchbar"><input id="searchInput" placeholder="search people + casts..." value="${esc(st.search.q)}">
+    const scope = st.search.scope || 'farcaster'
+    const scopes = [['farcaster', 'people + casts'], ['library', 'research docs'], ['repos', 'ZAO repos']].map(([k, l]) => `<span class="chip ${scope === k ? 'on' : ''}" data-act="searchscope" data-scope="${k}">${l}</span>`).join(' ')
+    const ph = scope === 'library' ? 'search 2,000+ research docs by title or summary...' : scope === 'repos' ? 'search repos by name, description, language, topic...' : 'search people + casts...'
+    const bar = `<div class="searchbar"><input id="searchInput" placeholder="${ph}" value="${esc(st.search.q)}">
       <button class="ibtn primary" data-act="dosearch">go</button></div>
-      <div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">in:</span> ${chips} ${saveBtn}</div>${saved}`
+      <div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">scope:</span> ${scopes}</div>
+      ${scope === 'farcaster' ? `<div class="subbar" style="padding-top:0"><span class="ub" style="align-self:center">in:</span> ${chips} ${saveBtn}</div>${saved}` : `<div class="subbar" style="padding-top:0"><span class="chip" data-act="${scope === 'library' ? 'library' : 'repos'}">browse ${scope === 'library' ? 'the library' : 'all repos'}</span></div>`}`
     let body = ''
     if (st.search.searching) body = '<div class="loading">searching...</div>'
     else if (st.search.err) body = `<div class="err">${esc(st.search.err)}</div>`
@@ -583,7 +597,9 @@
         ${pfp(u)}<div><div class="un">${esc(u.display)} <span class="ub">@${esc(u.username)} - ${u.followers} followers</span></div>
         <div class="ub">${esc(u.bio)}</div></div></div>`).join('')
       if (st.search.casts.length) body += st.search.casts.map(castCard).join('')
-      if (!st.search.users.length && !st.search.casts.length && st.search.q) body = '<div class="empty">no results.</div>'
+      if (st.search.docs.length) body += `<div class="subbar"><b style="color:#8a8a99;font-size:13px">${st.search.total} docs</b></div>` + st.search.docs.map(docRow).join('')
+      if (st.search.repos.length) body += `<div class="subbar"><b style="color:#8a8a99;font-size:13px">${st.search.total} repos</b></div>` + st.search.repos.map(repoRow).join('')
+      if (!st.search.users.length && !st.search.casts.length && !st.search.docs.length && !st.search.repos.length && st.search.q) body = '<div class="empty">no results.</div>'
     }
     return bar + body
   }
@@ -2719,6 +2735,9 @@
     if (act === 'allprojects') { openAllProjects(); return }
     if (act === 'repos') { openRepos({ brand: '', q: '' }); return }
     if (act === 'library') { openLibrary({ topic: '', q: '' }); return }
+    if (act === 'searchscope') { st.search.scope = btn.dataset.scope; st.search.users = []; st.search.casts = []; st.search.docs = []; st.search.repos = []; st.search.err = null; render(); if (st.search.q.trim()) runSearch(); return }
+    if (act === 'libdoc') { openLibraryDoc(btn.dataset.path); return }
+    if (act === 'repocast' || act === 'libcast') { prefillCast(btn.dataset.text, btn.dataset.url); return }
     if (act === 'linkedin') { openLinkedIn(); return }
     if (act === 'mylinks') { openMyLinks(); return }
     if (act === 'createempire') { openCreateEmpire(); return }
