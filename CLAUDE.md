@@ -2,6 +2,9 @@
 
 Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Neynar v2.
 
+## SECURITY: writes fail closed on Vercel without SESSION_SECRET (2026-09-15)
+Measured live on z.thezao.xyz: `/api/auth` answered `enabled:false, authed:true, role:zaal` to an anonymous request, and anonymous POSTs to /api/send, /api/react and /api/state got 400 (validation), not 401. The gate-off escape hatch (SESSION_SECRET unset = everyone is Zaal) had been live on the public deployment since the SIWN rewrite of 2026-07-14, because the two manual env vars were never set. Fix in auth.js `writesLocked()`: on Vercel (VERCEL=1) with no SESSION_SECRET, every non-GET call through blockedByAuth is refused with a message naming the fix; GET reads keep the old behaviour so the app stays usable. `/api/auth` reports `writesLocked` and the page shows a banner. Local CLI is untouched (no VERCEL env). THE REAL FIX IS STILL ZAAL'S: set SESSION_SECRET (random) + NEYNAR_CLIENT_ID (register the app in the Neynar dev portal) in Vercel, then sign in - see the 2026-07-14 section. Until then nobody, Zaal included, can post from the web app. Test: test/auth-writes-locked.test.mjs.
+
 ## Repos + research library surfaces (2026-09-15, research doc 2489)
 Zaal is making zaalcaster his main interface. Two read-only modules, folded into api/view.js (still no new api file):
 - **zaorepos.js** reads https://bettercallzaal.github.io/zao-repos/data.json - the hourly zao-repos dashboard (public repos only, by construction) - and filters/sorts it. `kind=repos&brand=&name=&q=&sort=` returns compact rows with staleness, hygiene score, deploy probe, topics. A `brand-*` topic wins over the dashboard's name-regex brand label once repos are tagged (doc 2489 decision 2: 129 of 130 repos have no topics today).
