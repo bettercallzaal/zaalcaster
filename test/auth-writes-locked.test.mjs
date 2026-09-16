@@ -1,35 +1,39 @@
 // node --test test/auth-writes-locked.test.mjs
-// On Vercel with no SESSION_SECRET, owner routes refuse writes and keep reads.
+// On Vercel with no SESSION_SECRET nobody has a session: every guarded route is 401.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 delete process.env.SESSION_SECRET
 delete process.env.NEYNAR_CLIENT_ID
 process.env.VERCEL = '1'
-const { blockedByAuth, writesLocked } = await import('../auth.js')
+const { blockedByAuth, blockedByGuestAuth, getSession, locked, writesLocked } = await import('../auth.js')
 
 const res = () => { const r = { code: null, body: null, status(c) { r.code = c; return r }, json(b) { r.body = b; return r } }; return r }
+const req = (method = 'GET') => ({ method, headers: {}, cookies: {} })
 
-test('writesLocked is true on Vercel without SESSION_SECRET', () => {
+test('locked on Vercel without SESSION_SECRET; alias kept', () => {
+  assert.equal(locked(), true)
   assert.equal(writesLocked(), true)
+  assert.equal(getSession(req()), null)
 })
-test('POST / PUT / DELETE to an owner route are refused with a message that names the fix', () => {
-  for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
+test('owner routes refuse every method with a message naming the fix', () => {
+  for (const method of ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']) {
     const r = res()
-    assert.equal(blockedByAuth({ method, headers: {}, cookies: {} }, r), true)
+    assert.equal(blockedByAuth(req(method), r), true)
     assert.equal(r.code, 401)
     assert.match(r.body.error, /SESSION_SECRET/)
   }
 })
-test('GET on an owner route keeps the gate-off behaviour (reads still work)', () => {
+test('guest routes refuse too', () => {
   const r = res()
-  assert.equal(blockedByAuth({ method: 'GET', headers: {}, cookies: {} }, r), false)
-  assert.equal(r.code, null)
+  assert.equal(blockedByGuestAuth(req(), r), true)
+  assert.equal(r.code, 401)
 })
-test('off Vercel (local CLI) nothing changes', () => {
+test('off Vercel (local CLI / dev) the gate-off hatch is unchanged', () => {
   delete process.env.VERCEL
-  assert.equal(writesLocked(), false)
-  const r = res()
-  assert.equal(blockedByAuth({ method: 'POST', headers: {}, cookies: {} }, r), false)
+  assert.equal(locked(), false)
+  assert.equal(getSession(req()).role, 'zaal')
+  assert.equal(blockedByAuth(req('POST'), res()), false)
+  assert.equal(blockedByGuestAuth(req(), res()), false)
   process.env.VERCEL = '1'
 })

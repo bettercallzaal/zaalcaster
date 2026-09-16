@@ -124,7 +124,8 @@ export function clearSessionCookie() {
 // expiry is advisory: a captured cookie value would otherwise never age out.
 export function getSession(req) {
   if (misconfigured()) return null // fail closed - see misconfigured() above
-  if (!authEnabled()) return { fid: ownerFid(), role: 'zaal' } // gate off = full local access
+  if (locked()) return null // Vercel with no secret: nobody, see locked() below
+  if (!authEnabled()) return { fid: ownerFid(), role: 'zaal' } // gate off = full LOCAL access (CLI, dev)
   const raw = readCookie(req, COOKIE)
   if (!raw) return null
   const parts = raw.split('.')
@@ -152,16 +153,24 @@ export function getSession(req) {
 // SESSION_SECRET every non-GET owner route is refused with a message that
 // says what to set. Reads keep the old behaviour so the app stays usable
 // while the two env vars get set; the fix is the env vars, not this guard.
-export function writesLocked() {
+// WIDENED THE SAME NIGHT to every route (dotfiles review): with no
+// SESSION_SECRET the owner cannot sign in either, so "reads stay open"
+// meant the app was usable by everyone except him, and /api/state, /api/inbox
+// and the partner bus are his private working data. Now: on Vercel without
+// SESSION_SECRET there is NO session for anyone (getSession returns null),
+// so every guarded route - reads and writes, owner and guest - answers 401
+// with a message naming the fix. /api/auth reports locked:true and
+// authed:false so the page shows the gate + banner instead of the owner UI.
+// The moment the env vars are set, everything opens for the owner alone.
+export function locked() {
   return !!process.env.VERCEL && !authEnabled()
 }
-export const WRITES_LOCKED_MESSAGE = 'writes are locked on this deployment: set SESSION_SECRET and NEYNAR_CLIENT_ID in Vercel, then sign in'
+export const writesLocked = locked // kept for the /api/auth field + banner
+export const LOCKED_MESSAGE = 'this deployment is locked: set SESSION_SECRET and NEYNAR_CLIENT_ID in Vercel, then sign in'
+export const WRITES_LOCKED_MESSAGE = LOCKED_MESSAGE
 
 export function blockedByAuth(req, res) {
-  if (writesLocked() && String(req.method || 'GET').toUpperCase() !== 'GET') {
-    res.status(401).json({ error: WRITES_LOCKED_MESSAGE })
-    return true
-  }
+  if (locked()) { res.status(401).json({ error: LOCKED_MESSAGE }); return true }
   const session = getSession(req)
   if (session && session.role === 'zaal') return false
   res.status(401).json({ error: 'unauthorized' })
@@ -174,6 +183,7 @@ export function blockedByAuth(req, res) {
 // per-branch owner checks inside, because splitting them into separate files
 // is not an option under Vercel Hobby's 12-function cap.
 export function blockedByGuestAuth(req, res) {
+  if (locked()) { res.status(401).json({ error: LOCKED_MESSAGE }); return true }
   if (getSession(req)) return false
   res.status(401).json({ error: 'unauthorized' })
   return true

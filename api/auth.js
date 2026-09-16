@@ -25,7 +25,7 @@
 // exception: NEYNAR_CLIENT_ID set without SESSION_SECRET fails closed
 // instead (see auth.js misconfigured()).
 
-import { authEnabled, misconfigured, getSession, sessionCookie, clearSessionCookie, ownerFid, writesLocked } from '../auth.js'
+import { authEnabled, misconfigured, getSession, sessionCookie, clearSessionCookie, ownerFid, locked } from '../auth.js'
 import { getSignerInfo } from '../lib.js'
 import { config } from '../config.js'
 
@@ -43,14 +43,16 @@ export default async function handler(req, res) {
     const session = getSession(req)
     res.setHeader('Cache-Control', 'no-store')
     res.status(200).json({
-      enabled: authEnabled() || misconfigured(),
+      // locked(): Vercel with no SESSION_SECRET - the gate shows, nobody is authed.
+      enabled: authEnabled() || misconfigured() || locked(),
       authed: !!session,
       role: session?.role || null,
       // Sign-in cannot work while misconfigured (see auth.js) - hide the
       // widget so the gate shows the not-configured message instead.
       misconfigured: misconfigured(),
-      // Vercel with no SESSION_SECRET: reads open, writes refused (auth.js writesLocked).
-      writesLocked: writesLocked(),
+      // Vercel with no SESSION_SECRET: every guarded route is 401 (auth.js locked()).
+      locked: locked(),
+      writesLocked: locked(),
       // Public identifier for Neynar's "Sign In With Neynar" widget - not a
       // secret (Neynar's own docs show it directly in page HTML). Unset until
       // Zaal registers an app + sets NEYNAR_CLIENT_ID in Vercel.
