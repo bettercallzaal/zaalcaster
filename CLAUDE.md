@@ -2,6 +2,13 @@
 
 Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Neynar v2.
 
+## Repos + research library surfaces (2026-09-15, research doc 2489)
+Zaal is making zaalcaster his main interface. Two read-only modules, folded into api/view.js (still no new api file):
+- **zaorepos.js** reads https://bettercallzaal.github.io/zao-repos/data.json - the hourly zao-repos dashboard (public repos only, by construction) - and filters/sorts it. `kind=repos&brand=&name=&q=&sort=` returns compact rows with staleness, hygiene score, deploy probe, topics. A `brand-*` topic wins over the dashboard's name-regex brand label once repos are tagged (doc 2489 decision 2: 129 of 130 repos have no topics today).
+- **research.js** reads the ZAOOS research library straight from raw.githubusercontent (ZAOOS is public): each topic README's table IS the index (`kind=research_index&topic=&q=`; whole-library search = 14 topic fetches, cached 5 min), and `kind=research_doc&path=` returns one doc's README with frontmatter split out. Doc paths are validated against `topic/NNNN-slug` before any URL is built. research/search-index.json is NOT used - it is 202 stale rows from April and does not parse.
+- **Frontend**: Daily launcher tiles "Repos" and "Library" (overlays with brand/topic chips, sort, search, a markdown reader for docs); every brand page (config.brands) now shows repos + research sections above its channel feed via `repoBrand`/`repoName` and `researchTopic`/`researchQuery` fields. "cast this" chips PREFILL the Post tab with the repo/doc URL as embed - the Post tab confirm stays the only send path. NEVER autopost from these surfaces.
+- Tests: test/zaorepos.test.mjs + test/research.test.mjs (pure, no network). Live-verified 2026-09-15 through the real handler: 130 repos, 86 farcaster index rows, whole-library search, doc fetch, 400s on bad paths/topics, 404 on a missing doc.
+
 ## Overnight build 2026-07-16 (PRs #107, #110, #113 merged; docs #106 merged)
 Zaal said "build it all overnight". Shipped, all live-verified:
 - **Staking tools (PR #107)**: "staking" chip on the empire card - activate staking (Empire Builder's ONLY timestamp-replay-protected write; 5-min window pre-flighted server-side) + add staking booster (days-to-seconds lockup, the docs' one-decimal multiplier rule, exact BigInt amounts). empire.js grew a shared postAuthed() relay. Remove-staking-booster held (same undocumented message contract as remove-booster). Activate is labeled honestly: documented for TOKEN empires, behavior on tokenless is the API's call.
