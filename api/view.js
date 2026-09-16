@@ -10,6 +10,9 @@
 //   ?kind=link_preview&url=       OpenGraph via Neynar's crawler
 //   ?kind=empire_leaderboard&id= / ?kind=empire_distribution&hash=
 //   ?kind=poidh_bounty&id=&chain=
+//   ?kind=repos&brand=&q=&sort=&name=   ZAO repo dashboard rows (zao-repos data.json)
+//   ?kind=research_index&topic=&q=      research library index rows (ZAOOS topic tables)
+//   ?kind=research_doc&path=             one research doc's README (raw, public repo)
 //
 // Read-only, guest-readable (blockedByGuestAuth): threads, profiles,
 // leaderboards, and bounties are public network data - the same things any
@@ -25,6 +28,8 @@ import {
 import { blockedByGuestAuth, getSession } from '../auth.js'
 import { getLeaderboardEntries, getDistributionRecipients } from '../empire.js'
 import { getBountyWithClaims } from '../poidh.js'
+import { getRepoData, filterRepos, compactRepo, brandCounts, SORT_KEYS } from '../zaorepos.js'
+import { getTopicIndex, searchLibrary, getDoc, TOPICS, isValidTopic } from '../research.js'
 
 
 // Partner bus (tasern / Jim at Meme for Trees) - read-only, OWNER ONLY.
@@ -264,6 +269,45 @@ export default async function handler(req, res) {
         claimsError: claims.ok ? null : claims.error,
       })
       return
+    }
+
+    // ZAO repo estate + research library (doc 2489). Both are public data
+    // read from public hosts; guest-readable like the rest of this file.
+    if (kind === 'repos') {
+      const d = await getRepoData()
+      if (!d.ok) { res.status(d.status === 502 ? 502 : 500).json({ error: d.error }); return }
+      const sort = SORT_KEYS.includes(req.query.sort) ? req.query.sort : 'pushed'
+      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60))
+      const rows = filterRepos(d.data.repos, {
+        brand: (req.query.brand || '').trim(), name: (req.query.name || '').trim(), q: (req.query.q || '').trim().slice(0, 80),
+        sort, limit, archived: req.query.archived === '1',
+      })
+      res.status(200).json({
+        generatedAt: d.data.generatedAt || null, owners: d.data.owners || [], summary: d.data.summary || null,
+        brands: brandCounts(d.data.repos), sort, sorts: SORT_KEYS, count: rows.length, repos: rows.map(compactRepo),
+      })
+      return
+    }
+
+    if (kind === 'research_index') {
+      const topic = (req.query.topic || '').trim()
+      const q = (req.query.q || '').trim().slice(0, 80)
+      if (topic && !isValidTopic(topic)) { res.status(400).json({ error: 'invalid topic' }); return }
+      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60))
+      if (topic && !q) {
+        const r = await getTopicIndex(topic)
+        if (!r.ok) { res.status(r.status === 404 ? 404 : 502).json({ error: r.error }); return }
+        res.status(200).json({ topics: TOPICS, topic, q: '', total: r.docs.length, docs: r.docs.slice(0, limit) }); return
+      }
+      const s = await searchLibrary(q, { topic, limit })
+      res.status(200).json({ topics: TOPICS, topic, q, total: s.total, failed: s.failed, docs: s.docs }); return
+    }
+
+    if (kind === 'research_doc') {
+      const path = (req.query.path || '').trim()
+      const r = await getDoc(path)
+      if (!r.ok) { res.status(r.status === 400 ? 400 : r.status === 404 ? 404 : 502).json({ error: r.error }); return }
+      res.status(200).json(r); return
     }
 
     if (kind === 'bus') {

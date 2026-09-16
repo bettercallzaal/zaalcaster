@@ -251,6 +251,7 @@
   .link-preview .lp-desc { font-size: 12px; color: var(--dim); margin-top: 3px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .stats button.rx-tappable { cursor: pointer; }
   .stats button.rx-tappable:hover span { text-decoration: underline; }
+  .mdh{font-weight:700;margin:14px 0 4px;font-size:15px}.mdh2{font-weight:700;margin:12px 0 4px;font-size:14px;color:#c9c9d6}.mdp{margin:6px 0;line-height:1.5;font-size:14px}.mdli{margin:2px 0 2px 12px;line-height:1.45;font-size:14px}.mdpre{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:rgba(255,255,255,.06);padding:8px 10px;border-radius:8px;overflow:auto;margin:6px 0}.mdq{border-left:3px solid #7c5cff;padding-left:10px;color:#c9c9d6;margin:6px 0}.libq{display:flex;gap:6px;align-items:center;margin:8px 0}.libq input{flex:1;min-width:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:inherit;border-radius:8px;padding:8px 10px;font-size:14px}.stale{font-size:11px;padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.08)}.stale.hot{color:#ff8a6a}.stale.active{color:#7cd992}.stale.dormant{color:#8a8a99}
 </style>
 </head>
 <body>
@@ -1554,7 +1555,7 @@
       ['compose', 'Post', 'new cast'],
       ['grow', 'Grow', 'new ppl'],
     ].map(([t, label, sub]) => `<div class="launch" data-act="goto" data-tab="${t}">
-      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div><div class="launch" data-act="busopen"><div class="ll">Bus${busState.count ? ' (' + busState.count + ')' : ''}</div><div class="ls">${busState.configured === false ? 'not connected' : (busState.error ? 'unreachable' : (busState.count ? esc(String(busState.messages[0] && busState.messages[0].subject || 'new message')).slice(0, 28) : 'partner messages'))}</div></div><div class="launch" data-openurl="/guide.html"><div class="ll">Guide</div><div class="ls">how it all works</div></div>`
+      <div class="ll">${label}</div><div class="ls">${sub}</div></div>`).join('') + `<div class="launch" data-act="repos"><div class="ll">Repos</div><div class="ls">every public ZAO repo</div></div><div class="launch" data-act="library"><div class="ll">Library</div><div class="ls">research docs</div></div><div class="launch" data-act="linkedin"><div class="ll">LinkedIn</div><div class="ls">draft posts</div></div><div class="launch" data-act="mylinks"><div class="ll">My links</div><div class="ls">your socials</div></div><div class="launch" data-act="busopen"><div class="ll">Bus${busState.count ? ' (' + busState.count + ')' : ''}</div><div class="ls">${busState.configured === false ? 'not connected' : (busState.error ? 'unreachable' : (busState.count ? esc(String(busState.messages[0] && busState.messages[0].subject || 'new message')).slice(0, 28) : 'partner messages'))}</div></div><div class="launch" data-openurl="/guide.html"><div class="ll">Guide</div><div class="ls">how it all works</div></div>`
     return `<div class="digest" style="background:#151529;border-color:#24242f"><div class="t" style="font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px"><span>GM @${esc(ME)} - <b>${done}/${daily.tasks.length}</b> done today</span><span class="chip" data-act="editdaily" style="flex:none">${editDaily ? 'done' : 'edit'}</span></div></div>
       <div class="launchgrid">${nav}</div>
       ${BRANDS.length ? `<div class="subbar" style="padding-bottom:4px"><b style="color:#8a8a99;font-size:13px">your projects</b> <span class="chip" data-act="allprojects">view all</span></div><div class="subbar" style="padding-top:0">${BRANDS.map((b, i) => `<span class="chip" data-act="brand" data-i="${i}">${esc(b.name)}</span>`).join(' ')}</div>` : ''}
@@ -1666,6 +1667,11 @@
   document.getElementById('overlayClose').addEventListener('click', closeOverlay)
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay() })
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay() })
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    if (e.target.id === 'libQ') { e.preventDefault(); openLibrary({ q: e.target.value.trim() }) }
+    if (e.target.id === 'repoQ') { e.preventDefault(); openRepos({ q: e.target.value.trim() }) }
+  })
 
   async function delCast(hash) {
     if (!window.confirm('delete this cast? this cannot be undone.')) return
@@ -2305,12 +2311,132 @@
     const head = `<div class="prof" style="display:block"><div class="pn" style="font-size:20px">${esc(b.name)}</div>
       ${b.tagline ? `<div class="ps">${esc(b.tagline)}</div>` : ''}
       <div class="subbar" style="padding-left:0">${links}${b.channel ? ` <span class="chip" data-act="brandchan" data-chan="${esc(b.channel)}">open /${esc(b.channel)}</span>` : ''}</div></div>`
+    const j = (url) => fetch(url).then((r) => r.json().then((d) => ({ ok: r.ok, d }))).catch((e) => ({ ok: false, d: { error: e.message } }))
+    const repoQ = b.repoName ? `name=${encodeURIComponent(b.repoName)}` : (b.repoBrand ? `brand=${encodeURIComponent(b.repoBrand)}` : '')
+    const libQ = (b.researchTopic ? `topic=${encodeURIComponent(b.researchTopic)}` : '') + (b.researchQuery ? `&q=${encodeURIComponent(b.researchQuery)}` : '')
     try {
-      const r = await fetch(`/api/feed?type=channel&id=${encodeURIComponent(b.channel)}&limit=20`); const d = await r.json()
-      if (!r.ok) throw new Error(d.error || 'feed failed')
-      const casts = (d.casts || []).map(castCard).join('') || '<div class="empty">no recent casts.</div>'
-      document.getElementById('obody').innerHTML = head + `<div class="subbar"><b style="color:#8a8a99;font-size:13px">/${esc(b.channel)} feed</b></div>` + casts
+      const [fr, rr, lr] = await Promise.all([
+        j(`/api/feed?type=channel&id=${encodeURIComponent(b.channel)}&limit=20`),
+        repoQ ? j(`/api/view?kind=repos&limit=12&${repoQ}`) : null,
+        libQ ? j(`/api/view?kind=research_index&limit=8&${libQ}`) : null,
+      ])
+      const sec = (label, more, body) => `<div class="subbar" style="margin-top:10px"><b style="color:#8a8a99;font-size:13px">${label}</b> ${more}</div>${body}`
+      const reposHtml = !rr ? '' : rr.ok
+        ? sec(`repos (${rr.d.count})`, `<span class="chip" data-act="openrepos" data-brand="${esc(b.repoName ? '' : b.repoBrand)}" data-q="${esc(b.repoName || '')}">all repos</span>`, (rr.d.repos || []).map(repoRow).join('') || '<div class="empty">no public repos under this label yet.</div>')
+        : sec('repos', '', `<div class="err">${esc(rr.d.error || 'repos failed')}</div>`)
+      const libHtml = !lr ? '' : lr.ok
+        ? sec(`research (${lr.d.total})`, `<span class="chip" data-act="openlib" data-topic="${esc(b.researchTopic || '')}" data-q="${esc(b.researchQuery || '')}">open library</span>`, (lr.d.docs || []).map(docRow).join('') || '<div class="empty">no docs match yet.</div>')
+        : sec('research', '', `<div class="err">${esc(lr.d.error || 'library failed')}</div>`)
+      const casts = fr.ok ? ((fr.d.casts || []).map(castCard).join('') || '<div class="empty">no recent casts.</div>') : `<div class="err">${esc(fr.d.error || 'feed failed')}</div>`
+      document.getElementById('obody').innerHTML = head + reposHtml + libHtml + sec(`/${esc(b.channel)} feed`, '', casts)
     } catch (e) { document.getElementById('obody').innerHTML = head + `<div class="err">${esc(e.message)}</div>` }
+  }
+
+  // ---- repos + research library (doc 2489): read-only surfaces over the
+  // zao-repos dashboard and the ZAOOS research library. "cast this" only
+  // PREFILLS the Post tab - the Post tab's own confirm stays the send path.
+  const lib = { topic: '', q: '', brand: '', sort: 'pushed', rq: '' }
+  function prefillCast(text, url) {
+    compose.text = text || ''; compose.embedUrl = url || ''; compose.channel = ''
+    closeOverlay(); switchTab('compose'); toast('prefilled - preview and confirm on your own time')
+  }
+  function repoRow(r) {
+    const when = r.pushedAt ? new Date(r.pushedAt).toLocaleDateString() : ''
+    const dep = r.deploy ? (r.deploy.status === 200 ? `<a class="ub" href="${esc(r.deploy.url || r.homepage)}" target="_blank" rel="noopener" style="color:#7cd992">live</a>` : `<span class="ub" style="color:#ff8a6a">deploy ${esc(String(r.deploy.status))}</span>`) : ''
+    const hyg = r.hygiene == null ? '' : `<span class="ub" title="${esc((r.hygieneMissing || []).join(', ') || 'all checks pass')}">hygiene ${r.hygiene}</span>`
+    const castText = `${r.name}${r.description ? ' - ' + r.description : ''}`.slice(0, 280)
+    return `<div class="urow" style="cursor:default;align-items:flex-start"><div style="flex:1;min-width:0">
+      <div><a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-weight:600">${esc(r.name)}</a> ${r.staleness ? `<span class="stale ${esc(r.staleness)}">${esc(r.staleness)}</span>` : ''} ${r.archived ? '<span class="stale">archived</span>' : ''}</div>
+      ${r.description ? `<div class="ps" style="margin-top:2px">${esc(r.description)}</div>` : ''}
+      <div class="ub" style="margin-top:3px">${esc(r.brand || '')}${r.language ? ' - ' + esc(r.language) : ''} - ${r.stars} stars - ${r.commits30} commits/30d${when ? ' - pushed ' + esc(when) : ''} ${hyg} ${dep}</div>
+      <div class="subbar" style="padding:4px 0 0"><span class="chip" data-act="repocast" data-text="${esc(castText)}" data-url="${esc(r.url)}">cast this</span>${r.topics.length ? ' ' + r.topics.slice(0, 4).map((x) => `<span class="ub">#${esc(x)}</span>`).join(' ') : ''}</div>
+    </div></div>`
+  }
+  async function openRepos(opts = {}) {
+    if ('brand' in opts) lib.brand = opts.brand || ''
+    if ('sort' in opts) lib.sort = opts.sort || 'pushed'
+    if ('q' in opts) lib.rq = opts.q || ''
+    openOverlay('repos', '<div class="loading">loading repos...</div>')
+    try {
+      const qs = `kind=repos&limit=80&sort=${encodeURIComponent(lib.sort)}${lib.brand ? '&brand=' + encodeURIComponent(lib.brand) : ''}${lib.rq ? '&q=' + encodeURIComponent(lib.rq) : ''}`
+      const r = await fetch(`/api/view?${qs}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'repos failed')
+      const s = d.summary && d.summary.counts ? d.summary.counts : null
+      const gen = d.generatedAt ? new Date(d.generatedAt).toLocaleString() : ''
+      const brands = `<div class="subbar" style="padding-left:0;flex-wrap:wrap"><span class="chip${lib.brand ? '' : ' on'}" data-act="repobrand" data-brand="">all</span> ${(d.brands || []).map((b) => `<span class="chip${lib.brand.toLowerCase() === b.brand.toLowerCase() ? ' on' : ''}" data-act="repobrand" data-brand="${esc(b.brand)}">${esc(b.brand)} ${b.count}</span>`).join(' ')}</div>`
+      const sorts = `<div class="subbar" style="padding-left:0"><span class="ub">sort:</span> ${(d.sorts || []).map((k) => `<span class="chip${lib.sort === k ? ' on' : ''}" data-act="reposort" data-sort="${k}">${k}</span>`).join(' ')}</div>`
+      const search = `<div class="libq"><input id="repoQ" placeholder="filter by name, description, language, topic" value="${esc(lib.rq)}"><span class="chip" data-act="repoq">go</span></div>`
+      const head = `<div class="prof" style="display:block"><div class="pn" style="font-size:18px">ZAO repos</div><div class="ps">${s ? `${s.total} public repos, ${s.live} live, ${s.archived} archived, ${s.deployed} deployed` : ''}${gen ? ` - dashboard rebuilt ${esc(gen)}` : ''} - <a href="https://bettercallzaal.github.io/zao-repos/" target="_blank" rel="noopener">full dashboard</a></div>${brands}${sorts}${search}</div>`
+      document.getElementById('obody').innerHTML = head + ((d.repos || []).map(repoRow).join('') || '<div class="empty">nothing matches.</div>')
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  function docRow(d) {
+    return `<div class="urow" style="align-items:flex-start" data-act="libdoc" data-path="${esc(d.path)}"><div style="flex:1;min-width:0">
+      <div><span class="ub">${esc(d.num)}</span> <b>${esc(d.title)}</b> ${d.type ? `<span class="stale">${esc(d.type.toLowerCase())}</span>` : ''}</div>
+      ${d.summary ? `<div class="ps" style="margin-top:2px">${esc(d.summary.slice(0, 220))}${d.summary.length > 220 ? '...' : ''}</div>` : ''}
+      <div class="ub" style="margin-top:2px">${esc(d.topic)}</div></div></div>`
+  }
+  async function openLibrary(opts = {}) {
+    if ('topic' in opts) lib.topic = opts.topic || ''
+    if ('q' in opts) lib.q = opts.q || ''
+    openOverlay('research library', '<div class="loading">reading the library...</div>')
+    try {
+      if (!lib.topic && !lib.q) lib.topic = 'farcaster' // the whole library is 14 fetches; start on the home topic
+      const qs = `kind=research_index&limit=80${lib.topic ? '&topic=' + encodeURIComponent(lib.topic) : ''}${lib.q ? '&q=' + encodeURIComponent(lib.q) : ''}`
+      const r = await fetch(`/api/view?${qs}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'library failed')
+      const topics = `<div class="subbar" style="padding-left:0;flex-wrap:wrap"><span class="chip${lib.topic ? '' : ' on'}" data-act="libtopic" data-topic="">all topics</span> ${(d.topics || []).map((x) => `<span class="chip${lib.topic === x ? ' on' : ''}" data-act="libtopic" data-topic="${esc(x)}">${esc(x)}</span>`).join(' ')}</div>`
+      const search = `<div class="libq"><input id="libQ" placeholder="search titles + summaries${lib.topic ? ' in ' + lib.topic : ' across the whole library'}" value="${esc(lib.q)}"><span class="chip" data-act="libq">go</span></div>`
+      const failed = (d.failed || []).length ? `<div class="ub" style="color:#ff8a6a">could not read: ${esc(d.failed.join(', '))}</div>` : ''
+      const head = `<div class="prof" style="display:block"><div class="pn" style="font-size:18px">research library</div><div class="ps">${d.total} docs${lib.q ? ` matching "${esc(lib.q)}"` : ''}${lib.topic ? ` in ${esc(lib.topic)}` : ''} - <a href="https://github.com/bettercallzaal/ZAOOS/tree/main/research" target="_blank" rel="noopener">on GitHub</a></div>${topics}${search}${failed}</div>`
+      document.getElementById('obody').innerHTML = head + ((d.docs || []).map(docRow).join('') || '<div class="empty">nothing matches.</div>')
+      const inp = document.getElementById('libQ'); if (inp && lib.q) inp.focus()
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
+  }
+  function mdInline(s) {
+    return esc(s)
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[([^\]]+)\]\((\.\.?\/[^)]+)\)/g, (m, txt, rel) => `<a href="https://github.com/bettercallzaal/ZAOOS/tree/main/research/${esc(lib.docPath || '')}/${esc(rel)}" target="_blank" rel="noopener">${txt}</a>`)
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+  }
+  function mdToHtml(md) {
+    const out = []; let pre = null; let tbl = null
+    const flushTbl = () => { if (tbl) { out.push(`<div class="mdpre">${tbl.map(esc).join('\n')}</div>`); tbl = null } }
+    for (const raw of String(md || '').split('\n')) {
+      const line = raw.replace(/\s+$/, '')
+      if (pre !== null) { if (/^```/.test(line)) { out.push(`<div class="mdpre">${esc(pre.join('\n'))}</div>`); pre = null } else pre.push(line); continue }
+      if (/^```/.test(line)) { flushTbl(); pre = []; continue }
+      if (/^\|/.test(line)) { (tbl = tbl || []).push(line); continue }
+      flushTbl()
+      let m
+      if ((m = /^#{1,2}\s+(.+)/.exec(line))) out.push(`<div class="mdh">${mdInline(m[1])}</div>`)
+      else if ((m = /^#{3,6}\s+(.+)/.exec(line))) out.push(`<div class="mdh2">${mdInline(m[1])}</div>`)
+      else if ((m = /^>\s?(.*)/.exec(line))) out.push(`<div class="mdq">${mdInline(m[1])}</div>`)
+      else if ((m = /^\s*[-*]\s+(.+)/.exec(line))) out.push(`<div class="mdli">- ${mdInline(m[1])}</div>`)
+      else if ((m = /^\s*\d+\.\s+(.+)/.exec(line))) out.push(`<div class="mdli">${mdInline(m[0].trim())}</div>`)
+      else if (line.trim() === '' || line.trim() === '---') out.push('')
+      else out.push(`<div class="mdp">${mdInline(line)}</div>`)
+    }
+    if (pre) out.push(`<div class="mdpre">${esc(pre.join('\n'))}</div>`)
+    flushTbl()
+    return out.join('')
+  }
+  async function openLibraryDoc(path) {
+    openOverlay('research doc', '<div class="loading">fetching the doc...</div>')
+    try {
+      const r = await fetch(`/api/view?kind=research_doc&path=${encodeURIComponent(path)}`); const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'doc failed')
+      lib.docPath = d.path
+      const fm = d.frontmatter || {}
+      const meta = ['topic', 'type', 'status', 'tier', 'last-validated'].filter((k) => fm[k]).map((k) => `<span class="stale">${esc(k)}: ${esc(fm[k])}</span>`).join(' ')
+      const castText = `${d.title}`.slice(0, 280)
+      const head = `<div class="prof" style="display:block"><div class="pn" style="font-size:17px">${esc(d.title)}</div><div class="ub" style="margin:4px 0">${meta}</div>
+        <div class="subbar" style="padding-left:0"><span class="chip" data-act="libback">back to library</span> <a class="chip" href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none">open on GitHub</a> <span class="chip" data-act="libcast" data-text="${esc(castText)}" data-url="${esc(d.url)}">cast this</span></div>
+        ${fm['original-query'] ? `<div class="ub">query: ${esc(fm['original-query'])}</div>` : ''}</div>`
+      document.getElementById('obody').innerHTML = head + `<div style="padding:0 12px 20px">${mdToHtml(d.body)}</div>`
+      document.querySelector('#overlay .sheet').scrollTop = 0
+    } catch (e) { document.getElementById('obody').innerHTML = `<div class="err">${esc(e.message)}</div>` }
   }
   let curProfile = null
   async function runResearch() {
@@ -2384,6 +2510,21 @@
     }
     const bc = e.target.closest('[data-act="brandchan"]')
     if (bc) { closeOverlay(); st.channels.id = bc.dataset.chan; switchTab('channels'); loadChannels(); return }
+    const lx = e.target.closest('[data-act="openrepos"],[data-act="repobrand"],[data-act="reposort"],[data-act="repoq"],[data-act="repocast"],[data-act="openlib"],[data-act="libtopic"],[data-act="libq"],[data-act="libdoc"],[data-act="libback"],[data-act="libcast"]')
+    if (lx) {
+      const a = lx.dataset.act
+      if (a === 'openrepos') { openRepos({ brand: lx.dataset.brand || '', q: lx.dataset.q || '', sort: 'pushed' }); return }
+      if (a === 'repobrand') { openRepos({ brand: lx.dataset.brand || '' }); return }
+      if (a === 'reposort') { openRepos({ sort: lx.dataset.sort }); return }
+      if (a === 'repoq') { const i = document.getElementById('repoQ'); openRepos({ q: i ? i.value.trim() : '' }); return }
+      if (a === 'repocast' || a === 'libcast') { prefillCast(lx.dataset.text, lx.dataset.url); return }
+      if (a === 'openlib') { openLibrary({ topic: lx.dataset.topic || '', q: lx.dataset.q || '' }); return }
+      if (a === 'libtopic') { openLibrary({ topic: lx.dataset.topic || '', q: lib.q }); return }
+      if (a === 'libq') { const i = document.getElementById('libQ'); openLibrary({ q: i ? i.value.trim() : '' }); return }
+      if (a === 'libdoc') { openLibraryDoc(lx.dataset.path); return }
+      if (a === 'libback') { openLibrary({}); return }
+      return
+    }
     const fz = e.target.closest('[data-act="follow"]')
     if (fz) { toggleFollow(fz); return }
     const mz = e.target.closest('[data-act="mute"], [data-act="block"]')
@@ -2576,6 +2717,8 @@
     if (act === 'editdaily') { editDaily = !editDaily; render(); return }
     if (act === 'brand') { openBrand(+btn.dataset.i); return }
     if (act === 'allprojects') { openAllProjects(); return }
+    if (act === 'repos') { openRepos({ brand: '', q: '' }); return }
+    if (act === 'library') { openLibrary({ topic: '', q: '' }); return }
     if (act === 'linkedin') { openLinkedIn(); return }
     if (act === 'mylinks') { openMyLinks(); return }
     if (act === 'createempire') { openCreateEmpire(); return }

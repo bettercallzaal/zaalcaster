@@ -49,11 +49,14 @@ export const config = {
 
   // Your brands - each gets a page (channel feed + links) in the Brands hub.
   brands: [
-    { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }] },
-    { name: 'WaveWarZ', channel: 'wavewarz', tagline: 'live-traded music battles - back music, not memes', links: [{ label: 'wavewarz.com', url: 'https://www.wavewarz.com' }] },
-    { name: 'ZABAL', channel: 'zabal', tagline: 'ZABAL Gamez build-a-thon + art', links: [{ label: 'zabal.art', url: 'https://zabal.art' }, { label: 'zabalgamez.com', url: 'https://zabalgamez.com' }] },
-    { name: 'ZLANK', channel: 'zabal', tagline: 'no-code Farcaster snap builder', links: [{ label: 'zlank.online', url: 'https://zlank.online' }] },
-    { name: 'zaalcaster', channel: 'zao', tagline: 'this app - gamified personal Farcaster client', links: [{ label: 'z.thezao.xyz', url: 'https://z.thezao.xyz' }, { label: 'github', url: 'https://github.com/bettercallzaal/zaalcaster' }] },
+    // repoBrand = the brand label in the zao-repos dashboard (or a brand-* topic once tagged);
+    // repoName = one exact repo instead. researchTopic = a research/<folder>; researchQuery = a
+    // text filter across the whole library. Any of them blank = that section is hidden.
+    { name: 'The ZAO', channel: 'zao', tagline: 'decentralized impact network for artists', links: [{ label: 'thezao.xyz', url: 'https://thezao.xyz' }, { label: 'papers', url: 'https://thezao.xyz/papers' }], repoBrand: 'ZAO Core', researchTopic: 'community' },
+    { name: 'WaveWarZ', channel: 'wavewarz', tagline: 'live-traded music battles - back music, not memes', links: [{ label: 'wavewarz.com', url: 'https://www.wavewarz.com' }], repoBrand: 'WaveWarZ', researchTopic: 'wavewarz' },
+    { name: 'ZABAL', channel: 'zabal', tagline: 'ZABAL Gamez build-a-thon + art', links: [{ label: 'zabal.art', url: 'https://zabal.art' }, { label: 'zabalgamez.com', url: 'https://zabalgamez.com' }], repoBrand: 'ZABAL', researchQuery: 'zabal' },
+    { name: 'ZLANK', channel: 'zabal', tagline: 'no-code Farcaster snap builder', links: [{ label: 'zlank.online', url: 'https://zlank.online' }], repoBrand: 'Zlank', researchQuery: 'zlank' },
+    { name: 'zaalcaster', channel: 'zao', tagline: 'this app - gamified personal Farcaster client', links: [{ label: 'z.thezao.xyz', url: 'https://z.thezao.xyz' }, { label: 'github', url: 'https://github.com/bettercallzaal/zaalcaster' }], repoName: 'zaalcaster', researchQuery: 'zaalcaster' },
   ],
 
   // One-tap quick replies (tap a chip to fill the reply box, then confirm).
