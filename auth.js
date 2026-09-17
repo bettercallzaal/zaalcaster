@@ -71,9 +71,14 @@ function signingKey() {
 // The gate is ON when there is a signing key AND sign-in is advertised
 // (NEYNAR_CLIENT_ID), or when SESSION_SECRET is set explicitly. The plain
 // local CLI (API key, no client id, no SESSION_SECRET) stays gate-off.
+// 2026-09-17, second change the same day: the gate is ON for every Vercel
+// deployment that has a signing key. Sign In With Neynar was retired, so the
+// NEYNAR_CLIENT_ID switch lost its meaning; sign-in is now Farcaster's own
+// relay (siwf.js) and needs no Neynar setting at all. Local CLI / dev without
+// VERCEL stays gate-off unless SESSION_SECRET is set explicitly.
 export function authEnabled() {
   if (process.env.SESSION_SECRET) return true
-  return !!process.env.NEYNAR_CLIENT_ID && !!signingKey()
+  return (!!process.env.VERCEL || !!process.env.NEYNAR_CLIENT_ID) && !!signingKey()
 }
 
 // The one dangerous config: NEYNAR_CLIENT_ID set (guest sign-in advertised to
@@ -83,7 +88,7 @@ export function authEnabled() {
 // with an empty key (forgeable). Fail closed instead: nobody gets a session
 // until SESSION_SECRET is set. (Security audit finding, 2026-07-15.)
 export function misconfigured() {
-  return !!process.env.NEYNAR_CLIENT_ID && !signingKey()
+  return (!!process.env.NEYNAR_CLIENT_ID || !!process.env.VERCEL) && !signingKey()
 }
 
 // USER_FID is canonical; ZAAL_FID is the legacy name kept so existing deploys
@@ -127,6 +132,26 @@ export function sessionCookie(fid) {
   const payload = `${fid}.${issuedAt}`
   const value = `${payload}.${sign(payload)}`
   return `${COOKIE}=${value}; Path=/; Max-Age=${MAX_AGE_SECONDS}; HttpOnly; Secure; SameSite=Lax`
+}
+
+// Sign-in ticket: binds a relay channelToken to the nonce we were issued and
+// a 10-minute expiry, signed with the session key, so the poll step can prove
+// the nonce it compares against is the one this server started - stateless.
+const TICKET_TTL_SECONDS = 600
+export function siwfTicket(channelToken, nonce) {
+  const exp = Math.floor(Date.now() / 1000) + TICKET_TTL_SECONDS
+  const payload = `${channelToken}.${nonce}.${exp}`
+  return `${payload}.${sign(payload)}`
+}
+export function readSiwfTicket(ticket, channelToken) {
+  const parts = String(ticket || '').split('.')
+  if (parts.length !== 4) return null
+  const [tok, nonce, expStr, sig] = parts
+  if (tok !== String(channelToken)) return null
+  if (!eq(sig, sign(`${tok}.${nonce}.${expStr}`))) return null
+  const exp = Number(expStr)
+  if (!Number.isFinite(exp) || Date.now() / 1000 > exp) return null
+  return { channelToken: tok, nonce }
 }
 
 export function clearSessionCookie() {
@@ -183,7 +208,7 @@ export function locked() {
   return !!process.env.VERCEL && !authEnabled()
 }
 export const writesLocked = locked // kept for the /api/auth field + banner
-export const LOCKED_MESSAGE = 'this deployment is locked: set NEYNAR_CLIENT_ID in Vercel (the Neynar app Client ID), then sign in'
+export const LOCKED_MESSAGE = 'this deployment is locked: NEYNAR_API_KEY (or SESSION_SECRET) must be set in Vercel, then sign in'
 export const WRITES_LOCKED_MESSAGE = LOCKED_MESSAGE
 
 export function blockedByAuth(req, res) {

@@ -3042,27 +3042,47 @@
     if (ROLE === 'zaal') { await pullState(); loadWizardState(); checkPosting() }
     switchTab(ROLE === 'zaal' ? 'daily' : 'feed')
   }
-  window.onSiwnSuccess = async function (data) {
-    document.getElementById('gateErr').textContent = ''
+  // Sign In With Farcaster over the relay (server: api/auth.js siwf_start /
+  // siwf_poll). Neynar retired its widget on 2026-09-17; this replaces it.
+  let siwf = { token: null, ticket: null, timer: null, url: null }
+  function siwfStop() { if (siwf.timer) clearInterval(siwf.timer); siwf.timer = null }
+  async function siwfStart() {
+    const box = document.getElementById('gateBox'); const err = document.getElementById('gateErr'); err.textContent = ''
+    siwfStop()
+    box.innerHTML = '<div class="loading">opening a sign-in request...</div>'
     try {
-      const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fid: data.fid, signer_uuid: data.signer_uuid }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { document.getElementById('gateErr').textContent = j.error || 'sign-in failed'; return }
-      ROLE = j.role || 'guest'
-      startApp()
-    } catch { document.getElementById('gateErr').textContent = 'sign-in failed - try again' }
+      const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'siwf_start' }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || 'could not start sign-in')
+      siwf = { token: d.channelToken, ticket: d.ticket, url: d.url, timer: null }
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+        <a class="ibtn primary" href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:10px 18px" data-act="siwfopen">open Farcaster to approve</a>
+        <div class="ub" id="siwfWait">waiting for your approval in Farcaster...</div>
+        <div class="ub">on a phone this opens the Farcaster app. on a laptop, open the link on your phone or in a browser where you are signed in to farcaster.xyz.</div>
+        <span class="chip" data-act="siwfrestart">start over</span></div>`
+      // Mobile: launch the app right away from the click gesture.
+      try { window.open(d.url, '_blank', 'noopener') } catch {}
+      let polls = 0
+      siwf.timer = setInterval(async () => {
+        if (++polls > 150) { siwfStop(); err.textContent = 'sign-in timed out - start over'; return } // 5 min
+        try {
+          const pr = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'siwf_poll', channelToken: siwf.token, ticket: siwf.ticket }) })
+          const pd = await pr.json().catch(() => ({}))
+          if (!pr.ok) { siwfStop(); err.textContent = pd.error || 'sign-in failed'; return }
+          if (pd.state === 'completed') { siwfStop(); ROLE = pd.role || 'guest'; gate.style.display = 'none'; startApp(); toast(pd.role === 'zaal' ? 'signed in - full access' : 'signed in - read-only view') }
+        } catch { /* transient - keep polling */ }
+      }, 2000)
+    } catch (e) { box.innerHTML = ''; err.textContent = e.message }
   }
   function showGate() {
     gate.style.display = 'flex'
     const box = document.getElementById('gateBox')
-    if (!NEYNAR_CLIENT_ID) { box.innerHTML = '<div style="color:#ff8a6a;font-size:13px">sign-in not configured yet</div>'; return }
-    box.innerHTML = `<div class="neynar_signin" data-client_id="${esc(NEYNAR_CLIENT_ID)}" data-success-callback="onSiwnSuccess" data-theme="dark"></div>`
-    if (!document.getElementById('siwnScript')) {
-      const s = document.createElement('script')
-      s.id = 'siwnScript'; s.src = 'https://neynarxyz.github.io/siwn/raw/1.2.0/index.js'; s.async = true
-      document.body.appendChild(s)
-    }
+    box.innerHTML = '<button class="ibtn primary" data-act="siwfstart" style="padding:10px 18px">sign in with Farcaster</button>'
   }
+  gate.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act="siwfstart"],[data-act="siwfrestart"]')
+    if (b) { e.preventDefault(); siwfStart() }
+  })
 
   // ---- cmd+k command palette ----
   const palette = document.getElementById('palette')

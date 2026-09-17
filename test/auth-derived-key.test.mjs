@@ -37,11 +37,15 @@ test('SESSION_SECRET, when set, still wins', () => {
   assert.equal(auth.getSession(reqWith(`zc_session=${raw}`)).role, 'zaal')
   delete process.env.SESSION_SECRET
 })
-test('no client id and no SESSION_SECRET: local CLI stays gate-off, Vercel stays locked', () => {
+test('no client id: Vercel with an api key is still gated; local CLI stays gate-off; Vercel with no key is locked', () => {
   delete process.env.NEYNAR_CLIENT_ID
-  assert.equal(auth.authEnabled(), false)
-  assert.equal(auth.locked(), true)
+  assert.equal(auth.authEnabled(), true)
+  assert.equal(auth.locked(), false)
   delete process.env.VERCEL
+  assert.equal(auth.authEnabled(), false)
   assert.equal(auth.getSession(reqWith('')).role, 'zaal')
-  process.env.VERCEL = '1'; process.env.NEYNAR_CLIENT_ID = 'client-id'
+  process.env.VERCEL = '1'
+  const key = process.env.NEYNAR_API_KEY; delete process.env.NEYNAR_API_KEY
+  assert.equal(auth.locked(), true)
+  process.env.NEYNAR_API_KEY = key; process.env.NEYNAR_CLIENT_ID = 'client-id'
 })
