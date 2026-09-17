@@ -294,7 +294,7 @@
 <div id="gate" style="position:fixed;inset:0;z-index:100;background:#0c0c12;display:none;align-items:center;justify-content:center">
   <div style="width:280px;max-width:86vw;text-align:center">
     <h1 style="font-size:20px;margin:0 0 4px">zaal<span style="color:#855DCD">caster</span></h1>
-    <div style="color:#8a8a99;font-size:13px;margin-bottom:16px">sign in with Farcaster - Zaal gets full access, everyone else gets a read-only view</div>
+    <div style="color:#8a8a99;font-size:13px;margin-bottom:16px">sign in with your Farcaster account. Zaal gets full access, everyone else a read-only view. no password, nothing to type.</div>
     <div id="gateBox" style="display:flex;justify-content:center"></div>
     <div id="gateErr" style="color:#ff8a6a;font-size:13px;margin-top:8px;min-height:16px"></div>
   </div>
@@ -3046,6 +3046,43 @@
   // siwf_poll). Neynar retired its widget on 2026-09-17; this replaces it.
   let siwf = { token: null, ticket: null, timer: null, url: null }
   function siwfStop() { if (siwf.timer) clearInterval(siwf.timer); siwf.timer = null }
+  // Phone vs computer decides the whole screen: a phone gets ONE button that
+  // opens the Farcaster app (a universal link, tapped as a real link so iOS
+  // hands it to the app); a computer gets the QR code drawn on the page to
+  // scan with the phone. Zaal 2026-09-17: "make it clear which one to press".
+  let siwfDevice = (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 900)) ? 'phone' : 'computer'
+  function renderSiwf(box) {
+    const url = siwf.url; if (!url) return
+    const toggle = `<div class="ub" style="margin-top:6px">${siwfDevice === 'phone' ? 'on a computer instead?' : 'on a phone instead?'} <span class="chip" data-act="siwfdevice" data-device="${siwfDevice === 'phone' ? 'computer' : 'phone'}">switch</span> <span class="chip" data-act="siwfrestart">start over</span></div>`
+    if (siwfDevice === 'phone') {
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+        <div class="ub" style="font-size:14px;color:#c9c9d6">1. tap the button. the Farcaster app opens with an approve screen for ${esc(location.host)}.</div>
+        <a class="ibtn primary" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:14px 22px;font-size:16px">open Farcaster and approve</a>
+        <div class="ub" style="font-size:14px;color:#c9c9d6">2. tap approve, then come back here. this page signs you in by itself.</div>
+        <div class="ub" id="siwfWait">waiting for your approval...</div>${toggle}</div>`
+    } else {
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+        <div class="ub" style="font-size:14px;color:#c9c9d6">1. open the camera on your phone and scan this code.</div>
+        <div id="siwfQr" style="background:#fff;padding:10px;border-radius:10px;line-height:0"><div class="loading" style="color:#000">drawing the code...</div></div>
+        <div class="ub" style="font-size:14px;color:#c9c9d6">2. approve in the Farcaster app on the phone. this page signs you in by itself.</div>
+        <div class="ub" id="siwfWait">waiting for your approval...</div>
+        <a class="ub" href="${esc(url)}" target="_blank" rel="noopener">no phone handy? open the link in a browser where you are logged in to farcaster.xyz</a>${toggle}</div>`
+      drawQr(url)
+    }
+  }
+  // QR drawn in-page, client-side only: the sign-in link is a one-time channel
+  // token, so it never goes to a QR image service. The generator is loaded
+  // from esm.sh the same way the Mini App SDK is, and only on a computer.
+  let qrLib = null
+  async function drawQr(text) {
+    const el = document.getElementById('siwfQr'); if (!el) return
+    try {
+      if (!qrLib) qrLib = (await import('https://esm.sh/qrcode-generator@1.4.4')).default
+      const qr = qrLib(0, 'M'); qr.addData(text); qr.make()
+      el.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 0, scalable: true })
+      const svg = el.querySelector('svg'); if (svg) { svg.style.width = '220px'; svg.style.height = '220px' }
+    } catch { el.innerHTML = `<div class="ub" style="color:#000;line-height:1.4;padding:6px">could not draw the code - <a href="${esc(text)}" target="_blank" rel="noopener" style="color:#855DCD">open this link</a> on your phone instead</div>` }
+  }
   async function siwfStart() {
     const box = document.getElementById('gateBox'); const err = document.getElementById('gateErr'); err.textContent = ''
     siwfStop()
@@ -3055,13 +3092,7 @@
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(d.error || 'could not start sign-in')
       siwf = { token: d.channelToken, ticket: d.ticket, url: d.url, timer: null }
-      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
-        <a class="ibtn primary" href="${esc(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:10px 18px" data-act="siwfopen">open Farcaster to approve</a>
-        <div class="ub" id="siwfWait">waiting for your approval in Farcaster...</div>
-        <div class="ub">on a phone this opens the Farcaster app. on a laptop, open the link on your phone or in a browser where you are signed in to farcaster.xyz.</div>
-        <span class="chip" data-act="siwfrestart">start over</span></div>`
-      // Mobile: launch the app right away from the click gesture.
-      try { window.open(d.url, '_blank', 'noopener') } catch {}
+      renderSiwf(box)
       let polls = 0
       siwf.timer = setInterval(async () => {
         if (++polls > 150) { siwfStop(); err.textContent = 'sign-in timed out - start over'; return } // 5 min
@@ -3080,6 +3111,8 @@
     box.innerHTML = '<button class="ibtn primary" data-act="siwfstart" style="padding:10px 18px">sign in with Farcaster</button>'
   }
   gate.addEventListener('click', (e) => {
+    const dv = e.target.closest('[data-act="siwfdevice"]')
+    if (dv) { e.preventDefault(); siwfDevice = dv.dataset.device; renderSiwf(document.getElementById('gateBox')); return }
     const b = e.target.closest('[data-act="siwfstart"],[data-act="siwfrestart"]')
     if (b) { e.preventDefault(); siwfStart() }
   })
