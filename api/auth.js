@@ -40,6 +40,18 @@ async function readJsonBody(req) {
   try { return JSON.parse(raw) } catch { return {} }
 }
 
+// siwf_start limiter: 10 per ip and 100 total per 10 minutes, per instance.
+const START_WINDOW_MS = 10 * 60_000
+const starts = new Map() // ip -> [timestamps]
+export function allowStart(ip, now = Date.now(), limits = { perIp: 10, total: 100 }) {
+  for (const [k, arr] of starts) { const keep = arr.filter((ts) => now - ts < START_WINDOW_MS); if (keep.length) starts.set(k, keep); else starts.delete(k) }
+  let total = 0; for (const arr of starts.values()) total += arr.length
+  const mine = starts.get(ip) || []
+  if (mine.length >= limits.perIp || total >= limits.total) return false
+  mine.push(now); starts.set(ip, mine)
+  return true
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const session = getSession(req)
@@ -94,9 +106,16 @@ export default async function handler(req, res) {
     //   poll  -> the browser sends token + ticket; when the relay says
     //            completed and nonce/domain/fid check out, we set the cookie.
     if (action === 'siwf_start') {
+      // Rate limit (hardening 2026-09-17): this is the app's only
+      // unauthenticated route that makes an outbound call, so an anonymous
+      // loop could open unbounded channels against the relay. Per-instance
+      // memory - warm serverless instances share it, cold ones start fresh -
+      // so it bounds the damage rather than counting exactly.
+      const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim()
+      if (!allowStart(ip)) { res.status(429).json({ error: 'too many sign-in attempts - wait a few minutes' }); return }
       const ch = await createChannel({ domain, siweUri: `https://${domain}/` })
       if (!ch.ok) { res.status(ch.status || 502).json({ error: ch.error }); return }
-      res.status(200).json({ channelToken: ch.channelToken, url: ch.url, ticket: siwfTicket(ch.channelToken, ch.nonce) })
+      res.status(200).json({ channelToken: ch.channelToken, url: ch.url, ticket: siwfTicket(ch.channelToken, ch.nonce, domain) })
       return
     }
     if (action === 'siwf_poll') {
@@ -106,7 +125,7 @@ export default async function handler(req, res) {
       const st = await channelStatus(channelToken)
       if (!st.ok) { res.status(st.status || 502).json({ error: st.error }); return }
       if (st.data.state !== 'completed') { res.status(200).json({ state: 'pending' }); return }
-      const v = completedIsValid(st.data, { nonce: t.nonce, domain })
+      const v = completedIsValid(st.data, { nonce: t.nonce, domain: t.domain }) // domain bound at start, not this request's header
       if (!v.ok) {
         await new Promise((r) => setTimeout(r, 400))
         res.status(401).json({ error: `sign-in rejected: ${v.error}` })

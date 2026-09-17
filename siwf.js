@@ -14,15 +14,25 @@
 // without) and returns { state: 'pending' | 'completed', nonce, fid,
 // username, custody, message, signature, signatureParams: { domain, ... } }.
 //
-// TRUST BOUNDARY, stated: we verify the nonce we issued, the domain, and
-// that the relay says completed - over TLS to relay.farcaster.xyz. We do
-// NOT recover the custody address from the SIWE signature (that needs
-// secp256k1 recovery, which Node's crypto does not expose without a
-// dependency). The relay only marks a channel completed after the user's
-// wallet signed the exact message it generated, and the channelToken that
-// reads that result is handed only to the browser that started the channel
-// (bound by an HMAC ticket, see api/auth.js). Sessions are still role-split:
-// only fid === owner gets write access; anyone else is read-only.
+// TRUST BOUNDARY, stated precisely (rewritten 2026-09-17 after the review
+// lane caught the first version claiming more than the code proves):
+//   PROVED: the relay marked the channel completed; the nonce in the result
+//   is the one this server was issued at start (it rides in the signed
+//   ticket, never in the request body); the domain the wallet signed for is
+//   the one bound at start; the fid comes from the relay's payload, never
+//   from the client. All over TLS to relay.farcaster.xyz.
+//   NOT PROVED: that the person driving this browser is the Farcaster
+//   account that approved. The ticket carries channelToken + nonce + domain
+//   + expiry and nothing about the browser, so it proves only "whoever polls
+//   is whoever called siwf_start". That leaves the ordinary device-code
+//   phishing shape open: an attacker starts a channel, gets the owner to
+//   approve the genuine farcaster.xyz link, and polls with their own token.
+//   The standard close (show the nonce beside the link and have the
+//   approver match it) is an identity-gate decision on Zaal's list; do not
+//   build it unprompted. Also NOT done: recovering the custody address from
+//   the SIWE signature (needs secp256k1 recovery, no dependency).
+//   Authorisation is still fid === owner for writes; every other fid is
+//   read-only.
 
 const RELAY = 'https://relay.farcaster.xyz/v1'
 const TIMEOUT_MS = 10_000

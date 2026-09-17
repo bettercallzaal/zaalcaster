@@ -30,11 +30,12 @@ test('guest routes refuse too', () => {
   assert.equal(blockedByGuestAuth(req(), r), true)
   assert.equal(r.code, 401)
 })
-test('off Vercel (local CLI / dev) the gate-off hatch is unchanged', () => {
+test('off Vercel with no gate: nobody has a session unless ZAALCASTER_LOCAL=1 opts in', () => {
   delete process.env.VERCEL
   assert.equal(locked(), false)
-  assert.equal(getSession(req()).role, 'zaal')
+  assert.equal(blockedByAuth(req('POST'), res()), true)
+  process.env.ZAALCASTER_LOCAL = '1'
   assert.equal(blockedByAuth(req('POST'), res()), false)
-  assert.equal(blockedByGuestAuth(req(), res()), false)
+  delete process.env.ZAALCASTER_LOCAL
   process.env.VERCEL = '1'
 })

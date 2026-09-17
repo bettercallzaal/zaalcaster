@@ -43,7 +43,10 @@ test('no client id: Vercel with an api key is still gated; local CLI stays gate-
   assert.equal(auth.locked(), false)
   delete process.env.VERCEL
   assert.equal(auth.authEnabled(), false)
+  assert.equal(auth.getSession(reqWith('')), null) // no gate + no opt-in = nobody
+  process.env.ZAALCASTER_LOCAL = '1'
   assert.equal(auth.getSession(reqWith('')).role, 'zaal')
+  delete process.env.ZAALCASTER_LOCAL
   process.env.VERCEL = '1'
   const key = process.env.NEYNAR_API_KEY; delete process.env.NEYNAR_API_KEY
   assert.equal(auth.locked(), true)
