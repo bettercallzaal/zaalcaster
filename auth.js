@@ -138,20 +138,28 @@ export function sessionCookie(fid) {
 // a 10-minute expiry, signed with the session key, so the poll step can prove
 // the nonce it compares against is the one this server started - stateless.
 const TICKET_TTL_SECONDS = 600
-export function siwfTicket(channelToken, nonce) {
+const b64u = (s) => Buffer.from(s, 'utf8').toString('base64url')
+const unb64u = (s) => Buffer.from(String(s), 'base64url').toString('utf8')
+// The DOMAIN is inside the ticket too (hardening 2026-09-17): both the start
+// and poll requests derive their host from the same forwardable header, so
+// comparing them to each other proved nothing. The poll step now checks the
+// relay's signed domain against the one bound at start.
+export function siwfTicket(channelToken, nonce, domain) {
   const exp = Math.floor(Date.now() / 1000) + TICKET_TTL_SECONDS
-  const payload = `${channelToken}.${nonce}.${exp}`
+  const payload = b64u(JSON.stringify({ t: String(channelToken), n: String(nonce), d: String(domain), e: exp }))
   return `${payload}.${sign(payload)}`
 }
 export function readSiwfTicket(ticket, channelToken) {
   const parts = String(ticket || '').split('.')
-  if (parts.length !== 4) return null
-  const [tok, nonce, expStr, sig] = parts
-  if (tok !== String(channelToken)) return null
-  if (!eq(sig, sign(`${tok}.${nonce}.${expStr}`))) return null
-  const exp = Number(expStr)
-  if (!Number.isFinite(exp) || Date.now() / 1000 > exp) return null
-  return { channelToken: tok, nonce }
+  if (parts.length !== 2) return null
+  const [payload, sig] = parts
+  if (!eq(sig, sign(payload))) return null
+  let o
+  try { o = JSON.parse(unb64u(payload)) } catch { return null }
+  if (!o || o.t !== String(channelToken)) return null
+  if (!Number.isFinite(o.e) || Date.now() / 1000 > o.e) return null
+  if (!o.n || !o.d) return null
+  return { channelToken: o.t, nonce: o.n, domain: o.d }
 }
 
 export function clearSessionCookie() {
@@ -167,7 +175,12 @@ export function clearSessionCookie() {
 export function getSession(req) {
   if (misconfigured()) return null // fail closed - see misconfigured() above
   if (locked()) return null // Vercel with no secret: nobody, see locked() below
-  if (!authEnabled()) return { fid: ownerFid(), role: 'zaal' } // gate off = full LOCAL access (CLI, dev)
+  // Gate off = everyone is the owner. That is only ever right on a box no
+  // one else can reach, and the code cannot tell a laptop from a host fronted
+  // by cloudflared. So it is OPT-IN (hardening 2026-09-17, review lane):
+  // ZAALCASTER_LOCAL=1 says "I know this is my machine". Without it, and
+  // without a gate, nobody has a session. The CLI never goes through here.
+  if (!authEnabled()) return process.env.ZAALCASTER_LOCAL === '1' ? { fid: ownerFid(), role: 'zaal' } : null
   const raw = readCookie(req, COOKIE)
   if (!raw) return null
   const parts = raw.split('.')

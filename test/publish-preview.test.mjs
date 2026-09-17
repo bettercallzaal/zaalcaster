@@ -1,6 +1,8 @@
 // node --test test/publish-preview.test.mjs
 // The preview must mirror the rails' real limits AND must never touch the network.
 import { test } from 'node:test'
+// The send handler is exercised directly; without a gate that needs the explicit local opt-in (auth.js getSession).
+process.env.ZAALCASTER_LOCAL = '1'
 import assert from 'node:assert/strict'
 import { previewSend, LIMITS } from '../publish-preview.js'
 

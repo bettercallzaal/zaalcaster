@@ -6,12 +6,21 @@ const { siwfTicket, readSiwfTicket, authEnabled } = await import('../auth.js')
 const { completedIsValid } = await import('../siwf.js')
 
 test('gate on for a Vercel deploy with an api key, no client id needed', () => { assert.equal(authEnabled(), true) })
-test('ticket round-trips and rejects a swapped token or tampered nonce', () => {
-  const tk = siwfTicket('ABC123', 'nonce-xyz')
-  assert.deepEqual(readSiwfTicket(tk, 'ABC123'), { channelToken: 'ABC123', nonce: 'nonce-xyz' })
+test('ticket round-trips with the domain and rejects a swapped token or tampered payload', () => {
+  const tk = siwfTicket('ABC123', 'nonce-xyz', 'z.thezao.xyz')
+  assert.deepEqual(readSiwfTicket(tk, 'ABC123'), { channelToken: 'ABC123', nonce: 'nonce-xyz', domain: 'z.thezao.xyz' })
   assert.equal(readSiwfTicket(tk, 'OTHER'), null)
-  const [tok, , exp, sig] = tk.split('.')
-  assert.equal(readSiwfTicket(`${tok}.evil.${exp}.${sig}`, 'ABC123'), null)
+  const [payload, sig] = tk.split('.')
+  const evil = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(payload, 'base64url').toString()), d: 'evil.example' })).toString('base64url')
+  assert.equal(readSiwfTicket(`${evil}.${sig}`, 'ABC123'), null)
+})
+test('siwf_start limiter: 10 per ip, then 429; other ips unaffected until the total cap', async () => {
+  const { allowStart } = await import('../api/auth.js')
+  const now = 1_000_000
+  for (let i = 0; i < 10; i++) assert.equal(allowStart('1.1.1.1', now), true)
+  assert.equal(allowStart('1.1.1.1', now), false)
+  assert.equal(allowStart('2.2.2.2', now), true)
+  assert.equal(allowStart('1.1.1.1', now + 11 * 60_000), true)
 })
 const good = { state: 'completed', nonce: 'n1', fid: 19640, username: 'zaal', message: 'z.thezao.xyz wants you to sign in\nNonce: n1', signature: '0xabc', signatureParams: { domain: 'z.thezao.xyz' } }
 test('completed channel passes with matching nonce + domain', () => {
