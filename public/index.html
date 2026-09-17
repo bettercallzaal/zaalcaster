@@ -3264,7 +3264,7 @@
         // Vercel with no SESSION_SECRET: the server refuses every guarded
         // route until the env vars are set (auth.js locked()). Say so on top.
         const b = document.createElement('div'); b.className = 'err'; b.style.cssText = 'margin:8px 12px'
-        b.textContent = 'this deployment is locked - set SESSION_SECRET and NEYNAR_CLIENT_ID in Vercel, then sign in. until then nobody (you included) can read or post here.'
+        b.textContent = 'this deployment is locked - set NEYNAR_CLIENT_ID in Vercel (Neynar app Client ID), redeploy, then sign in. until then nobody (you included) can read or post here.'
         document.body.insertBefore(b, document.getElementById('gate') || document.getElementById('main'))
       }
       if (d.enabled && !d.authed) showGate()

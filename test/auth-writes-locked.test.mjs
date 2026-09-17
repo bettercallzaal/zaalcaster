@@ -21,7 +21,7 @@ test('owner routes refuse every method with a message naming the fix', () => {
     const r = res()
     assert.equal(blockedByAuth(req(method), r), true)
     assert.equal(r.code, 401)
-    assert.match(r.body.error, /SESSION_SECRET/)
+    assert.match(r.body.error, /NEYNAR_CLIENT_ID/)
   }
 })
 test('guest routes refuse too', () => {
