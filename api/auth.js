@@ -1,5 +1,7 @@
 // /api/auth - Sign In With Farcaster (Neynar SIWN) + public branding config.
 //   GET    -> { enabled, authed, role, misconfigured, neynarClientId, config }
+//   POST   { action: 'siwf_start' } -> { channelToken, url, ticket }   (Sign In With Farcaster, relay)
+//   POST   { action: 'siwf_poll', channelToken, ticket } -> { state } | sets the session cookie
 //   POST { fid, signer_uuid } from the client's SIWN success callback ->
 //     independently re-verifies the signer with Neynar (never trusts the
 //     client-asserted fid alone), then sets the session cookie. 401 on any
@@ -25,8 +27,8 @@
 // exception: NEYNAR_CLIENT_ID set without SESSION_SECRET fails closed
 // instead (see auth.js misconfigured()).
 
-import { authEnabled, misconfigured, getSession, sessionCookie, clearSessionCookie, ownerFid, locked } from '../auth.js'
-import { getSignerInfo } from '../lib.js'
+import { authEnabled, misconfigured, getSession, sessionCookie, clearSessionCookie, ownerFid, locked, siwfTicket, readSiwfTicket } from '../auth.js'
+import { createChannel, channelStatus, completedIsValid } from '../siwf.js'
 import { config } from '../config.js'
 
 async function readJsonBody(req) {
@@ -75,37 +77,48 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     // Never issue a cookie signed with an empty key (forgeable).
     if (misconfigured()) {
-      res.status(500).json({ error: 'server misconfigured: NEYNAR_API_KEY (or SESSION_SECRET) must be set when NEYNAR_CLIENT_ID is set' })
+      res.status(500).json({ error: 'server misconfigured: NEYNAR_API_KEY (or SESSION_SECRET) must be set' })
       return
     }
     const body = await readJsonBody(req)
-    const claimedFid = Number(body.fid)
-    const signerUuid = String(body.signer_uuid || '').trim()
+    const action = String(body.action || '')
+    // The domain the user's wallet will see and sign for. Taken from the
+    // request host so z.thezao.xyz and zaalcaster.vercel.app both work; the
+    // relay refuses to complete a channel whose message names another domain.
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase()
+    if (!/^[a-z0-9.-]+(:\d+)?$/.test(host)) { res.status(400).json({ error: 'bad host' }); return }
+    const domain = host.replace(/:\d+$/, '')
 
-    if (!Number.isFinite(claimedFid) || claimedFid <= 0 || !signerUuid) {
-      res.status(400).json({ error: 'fid and signer_uuid required' })
+    // Sign In With Farcaster via the relay (siwf.js). Two steps, stateless:
+    //   start -> we open a channel, hand back the deep link + an HMAC ticket
+    //   poll  -> the browser sends token + ticket; when the relay says
+    //            completed and nonce/domain/fid check out, we set the cookie.
+    if (action === 'siwf_start') {
+      const ch = await createChannel({ domain, siweUri: `https://${domain}/` })
+      if (!ch.ok) { res.status(ch.status || 502).json({ error: ch.error }); return }
+      res.status(200).json({ channelToken: ch.channelToken, url: ch.url, ticket: siwfTicket(ch.channelToken, ch.nonce) })
       return
     }
-
-    // Never trust the client's word for who they are - independently confirm
-    // the signer_uuid is real, approved, and belongs to the claimed fid.
-    let signer
-    try {
-      signer = await getSignerInfo(signerUuid)
-    } catch {
-      signer = null
-    }
-    if (!signer || signer.status !== 'approved' || Number(signer.fid) !== claimedFid) {
-      // Constant 400ms delay on every rejection so response time doesn't
-      // reveal WHICH check failed (unknown uuid vs unapproved vs fid
-      // mismatch) - cheap probing deterrent, not a rate limiter.
-      await new Promise((r) => setTimeout(r, 400))
-      res.status(401).json({ error: 'signer not approved or fid mismatch' })
+    if (action === 'siwf_poll') {
+      const channelToken = String(body.channelToken || '')
+      const t = readSiwfTicket(body.ticket, channelToken)
+      if (!t) { res.status(400).json({ error: 'sign-in ticket invalid or expired - start again' }); return }
+      const st = await channelStatus(channelToken)
+      if (!st.ok) { res.status(st.status || 502).json({ error: st.error }); return }
+      if (st.data.state !== 'completed') { res.status(200).json({ state: 'pending' }); return }
+      const v = completedIsValid(st.data, { nonce: t.nonce, domain })
+      if (!v.ok) {
+        await new Promise((r) => setTimeout(r, 400))
+        res.status(401).json({ error: `sign-in rejected: ${v.error}` })
+        return
+      }
+      res.setHeader('Set-Cookie', sessionCookie(v.fid))
+      res.status(200).json({ state: 'completed', ok: true, fid: v.fid, username: v.username, role: v.fid === ownerFid() ? 'zaal' : 'guest' })
       return
     }
-
-    res.setHeader('Set-Cookie', sessionCookie(claimedFid))
-    res.status(200).json({ ok: true, fid: claimedFid, role: claimedFid === ownerFid() ? 'zaal' : 'guest' })
+    // Sign In With Neynar (signer_uuid) was retired by Neynar on or before
+    // 2026-09-17; its path is gone rather than left as a dead door.
+    res.status(400).json({ error: 'unknown action' })
     return
   }
 

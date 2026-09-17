@@ -1,10 +1,11 @@
 // node --test test/auth-writes-locked.test.mjs
-// On Vercel with no SESSION_SECRET nobody has a session: every guarded route is 401.
+// On Vercel with no signing key (no SESSION_SECRET, no NEYNAR_API_KEY) nobody has a session: every guarded route is 401.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 delete process.env.SESSION_SECRET
 delete process.env.NEYNAR_CLIENT_ID
+delete process.env.NEYNAR_API_KEY
 process.env.VERCEL = '1'
 const { blockedByAuth, blockedByGuestAuth, getSession, locked, writesLocked } = await import('../auth.js')
 
@@ -21,7 +22,7 @@ test('owner routes refuse every method with a message naming the fix', () => {
     const r = res()
     assert.equal(blockedByAuth(req(method), r), true)
     assert.equal(r.code, 401)
-    assert.match(r.body.error, /NEYNAR_CLIENT_ID/)
+    assert.match(r.body.error, /NEYNAR_API_KEY/)
   }
 })
 test('guest routes refuse too', () => {
