@@ -55,8 +55,25 @@ import { config } from './config.js'
 const COOKIE = 'zc_session'
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
+// SIGNING KEY, 2026-09-17: SESSION_SECRET if set, else a key DERIVED from
+// NEYNAR_API_KEY - which is already a server-only secret every deploy must
+// have - so turning the gate on needs exactly one new variable, the public
+// NEYNAR_CLIENT_ID. The derivation is a one-way HMAC over a fixed label, so
+// the API key is never the cookie key itself and cannot be recovered from
+// a cookie. Consequence, intended: rotating the Neynar key logs every
+// session out. Zaal asked for this instead of a second secret to manage.
+function signingKey() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET
+  if (process.env.NEYNAR_API_KEY) return crypto.createHmac('sha256', 'zaalcaster-session-v1').update(process.env.NEYNAR_API_KEY).digest('hex')
+  return ''
+}
+
+// The gate is ON when there is a signing key AND sign-in is advertised
+// (NEYNAR_CLIENT_ID), or when SESSION_SECRET is set explicitly. The plain
+// local CLI (API key, no client id, no SESSION_SECRET) stays gate-off.
 export function authEnabled() {
-  return !!process.env.SESSION_SECRET
+  if (process.env.SESSION_SECRET) return true
+  return !!process.env.NEYNAR_CLIENT_ID && !!signingKey()
 }
 
 // The one dangerous config: NEYNAR_CLIENT_ID set (guest sign-in advertised to
@@ -66,7 +83,7 @@ export function authEnabled() {
 // with an empty key (forgeable). Fail closed instead: nobody gets a session
 // until SESSION_SECRET is set. (Security audit finding, 2026-07-15.)
 export function misconfigured() {
-  return !!process.env.NEYNAR_CLIENT_ID && !process.env.SESSION_SECRET
+  return !!process.env.NEYNAR_CLIENT_ID && !signingKey()
 }
 
 // USER_FID is canonical; ZAAL_FID is the legacy name kept so existing deploys
@@ -77,7 +94,7 @@ export function ownerFid() {
 }
 
 function sign(value) {
-  return crypto.createHmac('sha256', process.env.SESSION_SECRET || '').update(value).digest('hex')
+  return crypto.createHmac('sha256', signingKey()).update(value).digest('hex')
 }
 
 // Constant-time comparison. The early length check is not itself timing-safe,
@@ -166,7 +183,7 @@ export function locked() {
   return !!process.env.VERCEL && !authEnabled()
 }
 export const writesLocked = locked // kept for the /api/auth field + banner
-export const LOCKED_MESSAGE = 'this deployment is locked: set SESSION_SECRET and NEYNAR_CLIENT_ID in Vercel, then sign in'
+export const LOCKED_MESSAGE = 'this deployment is locked: set NEYNAR_CLIENT_ID in Vercel (the Neynar app Client ID), then sign in'
 export const WRITES_LOCKED_MESSAGE = LOCKED_MESSAGE
 
 export function blockedByAuth(req, res) {

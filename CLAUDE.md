@@ -2,6 +2,9 @@
 
 Minimal personal Farcaster CLI for Zaal (@zaal, fid 19640). Reads + posts via Neynar v2.
 
+## Session key derived from NEYNAR_API_KEY (2026-09-17) - SESSION_SECRET is now optional
+Zaal asked not to manage a second secret. auth.js signingKey(): SESSION_SECRET if set, else HMAC-SHA256('zaalcaster-session-v1', NEYNAR_API_KEY) - a one-way derivation, so the API key is never the cookie key and cannot be recovered from a cookie. authEnabled() is now true when NEYNAR_CLIENT_ID is set and a signing key exists (or SESSION_SECRET is set explicitly). So the ONLY new Vercel variable to turn the gate on is the public NEYNAR_CLIENT_ID (the Neynar app's Client ID). Rotating the Neynar key logs every session out (intended). Local CLI with API key but no client id stays gate-off; Vercel without a client id stays locked (previous section). Tests: test/auth-derived-key.test.mjs.
+
 ## SECURITY: writes fail closed on Vercel without SESSION_SECRET (2026-09-15)
 Measured live on z.thezao.xyz: `/api/auth` answered `enabled:false, authed:true, role:zaal` to an anonymous request, and anonymous POSTs to /api/send, /api/react and /api/state got 400 (validation), not 401. The gate-off escape hatch (SESSION_SECRET unset = everyone is Zaal) had been live on the public deployment since the SIWN rewrite of 2026-07-14, because the two manual env vars were never set. Fix in auth.js `writesLocked()`: on Vercel (VERCEL=1) with no SESSION_SECRET, every non-GET call through blockedByAuth is refused with a message naming the fix; GET reads keep the old behaviour so the app stays usable. `/api/auth` reports `writesLocked` and the page shows a banner. Local CLI is untouched (no VERCEL env). THE REAL FIX IS STILL ZAAL'S: set SESSION_SECRET (random) + NEYNAR_CLIENT_ID (register the app in the Neynar dev portal) in Vercel, then sign in - see the 2026-07-14 section. Until then nobody, Zaal included, can post from the web app. Test: test/auth-writes-locked.test.mjs.
 
